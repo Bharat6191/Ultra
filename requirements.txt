@@ -1,0 +1,3 @@
+# Core app (install with: pip install -r requirements.txt)
+cryptography>=42.0.0
+pyotp>=2.9.0

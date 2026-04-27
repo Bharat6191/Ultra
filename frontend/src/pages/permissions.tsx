@@ -1,0 +1,354 @@
+import * as React from "react"
+import { toast } from "sonner"
+
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { getJson, postJson } from "@/lib/api"
+import { hasPermission } from "@/lib/permissions"
+
+type FeaturePublic = {
+  id: number
+  key: string
+  name: string
+}
+
+type PermissionPublic = {
+  id: number
+  feature_id: number
+  action: string
+  code: string
+  description: string | null
+  created_at: string
+}
+
+type CatalogPermission = {
+  id: number | null
+  action: string
+  code: string
+  description: string | null
+}
+
+type CatalogTab = {
+  key: string
+  title: string
+  actions: string[]
+  permissions: CatalogPermission[]
+}
+
+type CatalogModule = {
+  key: string
+  title: string
+  tabs: CatalogTab[]
+}
+
+type PermissionCatalog = {
+  modules: CatalogModule[]
+}
+
+const ACTION_COLUMNS = ["view", "create", "update", "delete"] as const
+const ACTION_LABEL: Record<string, string> = {
+  view: "View",
+  create: "Create",
+  update: "Edit",
+  delete: "Delete",
+}
+
+export function PermissionsPage() {
+  const [features, setFeatures] = React.useState<FeaturePublic[] | null>(null)
+  const [permissions, setPermissions] = React.useState<PermissionPublic[] | null>(null)
+  const [catalog, setCatalog] = React.useState<PermissionCatalog | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const [open, setOpen] = React.useState(false)
+  const [featureId, setFeatureId] = React.useState("")
+  const [action, setAction] = React.useState("")
+  const [description, setDescription] = React.useState("")
+
+  const featureNameById = React.useMemo(() => {
+    const map = new Map<number, FeaturePublic>()
+    for (const f of features ?? []) map.set(f.id, f)
+    return map
+  }, [features])
+
+  async function load() {
+    setError(null)
+    try {
+      const [f, p, cat] = await Promise.all([
+        getJson<FeaturePublic[]>("/admin/features?skip=0&limit=200"),
+        getJson<PermissionPublic[]>("/admin/permissions?skip=0&limit=200"),
+        getJson<PermissionCatalog>("/admin/permissions/catalog"),
+      ])
+      setFeatures(f)
+      setPermissions(p)
+      setCatalog(cat)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load permissions")
+      setFeatures([])
+      setPermissions([])
+      setCatalog({ modules: [] })
+    }
+  }
+
+  React.useEffect(() => {
+    void load()
+  }, [])
+
+  async function createPermission() {
+    const fid = Number(featureId)
+    if (!Number.isFinite(fid) || fid <= 0) {
+      setError("Feature ID must be a positive number.")
+      return
+    }
+    if (!action.trim()) {
+      setError("Action is required.")
+      return
+    }
+    setError(null)
+    toast.loading("Creating permission…", { id: "create-perm" })
+    try {
+      await postJson<PermissionPublic>("/admin/permissions", {
+        feature_id: fid,
+        action: action.trim(),
+        description: description.trim() ? description.trim() : null,
+      })
+      toast.success("Permission created", { id: "create-perm" })
+      setOpen(false)
+      setFeatureId("")
+      setAction("")
+      setDescription("")
+      await load()
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Failed to create permission"
+      toast.error(message, { id: "create-perm" })
+      setError(message)
+    }
+  }
+
+  return (
+    <div className="space-y-4 pb-10">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-medium">Permissions</h2>
+          <p className="text-sm text-muted-foreground">
+            Action-level codes use{" "}
+            <span className="font-mono text-xs">module.tab.action</span> (or{" "}
+            <span className="font-mono text-xs">module.action</span> when the tab matches the module).
+            Run <span className="font-mono text-xs">python scripts/sync_modules.py</span> to sync from
+            config.
+          </p>
+        </div>
+
+        {hasPermission("permissions.create") ? (
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">Create permission</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Create permission</DialogTitle>
+                <DialogDescription>
+                  Provide a feature id and action. Code will be generated by the backend.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="feature_id">Feature ID</Label>
+                  <Input
+                    id="feature_id"
+                    inputMode="numeric"
+                    value={featureId}
+                    onChange={(e) => setFeatureId(e.target.value)}
+                    placeholder="1"
+                  />
+                  {features && features.length > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      Existing features:{" "}
+                      {features
+                        .slice(0, 3)
+                        .map((f) => `${f.id}:${f.key}`)
+                        .join(", ")}
+                      {features.length > 3 ? " …" : ""}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="action">Action</Label>
+                  <Input
+                    id="action"
+                    value={action}
+                    onChange={(e) => setAction(e.target.value)}
+                    placeholder="view / create / update / delete"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="desc">Description (optional)</Label>
+                  <Input
+                    id="desc"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="What this permission allows"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={() => void createPermission()}>
+                    Create
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        ) : null}
+      </div>
+
+      {error ? (
+        <Alert variant="destructive">
+          <AlertTitle>Something went wrong</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="rounded-lg border">
+        <div className="px-3 py-2 text-sm font-medium">By module (catalog)</div>
+        <Separator />
+        {catalog === null ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : catalog.modules.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">No modules in catalog.</div>
+        ) : (
+          <div className="p-3">
+            <div className="overflow-x-auto rounded-md border">
+              <Table className="min-w-[860px] table-fixed">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[220px]">Module / Tab</TableHead>
+                    {ACTION_COLUMNS.map((act) => (
+                      <TableHead key={act} className="w-[160px] px-2 text-center text-xs font-medium">
+                        {ACTION_LABEL[act] ?? act}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {catalog.modules.map((mod) => (
+                    <React.Fragment key={mod.key}>
+                      <TableRow className="bg-muted/30">
+                        <TableCell colSpan={1 + ACTION_COLUMNS.length} className="py-2">
+                          <div className="text-sm font-semibold">{mod.title}</div>
+                        </TableCell>
+                      </TableRow>
+
+                      {mod.tabs.map((tab) => (
+                        <TableRow key={`${mod.key}.${tab.key}`}>
+                          <TableCell className="text-sm text-muted-foreground">{tab.title}</TableCell>
+                          {ACTION_COLUMNS.map((act) => {
+                            const cell = tab.permissions.find((p) => p.action === act)
+                            if (!cell) {
+                              return (
+                                <TableCell key={act} className="px-2 text-center align-middle">
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                </TableCell>
+                              )
+                            }
+
+                            const ok = cell.id != null
+                            return (
+                              <TableCell key={act} className="px-2 py-2 text-center align-middle" title={cell.code}>
+                                <div className="flex flex-col items-center gap-1">
+                                  <Checkbox
+                                    checked={ok}
+                                    disabled
+                                    className="pointer-events-none data-[state=checked]:border-primary data-[state=checked]:bg-primary"
+                                    aria-label={
+                                      ok
+                                        ? `Permission ${cell.code} exists in database`
+                                        : `Permission ${cell.code} missing — run scripts/sync_modules.py`
+                                    }
+                                  />
+                                  <code className="max-w-[150px] truncate font-mono text-[10px] text-muted-foreground">
+                                    {cell.code}
+                                  </code>
+                                </div>
+                              </TableCell>
+                            )
+                          })}
+                        </TableRow>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Tip: Hover any cell to see the full permission code. If a box is unchecked, run{" "}
+              <span className="font-mono">python scripts/sync_modules.py</span>.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-lg border">
+        <div className="px-3 py-2 text-sm font-medium">All permissions (database)</div>
+        <Separator />
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[240px]">Feature</TableHead>
+              <TableHead className="w-[140px]">Action</TableHead>
+              <TableHead>Code</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {permissions === null ? (
+              <TableRow>
+                <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
+                  Loading…
+                </TableCell>
+              </TableRow>
+            ) : permissions.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
+                  No permissions found.
+                </TableCell>
+              </TableRow>
+            ) : (
+              permissions
+                .slice()
+                .sort((a, b) => a.code.localeCompare(b.code))
+                .map((p) => {
+                  const f = featureNameById.get(p.feature_id)
+                  return (
+                    <TableRow key={p.id}>
+                      <TableCell className="text-sm">
+                        {f ? (
+                          <div className="min-w-0">
+                            <div className="truncate">{f.name}</div>
+                            <div className="truncate font-mono text-xs text-muted-foreground">{f.key}</div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">Feature {p.feature_id}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{p.action}</TableCell>
+                      <TableCell className="font-mono text-xs">{p.code}</TableCell>
+                    </TableRow>
+                  )
+                })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  )
+}
