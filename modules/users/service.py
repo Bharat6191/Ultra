@@ -532,6 +532,18 @@ class UserService:
             raw = req.payload.get("temp_password")
             if isinstance(raw, str) and raw.strip():
                 payload["temp_password"] = raw.strip()
+        # If we no longer have the original temp password (common after older records or manual edits),
+        # generate a new temporary password, update the user's credential, and send that.
+        if not str(payload.get("temp_password") or "").strip():
+            plain = self._generate_password()
+            validate_password(plain)
+            user.hashed_password = hash_password(plain)
+            user.password_changed_at = datetime.now(timezone.utc)
+            # Best-effort: keep it on the latest request payload too, so subsequent resends are stable.
+            if req is not None and isinstance(req.payload, dict):
+                req.payload["temp_password"] = plain
+            self._db.commit()
+            payload["temp_password"] = plain
 
         # If MFA is enabled and not completed, include a fresh setup link.
         try:
