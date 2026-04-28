@@ -83,7 +83,6 @@ class RoleService:
         role.org_units = loaded
 
     def create_role(self, data: RoleCreate, *, actor_user_id: int | None = None) -> Role:
-        assert_no_empty_permission_set(list(data.permission_ids))
         name = data.name.strip()
         exists = self._db.scalar(select(Role.id).where(Role.name == name))
         if exists is not None:
