@@ -56,6 +56,7 @@ def test_require_permission_dotted_matches_legacy_colon_in_db(db: Session) -> No
     role.permissions.append(perm)
     user = User(
         full_name="u",
+        username="u_test",
         email="u@example.com",
         phone="+15550009999",
         hashed_password="x",

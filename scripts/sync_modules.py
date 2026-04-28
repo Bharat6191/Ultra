@@ -11,10 +11,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Ensure project root is importable (so `import db`, `import modules`, etc. work).
-_ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+# Ensure backend root is importable (so `import db`, `import modules`, etc. work).
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent / "backend"
+if str(_BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_ROOT))
 
 import db.models  # noqa: F401  — register models
 from db.session import SessionLocal

@@ -28,8 +28,10 @@ def db() -> Session:
 
 
 def _mk_user(*, email: str, is_superuser: bool) -> User:
+    local = email.split("@", 1)[0]
     return User(
-        full_name=email.split("@", 1)[0],
+        full_name=local,
+        username=f"{local}_{abs(hash(email)) % 10_000:04d}",
         email=email,
         phone=f"+1555{abs(hash(email)) % 10_000_000:07d}",
         hashed_password="x",

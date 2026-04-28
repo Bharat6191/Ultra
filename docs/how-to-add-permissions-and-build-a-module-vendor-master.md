@@ -1,6 +1,6 @@
 # How to add permissions + create a new module (Vendor Master)
 
-This repo uses **DB-backed RBAC** (permissions live in the database) with a **declarative catalog** in `modules/module_config.py` that can be synced into the DB using `scripts/sync_modules.py`.
+This repo uses **DB-backed RBAC** (permissions live in the database) with a **declarative catalog** in `backend/modules/module_config.py` that can be synced into the DB using `scripts/sync_modules.py`.
 
 This document shows the **end-to-end flow** to:
 
@@ -32,11 +32,11 @@ Legacy `module:action` is still accepted for the **first separator only** (both 
 
 In this codebase, the recommended way is:
 
-1. Add your module + actions to `modules/module_config.py`
+1. Add your module + actions to `backend/modules/module_config.py`
 2. Run `python scripts/sync_modules.py`
 3. Assign permissions to roles in the UI or via the Roles API
 
-### A1) Add your module to `modules/module_config.py`
+### A1) Add your module to `backend/modules/module_config.py`
 
 `MODULE_CONFIG` is the canonical catalog.
 
@@ -83,12 +83,12 @@ Options:
 
 ## B) Create a new backend module: Vendor Master (FastAPI + SQLAlchemy)
 
-This repo’s module shape is consistent (see `modules/org_units/*` and `modules/users/*`):
+This repo’s module shape is consistent (see `backend/modules/org_units/*` and `backend/modules/users/*`):
 
-- `modules/<module>/model.py` (SQLAlchemy table)
-- `modules/<module>/schema.py` (Pydantic request/response)
-- `modules/<module>/service.py` (business logic)
-- `modules/<module>/router.py` (FastAPI endpoints)
+- `backend/modules/<module>/model.py` (SQLAlchemy table)
+- `backend/modules/<module>/schema.py` (Pydantic request/response)
+- `backend/modules/<module>/service.py` (business logic)
+- `backend/modules/<module>/router.py` (FastAPI endpoints)
 
 ### B0) Decide the API surface + permission mapping
 
@@ -99,7 +99,7 @@ Suggested endpoints (admin namespace):
 - `PATCH /admin/vendors/{id}` → requires `vendor_master.update`
 - `DELETE /admin/vendors/{id}` → requires `vendor_master.delete` (optional)
 
-### B1) Create the DB model (`modules/vendor_master/model.py`)
+### B1) Create the DB model (`backend/modules/vendor_master/model.py`)
 
 Typical patterns in this repo:
 
@@ -115,7 +115,7 @@ Common Vendor fields:
 - `phone` (optional)
 - `is_active` (boolean)
 
-### B2) Add schemas (`modules/vendor_master/schema.py`)
+### B2) Add schemas (`backend/modules/vendor_master/schema.py`)
 
 Follow the existing style:
 
@@ -123,7 +123,7 @@ Follow the existing style:
 - `VendorUpdate` (all optional fields)
 - `VendorPublic` (response model)
 
-### B3) Implement the service (`modules/vendor_master/service.py`)
+### B3) Implement the service (`backend/modules/vendor_master/service.py`)
 
 Keep DB access here:
 
@@ -134,7 +134,7 @@ Keep DB access here:
 
 Raise repo-standard errors if needed (see `modules/errors.py` usage in other modules).
 
-### B4) Add the router (`modules/vendor_master/router.py`)
+### B4) Add the router (`backend/modules/vendor_master/router.py`)
 
 Follow `modules/org_units/router.py` pattern:
 
@@ -143,18 +143,18 @@ Follow `modules/org_units/router.py` pattern:
 
 ### B5) Register the router under `/admin`
 
-Add an include in `admin_api/routes.py`:
+Add an include in `backend/admin_api/routes.py`:
 
 - `from modules.vendor_master.router import router as vendor_master_router`
 - `router.include_router(vendor_master_router)`
 
 ### B6) Make sure Alembic sees the new model (important)
 
-This repo registers models by importing `db.models`.
+This repo registers models by importing `db.models` (with `backend/` on the import path).
 
 So you must ensure your new model is imported somewhere under `db/models/__init__.py` (directly or indirectly), otherwise:
 
-- `alembic revision --autogenerate` won’t see the table
+- `alembic revision --autogenerate` won’t see the table (use `alembic -c backend/alembic.ini ...`)
 - metadata might not include your model in certain scripts/tests
 
 ### B7) Create & run a migration
@@ -162,8 +162,8 @@ So you must ensure your new model is imported somewhere under `db/models/__init_
 Create migration (autogenerate is recommended after model registration):
 
 ```bash
-alembic revision --autogenerate -m "add vendor master"
-alembic upgrade head
+alembic -c backend/alembic.ini revision --autogenerate -m "add vendor master"
+alembic -c backend/alembic.ini upgrade head
 ```
 
 Then confirm the table exists in your DB.

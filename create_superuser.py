@@ -11,6 +11,12 @@ from __future__ import annotations
 import argparse
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
+
+# Ensure backend root is importable (so `import core`, `import modules`, etc. work).
+BACKEND_ROOT = Path(__file__).resolve().parent / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError

@@ -18,9 +18,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[1]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+_BACKEND_ROOT = Path(__file__).resolve().parents[1] / "backend"
+if str(_BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_ROOT))
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError

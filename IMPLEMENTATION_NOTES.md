@@ -26,6 +26,8 @@ This document describes the work completed so far in this repo:
   - Modules include: **users**, **org_units** (Plants), **roles**, **permissions**, **settings**, **features**.
   - Run from project root (with `DATABASE_URL` / same DB as the app):  
     `python scripts/sync_modules.py`
+  - With the `backend/` folder structure, Alembic lives under `backend/`:
+    `alembic -c backend/alembic.ini upgrade head`
 
 - **`alembic/versions/011_org_units_rbac_permissions.py`**
   - Seeds **`org_units`** feature and **`org_units.view|create|update|delete`** if missing (alongside sync).

@@ -38,9 +38,10 @@ def test_create_user_assigns_role_and_org(db: Session) -> None:
     user = svc.create_user(
         UserCreate(
             full_name="Alice Example",
+            username="alice.example",
             phone="+15550000001",
-            email=None,
             password="GoodPass1!",
+            email="alice@example.com",
             role_id=role.id,
             org_unit_id=plant.id,
         )
@@ -65,9 +66,10 @@ def test_duplicate_phone_fails(db: Session) -> None:
     svc.create_user(
         UserCreate(
             full_name="A",
+            username="user.a",
             phone="+15550000002",
-            email=None,
             password="GoodPass1!",
+            email="a@example.com",
             role_id=role.id,
             org_unit_id=plant.id,
         )
@@ -76,9 +78,10 @@ def test_duplicate_phone_fails(db: Session) -> None:
         svc.create_user(
             UserCreate(
                 full_name="B",
+                username="user.b",
                 phone="+15550000002",
-                email=None,
                 password="GoodPass2!",
+                email="b@example.com",
                 role_id=role.id,
                 org_unit_id=plant.id,
             )
@@ -98,9 +101,10 @@ def test_missing_role_fails(db: Session) -> None:
         svc.create_user(
             UserCreate(
                 full_name="A",
+                username="user.missingrole",
                 phone="+15550000003",
-                email=None,
                 password="GoodPass1!",
+                email="missingrole@example.com",
                 role_id=999,
                 org_unit_id=plant.id,
             )
