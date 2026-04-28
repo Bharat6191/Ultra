@@ -1,50 +1,77 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import * as React from "react"
+
+import { TaskDashboard, type TasksDashboardModule } from "@/components/dashboard/task-dashboard"
+import { UserDashboard, type UsersDashboardModule } from "@/components/dashboard/user-dashboard"
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { getJson } from "@/lib/api"
+import { hasPermission } from "@/lib/permissions"
+
+type DashboardSummary = {
+  modules: {
+    users?: UsersDashboardModule
+    tasks?: TasksDashboardModule
+    [k: string]: unknown
+  }
+}
 
 export function DashboardPage() {
+  const [summary, setSummary] = React.useState<DashboardSummary | null>(null)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const s = await getJson<DashboardSummary>("/dashboard/summary")
+        if (cancelled) return
+        setSummary(s)
+        setLoadError(null)
+      } catch (e) {
+        if (cancelled) return
+        setLoadError(e instanceof Error ? e.message : "Failed to load dashboard stats")
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  const usersModule = summary?.modules?.users
+  const tasksModule = summary?.modules?.tasks
+
   return (
     <div className="grid gap-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="border-emerald-100">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Plant performance</CardTitle>
-            <CardDescription className="text-xs">Today</CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-baseline justify-between">
-            <div className="text-2xl font-semibold tracking-tight">92%</div>
-            <Badge className="bg-emerald-600">On track</Badge>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Open approvals</CardTitle>
-            <CardDescription className="text-xs">Pending</CardDescription>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold tracking-tight">7</CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Master data updates</CardTitle>
-            <CardDescription className="text-xs">This week</CardDescription>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold tracking-tight">31</CardContent>
-        </Card>
+      <div className="flex items-center gap-2">
+        <h1 className="text-lg font-semibold tracking-tight text-zinc-950">Dashboard</h1>
+        <span className="text-emerald-600">•</span>
+        <span className="text-sm font-medium text-muted-foreground">Workspace</span>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Workspace</CardTitle>
-          <CardDescription>
-            This is the main application area for standard users. Replace these sections with your
-            actual modules.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Recommended next routes: master data, planning, and performance dashboards.
-        </CardContent>
-      </Card>
+      {loadError ? (
+        <Card className="border-dashed border-emerald-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Dashboard data unavailable</CardTitle>
+            <CardDescription>{loadError}</CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
+
+      {!usersModule && !tasksModule && !loadError ? (
+        <Card className="border-dashed border-emerald-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">No modules available</CardTitle>
+            <CardDescription>
+              You don’t have access to any modules. Ask an admin to grant permissions like{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">users.view</code> or{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">task.view</code>.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
+
+      {usersModule && hasPermission("users.view") ? <UserDashboard data={usersModule} /> : null}
+      {tasksModule && (hasPermission("approval.view") || hasPermission("task.view")) ? (
+        <TaskDashboard data={tasksModule} />
+      ) : null}
     </div>
   )
 }

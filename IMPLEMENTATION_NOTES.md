@@ -332,3 +332,56 @@ For a given domain entity (for example a user id after creation is wired to the 
 1. An operator with **`users.create`** submits a new user; the engine creates an **`approval_request`** with **`entity_type=user_creation`**, snapshots a safe **`payload`**, and opens **tasks** for the first workflow step.
 2. Each approver opens **My tasks**, sees the **action** and **entity preview**, and uses **Approve** or **Reject** (requires **`approval.act`**).
 3. **View details** loads **request status** (progress) and the **audit timeline** for that entity so reviewers see **who created**, **who approved**, **when**, and **what is still pending**.
+
+---
+
+## 11) Dynamic Dashboard System (module-based)
+
+We added a modular, permission-driven dashboard system for the **user workspace** (`/dashboard`) where the UI automatically composes dashboard sections based on the modules a user can access.
+
+### Backend API
+
+- `GET /dashboard/summary`
+  - Returns a `modules` object where each key is a module dashboard payload.
+  - Module enablement is derived from the caller’s permissions snapshot (same DB-backed RBAC as the rest of the system).
+
+Module detection rules (current):
+
+- **Users dashboard** enabled when the user has `users.view`.
+- **Tasks dashboard** enabled when the user has `approval.view` or `task.view` (the system has both approval-style and unified task permissions).
+
+Response shape (high-level):
+
+- `modules.users`
+  - `total_users`, `active_users`, `inactive_users`, `new_users_last_7_days`
+  - `users_by_role`: distinct user counts per role
+- `modules.tasks`
+  - `pending`, `approved`, `rejected`, `completed`
+  - `completed` is treated as “finished work” and aggregates `approved + completed + closed` statuses for tasks assigned to the current user.
+
+Files:
+
+- `modules/dashboard/app_router.py`
+- Registered in `app_api/routes.py`
+
+### Frontend composition
+
+- `frontend/src/pages/dashboard.tsx`
+  - Fetches `GET /dashboard/summary`
+  - Renders module sections dynamically (no hardcoded numbers)
+  - Shows an empty-state card when no module dashboards are available
+
+Module components:
+
+- `frontend/src/components/dashboard/user-dashboard.tsx`
+  - Stats cards + charts (Recharts):
+    - Users by role (bar)
+    - Active vs inactive (donut)
+- `frontend/src/components/dashboard/task-dashboard.tsx`
+  - Stats cards + chart (Recharts):
+    - Pending / Approved / Rejected / Completed
+
+### Charts + theming
+
+- Chart library: `recharts` (frontend dependency)
+- Dashboard uses an emerald accent / dark header style to keep a “green on black” feel while staying consistent with the rest of the ShadCN UI.

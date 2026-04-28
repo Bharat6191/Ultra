@@ -6,6 +6,7 @@ from core.config import get_settings
 from core.permissions import require_superuser
 from modules.features.router import router as features_router
 from modules.org_units.router import router as org_units_router
+from modules.dashboard.router import router as dashboard_router
 from modules.approvals.admin_router import router as approval_workflows_router
 from modules.approvals.mappings_admin_router import router as workflow_mappings_router
 from modules.emails.admin_router import router as email_templates_router
@@ -19,6 +20,7 @@ if get_settings().enforce_superuser_on_admin:
     _admin_dependencies.append(Depends(require_superuser()))
 
 router = APIRouter(dependencies=_admin_dependencies)
+router.include_router(dashboard_router)
 router.include_router(users_router)
 router.include_router(org_units_router)
 router.include_router(features_router)
