@@ -15,6 +15,7 @@ EventCode = Literal[
     "MFA_ENABLED",
     "TASK_REWORK_REQUIRED",
     "TASK_RESUBMITTED",
+    "CONTRACTOR_DOC_EXPIRY",
 ]
 
 
@@ -30,5 +31,6 @@ EVENT_CODES: tuple[str, ...] = (
     "MFA_ENABLED",
     "TASK_REWORK_REQUIRED",
     "TASK_RESUBMITTED",
+    "CONTRACTOR_DOC_EXPIRY",
 )
 

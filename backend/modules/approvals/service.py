@@ -728,4 +728,14 @@ class ApprovalEngineService:
             # Avoid sending a second MFA email when the setup link was already included above.
             if not (isinstance(payload, dict) and payload.get("setup_link")):
                 maybe_send_mfa_setup_for_user(self._db, user)
+            return
+
+        if req.entity_type == "contractor_creation":
+            from modules.contractor.models import Contractor
+
+            contractor = self._db.get(Contractor, int(req.entity_id))
+            if contractor is None:
+                raise ApprovalError("Target contractor not found for approval request.")
+            contractor.is_active = True
+            return
 

@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   BarChart3,
   ClipboardList,
+  BriefcaseBusiness,
   Factory,
   KeyRound,
   LayoutDashboard,
@@ -98,6 +99,13 @@ const shellNavItems: ShellNavItem[] = [
     icon: Settings,
     to: "/dashboard/system-settings",
     permission: "settings.update",
+  },
+  {
+    id: "contractors",
+    label: "Contractors",
+    icon: BriefcaseBusiness,
+    to: "/dashboard/contractors",
+    permission: "contractor.view",
   },
 ]
 

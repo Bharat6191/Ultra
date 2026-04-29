@@ -12,10 +12,13 @@ import { PlantsPage } from "@/pages/plants"
 import { RolesPage } from "@/pages/roles"
 import { SettingsPage } from "@/pages/settings"
 import { UsersPage } from "@/pages/users"
+import { ContractorsPage } from "@/pages/contractors"
+import { ContractorDetailPage } from "@/pages/contractor-detail"
 import { MyTasksPage } from "@/pages/my-tasks"
 import { WorkflowAssignmentPage } from "@/pages/workflow-assignment"
 import { EmailTemplatesPage } from "@/pages/email-templates"
 import { EmailTemplateEditorPage } from "@/pages/email-template-editor"
+import { AdminNotificationsPage } from "@/pages/admin-notifications"
 import { UserCreatePage } from "@/pages/user-create"
 import { UserEditPage } from "@/pages/user-edit"
 import { UserViewPage } from "@/pages/user-view"
@@ -119,6 +122,17 @@ function App() {
               </RequirePermission>
             }
           />
+          <Route
+            path="contractors"
+            element={
+              <RequirePermission code="contractor.view">
+                <Outlet />
+              </RequirePermission>
+            }
+          >
+            <Route index element={<ContractorsPage />} />
+            <Route path=":id" element={<ContractorDetailPage />} />
+          </Route>
         </Route>
         <Route path="/admin/login" element={<LoginRoute />} />
         <Route path="/admin" element={<AdminRoute />}>
@@ -165,6 +179,14 @@ function App() {
             element={
               <RequirePermission code="settings.update">
                 <SettingsPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="settings/notifications"
+            element={
+              <RequirePermission anyOf={["notification_settings.manage", "email_templates.manage"]}>
+                <AdminNotificationsPage />
               </RequirePermission>
             }
           />
@@ -328,6 +350,7 @@ function AdminRoute() {
     | "settings"
     | "workflow-assignment"
     | "email-templates"
+    | "notifications"
   >("overview")
   const [userEmail, setUserEmail] = React.useState<string | null>(null)
   const [profileTick, setProfileTick] = React.useState(0)
@@ -341,6 +364,7 @@ function AdminRoute() {
     else if (p.startsWith("/admin/permissions")) setActiveId("permissions")
     else if (p.startsWith("/admin/workflow-assignment")) setActiveId("workflow-assignment")
     else if (p.startsWith("/admin/email-templates")) setActiveId("email-templates")
+    else if (p.startsWith("/admin/settings/notifications")) setActiveId("notifications")
     else if (p.startsWith("/admin/settings")) setActiveId("settings")
     else setActiveId("overview")
   }, [location.pathname])
@@ -386,6 +410,7 @@ function AdminRoute() {
         if (id === "permissions") navigate("/admin/permissions")
         if (id === "workflow-assignment") navigate("/admin/workflow-assignment")
         if (id === "email-templates") navigate("/admin/email-templates")
+        if (id === "notifications") navigate("/admin/settings/notifications")
         if (id === "settings") navigate("/admin/settings")
       }}
       userEmail={userEmail}

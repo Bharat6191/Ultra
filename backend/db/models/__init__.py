@@ -21,6 +21,8 @@ from modules.rbac_association import role_org_unit, role_permission, user_org_un
 from modules.roles.model import Role
 from modules.settings.model import Setting
 from modules.users.model import User
+from modules.contractor.models import Contractor, ContractorDocument
+from modules.notifications.model import NotificationDedupKey, NotificationSetting
 
 __all__ = [
     "AuditLog",
@@ -39,6 +41,10 @@ __all__ = [
     "Role",
     "Setting",
     "User",
+    "Contractor",
+    "ContractorDocument",
+    "NotificationSetting",
+    "NotificationDedupKey",
     "UserSession",
     "PasswordResetToken",
     "AuthPolicy",

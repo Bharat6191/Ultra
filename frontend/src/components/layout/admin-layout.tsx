@@ -1,6 +1,6 @@
 import * as React from "react"
 import type { LucideIcon } from "lucide-react"
-import { Factory, KeyRound, LayoutDashboard, Link2, Mail, Settings, Shield, Users } from "lucide-react"
+import { Bell, Factory, KeyRound, LayoutDashboard, Link2, Mail, Settings, Shield, Users } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -28,6 +28,7 @@ export type AdminNavId =
   | "settings"
   | "workflow-assignment"
   | "email-templates"
+  | "notifications"
 
 type NavItem = {
   id: AdminNavId
@@ -68,6 +69,12 @@ const navItems: NavItem[] = [
     label: "Email Templates",
     icon: Mail,
     permission: ["email_templates.view", "email_templates.create", "email_templates.update", "email_templates.delete"],
+  },
+  {
+    id: "notifications",
+    label: "Notifications",
+    icon: Bell,
+    permission: ["notification_settings.manage", "email_templates.manage"],
   },
   { id: "settings", label: "Settings", icon: Settings, permission: "settings.update" },
 ]

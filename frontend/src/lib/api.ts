@@ -89,6 +89,33 @@ export async function postJson<TResponse>(
   return data as TResponse
 }
 
+export async function postForm<TResponse>(
+  path: string,
+  form: FormData,
+  init?: Omit<RequestInit, "method" | "body" | "headers">
+): Promise<TResponse> {
+  const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`
+  const token = getAccessToken()
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: form,
+    ...init,
+  })
+
+  const text = await res.text()
+  const data = text ? (JSON.parse(text) as unknown) : undefined
+
+  if (!res.ok) {
+    throw new ApiError(parseErrorMessage(data, res.status), res.status, data)
+  }
+
+  return data as TResponse
+}
+
 export async function patchJson<TResponse>(
   path: string,
   body: Json,

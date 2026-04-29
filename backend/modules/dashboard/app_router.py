@@ -14,6 +14,7 @@ from modules.approvals.model import ApprovalTask
 from modules.rbac_association import user_role
 from modules.roles.model import Role
 from modules.users.model import User
+from modules.contractor.models import Contractor, ContractorDocument
 
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -53,6 +54,7 @@ def get_dashboard_summary(
     has_users = _has(grants, "users.view")
     # UI currently gates tasks by `approval.view`, but backend tasks are under `task.*`.
     has_tasks = _has_any(grants, "approval.view", "task.view")
+    has_contractors = _has_any(grants, "contractor.view", "contractor.create", "contractor.update")
 
     modules: dict[str, Any] = {}
 
@@ -101,6 +103,21 @@ def get_dashboard_summary(
             # - approval tasks: approved
             # - manual tasks: completed / closed
             "completed": by_status.get("approved", 0) + by_status.get("completed", 0) + by_status.get("closed", 0),
+        }
+
+    if has_contractors:
+        total_contractors = int(db.scalar(select(func.count()).select_from(Contractor)) or 0)
+        docs_with_expiry = int(
+            db.scalar(
+                select(func.count())
+                .select_from(ContractorDocument)
+                .where(ContractorDocument.expiry_date.is_not(None))
+            )
+            or 0
+        )
+        modules["contractors"] = {
+            "total_contractors": total_contractors,
+            "documents_with_expiry": docs_with_expiry,
         }
 
     return {"modules": modules}
