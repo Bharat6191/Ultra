@@ -12,7 +12,12 @@ import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { getJson, patchJson, postJson } from "@/lib/api"
-import { canListOrgUnitsForAssignments, hasPermission, isSuperuser } from "@/lib/permissions"
+import {
+  canListOrgUnitsForAssignments,
+  hasPermission,
+  isSuperuser,
+  persistAuthFromMe,
+} from "@/lib/permissions"
 
 type OrgUnitPublic = {
   id: number
@@ -194,6 +199,19 @@ export function RolesPage() {
 
   const hasDirty = hasDirtyPermissions || hasDirtyPlants
 
+  const catalogMissingPermissionCount = React.useMemo(() => {
+    if (!catalog?.modules?.length) return 0
+    let n = 0
+    for (const mod of catalog.modules) {
+      for (const tab of mod.tabs) {
+        for (const p of tab.permissions) {
+          if (p.id == null) n += 1
+        }
+      }
+    }
+    return n
+  }, [catalog])
+
   const canSaveRole = hasPermission("roles.update") || isSuperuser()
 
   async function createRole() {
@@ -236,7 +254,20 @@ export function RolesPage() {
     toast.loading("Saving…", { id: "save-perms" })
     try {
       await patchJson<RoleDetail>(`/admin/roles/${selectedRoleId}`, body)
-      toast.success("Saved", { id: "save-perms" })
+      // If the editor happens to be in this role too, refresh their own RBAC
+      // snapshot so menus / tabs / buttons update immediately. The dashboard
+      // app shell also auto-refreshes on focus, so users in other tabs pick
+      // up the change on their next switch back.
+      try {
+        const me = await getJson<{ is_superuser?: boolean; permissions?: string[] }>("/me")
+        persistAuthFromMe(me)
+      } catch {
+        // ignore — a stale snapshot will be cleared on next focus / login.
+      }
+      toast.success(
+        "Saved. Affected users will see new menus on their next page focus, or via Profile → Refresh permissions.",
+        { id: "save-perms" },
+      )
       await loadRole(selectedRoleId)
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to save"
@@ -266,6 +297,19 @@ export function RolesPage() {
         <Alert variant="destructive">
           <AlertTitle>Something went wrong</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {catalogMissingPermissionCount > 0 ? (
+        <Alert>
+          <AlertTitle>Permission rows missing in the database</AlertTitle>
+          <AlertDescription>
+            {catalogMissingPermissionCount} checkbox(es) are disabled because there is no matching row in{" "}
+            <span className="font-mono">permissions</span> yet (the Roles UI cannot tick them until they exist). From
+            the repo root run{" "}
+            <span className="font-mono">python scripts/sync_modules.py</span> against this environment&apos;s
+            database, then reload this page.
+          </AlertDescription>
         </Alert>
       ) : null}
 

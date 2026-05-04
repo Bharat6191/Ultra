@@ -139,7 +139,7 @@ def main() -> int:
 
         roles = {
             "Contractor Manager": {
-                "description": "Full access to contractor master + document uploads.",
+                "description": "Full access to contractor master + document uploads + rate negotiations.",
                 "perms": [
                     "contractor.view",
                     "contractor.create",
@@ -147,6 +147,22 @@ def main() -> int:
                     "contractor.delete",
                     "contractor.manage_plants",
                     "contractor.document.upload",
+                    "rate_master.view",
+                    "rate_master.create",
+                    "rate_master.update",
+                    "contractor_rates.view",
+                    "contractor_rates.create",
+                    "contractor_rates.update",
+                ],
+            },
+            "Procurement Approver": {
+                "description": "Can approve negotiated rates produced by procurement.",
+                "perms": [
+                    "contractor.view",
+                    "contractor_rates.view",
+                    "contractor_rates.approve",
+                    "approval.view",
+                    "approval.act",
                 ],
             },
             "Task Operator": {
@@ -175,6 +191,8 @@ def main() -> int:
         users = [
             # contractor module
             ("ctr_manager", "ctr.manager@example.test", "Contractor Manager", "+15550101001", "Contractor Manager"),
+            # negotiation approver
+            ("rate_approver", "rate.approver@example.test", "Procurement Approver", "+15550101005", "Procurement Approver"),
             # tasks
             ("task_operator", "task.operator@example.test", "Task Operator", "+15550101002", "Task Operator"),
             ("task_manager", "task.manager@example.test", "Task Manager", "+15550101003", "Task Manager"),

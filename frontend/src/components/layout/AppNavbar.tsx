@@ -1,5 +1,6 @@
 import * as React from "react"
-import { Bell } from "lucide-react"
+import { Bell, RefreshCw } from "lucide-react"
+import { toast } from "sonner"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -16,6 +17,7 @@ export type AppNavbarProps = {
   title: string
   userEmail?: string | null
   onSignOut?: () => void
+  onRefreshProfile?: () => void
 }
 
 function computeInitials(email?: string | null) {
@@ -32,8 +34,10 @@ export function AppNavbar({
   title,
   userEmail,
   onSignOut,
+  onRefreshProfile,
 }: AppNavbarProps) {
   const initials = React.useMemo(() => computeInitials(userEmail), [userEmail])
+  const [refreshing, setRefreshing] = React.useState(false)
 
   return (
     <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-gray-200 bg-white px-6">
@@ -62,6 +66,31 @@ export function AppNavbar({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem>Profile</DropdownMenuItem>
+            {onRefreshProfile ? (
+              <DropdownMenuItem
+                disabled={refreshing}
+                onSelect={(e) => {
+                  e.preventDefault()
+                  setRefreshing(true)
+                  toast.loading("Refreshing your permissions…", {
+                    id: "refresh-perms",
+                  })
+                  try {
+                    onRefreshProfile()
+                  } finally {
+                    // The refresh kicks off async work; give the UI a tick to
+                    // re-render with the new RBAC snapshot before resetting.
+                    setTimeout(() => {
+                      setRefreshing(false)
+                      toast.success("Permissions refreshed.", { id: "refresh-perms" })
+                    }, 600)
+                  }
+                }}
+              >
+                <RefreshCw className="size-4 opacity-70" />
+                <span>Refresh permissions</span>
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={(e) => {

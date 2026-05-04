@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getJson, putJson } from "@/lib/api"
+import { hasPermission, isSuperuser } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
 export type PasswordPolicy = {
@@ -42,6 +43,8 @@ function isPasswordPolicy(v: unknown): v is PasswordPolicy {
 }
 
 export function SettingsPage() {
+  const canEditSettings = hasPermission("settings.update") || isSuperuser()
+
   const [policy, setPolicy] = React.useState<PasswordPolicy | null>(null)
   const [authPolicy, setAuthPolicy] = React.useState<AuthPolicy | null>(null)
   const [jsonText, setJsonText] = React.useState("")
@@ -140,6 +143,13 @@ export function SettingsPage() {
       <div className="space-y-1">
         <h2 className="text-lg font-semibold tracking-tight">Settings</h2>
         <p className="text-sm text-muted-foreground">Security and authentication policy for the organization.</p>
+        {!canEditSettings ? (
+          <p className="text-sm text-amber-800">
+            You have read-only access. Saving changes requires{" "}
+            <span className="font-medium">settings.update</span> (grant &quot;Edit&quot; on the Settings module for
+            this role).
+          </p>
+        ) : null}
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="w-full">
@@ -172,6 +182,7 @@ export function SettingsPage() {
                       </div>
                       <Switch
                         checked={authPolicy.password_enabled}
+                        disabled={!canEditSettings}
                         onCheckedChange={(v) => setAuthPolicy((p) => (p ? { ...p, password_enabled: Boolean(v) } : p))}
                       />
                     </div>
@@ -182,6 +193,7 @@ export function SettingsPage() {
                       </div>
                       <Switch
                         checked={authPolicy.captcha_enabled}
+                        disabled={!canEditSettings}
                         onCheckedChange={(v) => setAuthPolicy((p) => (p ? { ...p, captcha_enabled: Boolean(v) } : p))}
                       />
                     </div>
@@ -192,6 +204,7 @@ export function SettingsPage() {
                       </div>
                       <Switch
                         checked={authPolicy.mfa_enabled}
+                        disabled={!canEditSettings}
                         onCheckedChange={(v) => setAuthPolicy((p) => (p ? { ...p, mfa_enabled: Boolean(v) } : p))}
                       />
                     </div>
@@ -202,7 +215,7 @@ export function SettingsPage() {
                       </div>
                       <Switch
                         checked={authPolicy.mfa_enforced}
-                        disabled={!authPolicy.mfa_enabled}
+                        disabled={!canEditSettings || !authPolicy.mfa_enabled}
                         onCheckedChange={(v) => setAuthPolicy((p) => (p ? { ...p, mfa_enforced: Boolean(v) } : p))}
                       />
                     </div>
@@ -212,7 +225,7 @@ export function SettingsPage() {
                     <Button
                       type="button"
                       size="sm"
-                      disabled={savingAuth}
+                      disabled={!canEditSettings || savingAuth}
                       onClick={async () => {
                         if (!authPolicy) return
                         setSavingAuth(true)
@@ -256,6 +269,7 @@ export function SettingsPage() {
                     type="number"
                     min={1}
                     max={256}
+                    disabled={!canEditSettings}
                     value={policy.min_length}
                     onChange={(e) => {
                       const n = Number(e.target.value)
@@ -270,6 +284,7 @@ export function SettingsPage() {
                     type="number"
                     min={0}
                     max={36500}
+                    disabled={!canEditSettings}
                     value={policy.max_age_days}
                     onChange={(e) => {
                       const n = Number(e.target.value)
@@ -297,6 +312,7 @@ export function SettingsPage() {
                   <Switch
                     id={key}
                     checked={policy[key]}
+                    disabled={!canEditSettings}
                     onCheckedChange={(v) =>
                       setPolicy((p) => (p ? { ...p, [key]: Boolean(v) } : p))
                     }
@@ -305,7 +321,7 @@ export function SettingsPage() {
               ))}
 
               <div className="flex justify-end">
-                <Button size="sm" onClick={() => void save()} disabled={saving}>
+                <Button size="sm" onClick={() => void save()} disabled={!canEditSettings || saving}>
                   {saving ? "Saving…" : "Save password policy"}
                 </Button>
               </div>
@@ -324,12 +340,13 @@ export function SettingsPage() {
                   jsonError && "border-destructive"
                 )}
                 spellCheck={false}
+                disabled={!canEditSettings}
                 value={jsonText}
                 onChange={(e) => setJsonText(e.target.value)}
               />
               {jsonError ? <p className="text-xs text-destructive">{jsonError}</p> : null}
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={applyJson}>
+                <Button type="button" variant="outline" size="sm" disabled={!canEditSettings} onClick={applyJson}>
                   Apply JSON
                 </Button>
               </div>

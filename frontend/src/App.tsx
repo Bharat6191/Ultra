@@ -15,6 +15,9 @@ import { UsersPage } from "@/pages/users"
 import { ContractorsPage } from "@/pages/contractors"
 import { ContractorDetailPage } from "@/pages/contractor-detail"
 import { ContractorCreatePage } from "@/pages/contractor-create"
+import { RateMasterPage } from "@/pages/rate-master"
+import { NegotiatedRatesPage } from "@/pages/negotiated-rates"
+import { NegotiatedRateDetailPage } from "@/pages/negotiated-rate-detail"
 import { MyTasksPage } from "@/pages/my-tasks"
 import { WorkflowAssignmentPage } from "@/pages/workflow-assignment"
 import { EmailTemplatesPage } from "@/pages/email-templates"
@@ -30,8 +33,7 @@ import { MfaSetupPage } from "@/pages/mfa-setup"
 import * as React from "react"
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { getJson } from "@/lib/api"
-import { AccessDenied } from "@/components/admin/access-denied"
-import { clearAuthProfile, hasAnyNonUsersRbacPermission, isSuperuser, persistAuthFromMe } from "@/lib/permissions"
+import { clearAuthProfile, isSuperuser, persistAuthFromMe } from "@/lib/permissions"
 
 function App() {
   return (
@@ -45,28 +47,6 @@ function App() {
         <Route path="/login" element={<AppLoginRoute />} />
         <Route path="/dashboard" element={<AppRoute />}>
           <Route index element={<DashboardPage />} />
-          <Route
-            path="performance"
-            element={
-              <RequireNonUsersWorkspace>
-                <WorkspacePlaceholder
-                  title="Performance"
-                  body="Connect plant KPIs and trends here. This area is reserved for operational analytics."
-                />
-              </RequireNonUsersWorkspace>
-            }
-          />
-          <Route
-            path="preferences"
-            element={
-              <RequireNonUsersWorkspace>
-                <WorkspacePlaceholder
-                  title="Preferences"
-                  body="Personal settings for this workspace will live here."
-                />
-              </RequireNonUsersWorkspace>
-            }
-          />
           <Route
             path="users"
             element={
@@ -118,7 +98,7 @@ function App() {
           <Route
             path="system-settings"
             element={
-              <RequirePermission code="settings.update">
+              <RequirePermission anyOf={["settings.view", "settings.update"]}>
                 <SettingsPage />
               </RequirePermission>
             }
@@ -141,6 +121,41 @@ function App() {
               }
             />
             <Route path=":id" element={<ContractorDetailPage />} />
+          </Route>
+          <Route
+            path="rate-master"
+            element={
+              <RequirePermission
+                anyOf={["rate_master.view", "rate_master.create", "rate_master.update"]}
+              >
+                <RateMasterPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="negotiated-rates"
+            element={
+              <RequirePermission
+                anyOf={[
+                  "contractor_rates.view",
+                  "contractor_rates.create",
+                  "contractor_rates.update",
+                  "contractor_rates.approve",
+                ]}
+              >
+                <Outlet />
+              </RequirePermission>
+            }
+          >
+            <Route index element={<NegotiatedRatesPage />} />
+            <Route
+              path=":rateId"
+              element={
+                <RequirePermission code="contractor_rates.view">
+                  <NegotiatedRateDetailPage />
+                </RequirePermission>
+              }
+            />
           </Route>
         </Route>
         <Route path="/admin/login" element={<LoginRoute />} />
@@ -186,7 +201,7 @@ function App() {
           <Route
             path="settings"
             element={
-              <RequirePermission code="settings.update">
+              <RequirePermission anyOf={["settings.view", "settings.update"]}>
                 <SettingsPage />
               </RequirePermission>
             }
@@ -226,24 +241,6 @@ function App() {
 }
 
 export default App
-
-function WorkspacePlaceholder({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="max-w-lg space-y-2">
-      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-      <p className="text-sm text-muted-foreground">{body}</p>
-    </div>
-  )
-}
-
-function RequireNonUsersWorkspace({ children }: { children: React.ReactNode }) {
-  if (!hasAnyNonUsersRbacPermission()) {
-    return (
-      <AccessDenied message="This area is available when your role includes permissions beyond user management (for example roles, permissions, or settings)." />
-    )
-  }
-  return <>{children}</>
-}
 
 function hasToken() {
   const t = localStorage.getItem("access_token")
@@ -303,40 +300,72 @@ function AppRoute() {
   const [userEmail, setUserEmail] = React.useState<string | null>(null)
   const [profileTick, setProfileTick] = React.useState(0)
 
-  React.useEffect(() => {
-    let cancelled = false
-    ;(async () => {
+  // Refetch /me and re-snapshot the RBAC cache. Used both at mount (to gate
+  // the route) and on window focus / explicit refresh so that permission
+  // changes made in another tab become visible without a full reload.
+  const refreshProfile = React.useCallback(
+    async (opts?: { silent?: boolean }) => {
       if (!hasToken()) {
-        setChecking(false)
-        navigate("/login", { replace: true })
+        if (!opts?.silent) {
+          setChecking(false)
+          navigate("/login", { replace: true })
+        }
         return
       }
       try {
-        const me = await getJson<{ email?: string; is_superuser?: boolean; permissions?: string[] }>("/me")
-        if (cancelled) return
+        const me = await getJson<{
+          email?: string
+          is_superuser?: boolean
+          permissions?: string[]
+        }>("/me")
         persistAuthFromMe(me)
         if (me?.is_superuser === true) {
           navigate("/admin", { replace: true })
           return
         }
         setUserEmail(typeof me.email === "string" ? me.email : null)
+        // Bump tick on every refresh so descendant pages re-evaluate
+        // hasPermission()-driven UI (sidebar items, tabs, action buttons).
         setProfileTick((t) => t + 1)
         setChecking(false)
       } catch {
-        if (cancelled) return
+        if (opts?.silent) return
         clearTokens()
         navigate("/login", { replace: true })
       }
-    })()
-    return () => {
-      cancelled = true
+    },
+    [navigate],
+  )
+
+  React.useEffect(() => {
+    void refreshProfile()
+  }, [refreshProfile])
+
+  // Auto-refresh permissions when the user comes back to the tab. This catches
+  // the common case where an admin updates a role in another tab; the user's
+  // sidebar / tabs would otherwise stay stale until they hard-reload.
+  React.useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === "visible") {
+        void refreshProfile({ silent: true })
+      }
     }
-  }, [navigate])
+    function onFocus() {
+      void refreshProfile({ silent: true })
+    }
+    window.addEventListener("focus", onFocus)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      window.removeEventListener("focus", onFocus)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [refreshProfile])
 
   if (checking) return null
   return (
     <AppShellLayout
       userEmail={userEmail}
+      onRefreshProfile={() => void refreshProfile({ silent: true })}
       onSignOut={() => {
         clearTokens()
         navigate("/login", { replace: true })

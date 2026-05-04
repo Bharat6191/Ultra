@@ -200,6 +200,80 @@ class ApprovalEngineService:
         stmt = select(user_role.c.role_id).where(user_role.c.user_id == user_id)
         return {int(rid) for rid in self._db.execute(stmt).scalars().all()}
 
+    def _task_title_and_description(self, req: ApprovalRequest) -> tuple[str, str | None]:
+        """Build an approver-friendly title + description for an approval task.
+
+        The base ``ApprovalTask.title`` falls back to ``Approval: <entity_type>`` so
+        the inbox is readable even without entity-specific knowledge. For known
+        entity types (currently contractor, contractor rate) we resolve the linked
+        record and embed key context (contractor name, negotiated rate, savings)
+        so the approver sees what they're acting on at a glance.
+        """
+        et = req.entity_type or ""
+        eid = req.entity_id
+
+        # Contractor lifecycle approvals.
+        if et in ("contractor_creation", "contractor_activation", "contractor_update"):
+            try:
+                from modules.contractor.models import Contractor
+
+                c = self._db.get(Contractor, int(eid))
+                if c is not None:
+                    pretty = {
+                        "contractor_creation": "Contractor approval",
+                        "contractor_activation": "Contractor activation",
+                        "contractor_update": "Contractor update",
+                    }[et]
+                    title = f"{pretty}: {c.name}"
+                    desc = (
+                        f"Review and approve {pretty.lower()} for "
+                        f"{c.name}{' (' + (c.contractor_code or '') + ')' if c.contractor_code else ''}."
+                    )
+                    return title, desc
+            except Exception:
+                pass
+
+        # Contractor negotiated rate approvals.
+        if et == "contractor_rate_approval":
+            try:
+                from modules.contractor.models import Contractor
+                from modules.contractor_rates.models import ContractorRate, RateMaster
+
+                rate = self._db.get(ContractorRate, int(eid))
+                if rate is not None:
+                    contractor = self._db.get(Contractor, int(rate.contractor_id))
+                    rm = self._db.get(RateMaster, int(rate.rate_master_id))
+                    job = rm.job_type if rm is not None else "rate"
+                    skill = (rm.skill_type if rm is not None else "").replace("_", " ")
+                    contractor_name = contractor.name if contractor is not None else f"Contractor #{rate.contractor_id}"
+                    title = f"Rate approval: {contractor_name} · {job}"
+                    bits = [
+                        f"Negotiated ₹{rate.negotiated_rate}",
+                    ]
+                    if rm is not None:
+                        bits.append(f"base ₹{rm.base_rate}")
+                    if rate.previous_rate is not None:
+                        bits.append(f"previous ₹{rate.previous_rate}")
+                    if rate.savings_amount is not None and rate.savings_percentage is not None:
+                        bits.append(
+                            f"savings ₹{rate.savings_amount} ({rate.savings_percentage}%)"
+                        )
+                    bits.append(
+                        f"effective {rate.effective_from}"
+                        + (f" → {rate.effective_to}" if rate.effective_to else "")
+                    )
+                    desc = (
+                        f"Review the {skill or 'requested'} {job} rate for {contractor_name}: "
+                        + ", ".join(bits)
+                        + "."
+                    )
+                    return title, desc
+            except Exception:
+                pass
+
+        # Generic fallback: keeps the legacy "Approval: <entity_type>" wording.
+        return f"Approval: {et}", None
+
     def _create_tasks_for_step(self, req: ApprovalRequest, step: ApprovalStep) -> None:
         # Create a single group/role-assigned task. Any user in that role can act on it.
         role = self._db.get(Role, step.approver_role_id)
@@ -208,13 +282,15 @@ class ApprovalEngineService:
         # Keep a guardrail: if there are zero active users in the role, fail fast (same as legacy).
         if not self._users_for_role(step.approver_role_id):
             raise ConflictError("No active approvers found for the configured approver role.")
+        title, description = self._task_title_and_description(req)
         task = ApprovalTask(
             request_id=req.id,
             step_id=step.id,
             assigned_user_id=None,
             assigned_role_id=step.approver_role_id,
             task_type="approval",
-            title=f"Approval: {req.entity_type}",
+            title=title,
+            description=description,
             priority="medium",
             status="pending",
             acted_at=None,
@@ -536,6 +612,14 @@ class ApprovalEngineService:
             task.status = "rejected"
             task.acted_at = now
 
+            # Entity-specific rejection hook (best-effort: contractor_rate flips to "rejected"
+            # so it can be reworked or replaced; other entities stay on the rework path).
+            self._apply_entity_rejection(
+                req,
+                rejector_user_id=actor_user_id,
+                comment=comment,
+            )
+
             # Move request into rework state (do not keep it "pending").
             req.status = "in_rework"
 
@@ -680,6 +764,29 @@ class ApprovalEngineService:
         self._db.commit()
         return self.get_request(req.id)
 
+    def _apply_entity_rejection(
+        self,
+        req: ApprovalRequest,
+        *,
+        rejector_user_id: int | None,
+        comment: str | None,
+    ) -> None:
+        """Entity-specific finalization hook for rejection. Best-effort; never raises."""
+        try:
+            if req.entity_type == "contractor_rate_approval":
+                from modules.contractor_rates.service import ContractorRateService
+
+                ContractorRateService(self._db).finalize_rejection(
+                    int(req.entity_id),
+                    rejector_user_id=rejector_user_id,
+                    approval_request_id=int(req.id),
+                    comment=comment,
+                )
+        except Exception:
+            # Rejection must not be blocked by an entity-specific failure;
+            # the rework path still creates the rework task so the requester is notified.
+            pass
+
     def _finalize_request(self, req: ApprovalRequest) -> None:
         if req.entity_type == "user_creation":
             user = self._db.get(User, req.entity_id)
@@ -773,6 +880,36 @@ class ApprovalEngineService:
                     "approval_request_id": int(req.id),
                     "via": "approval_finalized",
                 },
+            )
+            return
+
+        if req.entity_type == "contractor_rate_approval":
+            # Final approval on a negotiated rate -> activate it via the rate service so
+            # savings/audit/lifecycle are all updated atomically.
+            from modules.contractor_rates.service import ContractorRateService
+
+            # Find the approver who triggered the final approval (last approve action on
+            # the request's tasks). When no actor is found we fall back to None.
+            approver_user_id: int | None = None
+            try:
+                last_action = self._db.scalar(
+                    select(ApprovalAction)
+                    .join(ApprovalTask, ApprovalTask.id == ApprovalAction.task_id)
+                    .where(
+                        ApprovalTask.request_id == int(req.id),
+                        ApprovalAction.action == "approve",
+                    )
+                    .order_by(ApprovalAction.created_at.desc())
+                )
+                if last_action is not None:
+                    approver_user_id = int(last_action.user_id)
+            except Exception:
+                approver_user_id = None
+
+            ContractorRateService(self._db).finalize_approval(
+                int(req.entity_id),
+                approver_user_id=approver_user_id,
+                approval_request_id=int(req.id),
             )
             return
 

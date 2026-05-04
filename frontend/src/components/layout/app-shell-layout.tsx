@@ -1,15 +1,15 @@
 import * as React from "react"
 import {
-  BarChart3,
-  ClipboardList,
+  BadgeIndianRupee,
   BriefcaseBusiness,
+  ClipboardList,
   Factory,
+  Handshake,
   KeyRound,
   LayoutDashboard,
   LogOut,
   PanelLeft,
   Settings,
-  Settings2,
   Shield,
   User2,
   Users,
@@ -19,7 +19,7 @@ import { useLocation } from "react-router-dom"
 
 import { AppNavbar } from "@/components/layout/AppNavbar"
 import { AppSidebar } from "@/components/layout/AppSidebar"
-import { hasAnyNonUsersRbacPermission, hasPermission } from "@/lib/permissions"
+import { hasPermission } from "@/lib/permissions"
 import type { SidebarNavItem } from "@/components/layout/AppSidebar"
 
 type NavPerm = string | string[] | null
@@ -30,31 +30,10 @@ type ShellNavItem = {
   icon: LucideIcon
   to: string
   permission: NavPerm
-  /**
-   * When true, hide this item unless the user has at least one RBAC grant outside ``users.*``
-   * (so roles with only user-management permissions do not see generic workspace tabs).
-   */
-  hideWhenOnlyUsersModule?: boolean
 }
 
 const shellNavItems: ShellNavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, to: "/dashboard", permission: null },
-  {
-    id: "performance",
-    label: "Performance",
-    icon: BarChart3,
-    to: "/dashboard/performance",
-    permission: null,
-    hideWhenOnlyUsersModule: true,
-  },
-  {
-    id: "preferences",
-    label: "Preferences",
-    icon: Settings2,
-    to: "/dashboard/preferences",
-    permission: null,
-    hideWhenOnlyUsersModule: true,
-  },
   { id: "users", label: "Users", icon: Users, to: "/dashboard/users", permission: "users.view" },
   {
     id: "tasks",
@@ -89,7 +68,7 @@ const shellNavItems: ShellNavItem[] = [
     label: "System settings",
     icon: Settings,
     to: "/dashboard/system-settings",
-    permission: "settings.update",
+    permission: ["settings.view", "settings.update"],
   },
   {
     id: "contractors",
@@ -98,10 +77,28 @@ const shellNavItems: ShellNavItem[] = [
     to: "/dashboard/contractors",
     permission: "contractor.view",
   },
+  {
+    id: "rate-master",
+    label: "Rate master",
+    icon: BadgeIndianRupee,
+    to: "/dashboard/rate-master",
+    permission: ["rate_master.view", "rate_master.create", "rate_master.update"],
+  },
+  {
+    id: "negotiated-rates",
+    label: "Negotiated rates",
+    icon: Handshake,
+    to: "/dashboard/negotiated-rates",
+    permission: [
+      "contractor_rates.view",
+      "contractor_rates.create",
+      "contractor_rates.update",
+      "contractor_rates.approve",
+    ],
+  },
 ]
 
 function navItemVisible(item: ShellNavItem): boolean {
-  if (item.hideWhenOnlyUsersModule && !hasAnyNonUsersRbacPermission()) return false
   const p = item.permission
   if (p === null) return true
   if (Array.isArray(p)) return p.some((c) => hasPermission(c))
@@ -117,9 +114,15 @@ export type AppShellLayoutProps = {
   children: React.ReactNode
   userEmail?: string | null
   onSignOut?: () => void
+  onRefreshProfile?: () => void
 }
 
-export function AppShellLayout({ children, userEmail, onSignOut }: AppShellLayoutProps) {
+export function AppShellLayout({
+  children,
+  userEmail,
+  onSignOut,
+  onRefreshProfile,
+}: AppShellLayoutProps) {
   const location = useLocation()
   const visibleNav = shellNavItems.filter(navItemVisible)
 
@@ -138,7 +141,12 @@ export function AppShellLayout({ children, userEmail, onSignOut }: AppShellLayou
       <AppSidebar items={sidebarItems} />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <AppNavbar title={title} userEmail={userEmail} onSignOut={onSignOut} />
+        <AppNavbar
+          title={title}
+          userEmail={userEmail}
+          onSignOut={onSignOut}
+          onRefreshProfile={onRefreshProfile}
+        />
 
         <main className="min-h-0 flex-1 overflow-auto px-6 py-6">
           <div className="w-full">{children}</div>

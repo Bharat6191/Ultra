@@ -76,7 +76,12 @@ const navItems: NavItem[] = [
     icon: Bell,
     permission: ["notification_settings.manage", "email_templates.manage"],
   },
-  { id: "settings", label: "Settings", icon: Settings, permission: "settings.update" },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: Settings,
+    permission: ["settings.view", "settings.update"],
+  },
 ]
 
 export type AdminLayoutProps = {

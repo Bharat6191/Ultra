@@ -78,11 +78,6 @@ export function hasPermission(code: string): boolean {
 }
 
 /**
- * True if the user has any RBAC permission outside the ``users.*`` namespace
- * (roles, permissions, settings, features). Used for workspace nav items that are not
- * user-management screens (e.g. Performance) so a role with only ``users.*`` does not see them.
- */
-/**
  * List org units (plants) for user/role pickers without opening the Plants admin module.
  * Matches ``GET /admin/org-units`` authorization (OR of these codes).
  */
@@ -100,24 +95,15 @@ export function canListOrgUnitsForAssignments(): boolean {
       // dialog. Mirror the backend OR-permission list.
       hasPermission("contractor.view") ||
       hasPermission("contractor.update") ||
-      hasPermission("contractor.manage_plants")
+      hasPermission("contractor.manage_plants") ||
+      // Rate master + negotiated rates UIs use the same plant picker.
+      hasPermission("rate_master.view") ||
+      hasPermission("rate_master.create") ||
+      hasPermission("rate_master.update") ||
+      hasPermission("contractor_rates.view") ||
+      hasPermission("contractor_rates.create") ||
+      hasPermission("contractor_rates.update")
     )
-  } catch {
-    return false
-  }
-}
-
-export function hasAnyNonUsersRbacPermission(): boolean {
-  try {
-    if (localStorage.getItem(LS_IS_SUPERUSER) === "1") return true
-    const modules = ["roles", "permissions", "settings", "features", "org_units"] as const
-    const actions = ["view", "create", "update", "delete"] as const
-    for (const m of modules) {
-      for (const a of actions) {
-        if (hasPermission(`${m}.${a}`)) return true
-      }
-    }
-    return false
   } catch {
     return false
   }

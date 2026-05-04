@@ -4,6 +4,7 @@ import { toast } from "sonner"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ContractorRatesPanel } from "@/components/contractors/ContractorRatesPanel"
 import {
   Dialog,
   DialogContent,
@@ -83,6 +84,21 @@ export function ContractorDetailPage() {
 
   const canEdit = hasPermission("contractor.update")
   const canActivate = hasPermission("contractor.activate") || hasPermission("contractor.update")
+  const canViewRates = hasPermission("contractor_rates.view")
+
+  const rawTab = (searchParams.get("tab") ?? "overview").toLowerCase()
+  const focusParam = searchParams.get("focus")
+  const focusRateId = focusParam ? Number(focusParam) : null
+
+  // Tabs available on the contractor master profile. The "rates" tab is a
+  // read-only view of negotiation history — actions (create / submit / cancel /
+  // add round) live on the dedicated `/dashboard/negotiated-rates/:id` page.
+  const allowedTabs = canViewRates
+    ? (["overview", "documents", "plants", "rates", "timeline"] as const)
+    : (["overview", "documents", "plants", "timeline"] as const)
+  const tabValue: string = (allowedTabs as readonly string[]).includes(rawTab)
+    ? rawTab
+    : "overview"
 
   async function loadContractor() {
     setError(null)
@@ -214,11 +230,26 @@ export function ContractorDetailPage() {
 
       {error ? <div className="text-sm text-destructive">{error}</div> : null}
 
-      <Tabs defaultValue="overview" className="gap-4">
+      <Tabs
+        value={tabValue}
+        onValueChange={(v) => {
+          const next = new URLSearchParams(searchParams)
+          if (v === "overview") next.delete("tab")
+          else next.set("tab", v)
+          // The deep-link `focus` param is only meaningful while the rates tab
+          // is selected; drop it when the user navigates elsewhere.
+          if (v !== "rates") next.delete("focus")
+          setSearchParams(next, { replace: true })
+        }}
+        className="gap-4"
+      >
         <TabsList variant="line" className="rounded-2xl bg-white p-2 shadow-sm">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="plants">Plants</TabsTrigger>
+          {canViewRates ? (
+            <TabsTrigger value="rates">Negotiated rates</TabsTrigger>
+          ) : null}
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
 
@@ -241,6 +272,23 @@ export function ContractorDetailPage() {
         <TabsContent value="plants">
           <ContractorPlants contractorId={contractor.id} />
         </TabsContent>
+
+        {canViewRates ? (
+          <TabsContent value="rates">
+            <ContractorRatesPanel
+              contractorId={contractor.id}
+              focusRateId={focusRateId}
+              onFocusHandled={() => {
+                if (focusParam) {
+                  const next = new URLSearchParams(searchParams)
+                  next.delete("focus")
+                  setSearchParams(next, { replace: true })
+                }
+              }}
+              readOnly
+            />
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="timeline">
           <ContractorTimeline contractorId={contractor.id} />

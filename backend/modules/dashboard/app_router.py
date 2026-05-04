@@ -20,6 +20,7 @@ from modules.contractor.models import (
     ContractorPlant,
 )
 from modules.contractor.compliance import evaluate_contractor_compliance
+from modules.contractor_rates.models import ContractorRate, RateMaster
 from modules.org_units.model import OrgUnit
 
 
@@ -61,6 +62,13 @@ def get_dashboard_summary(
     # UI currently gates tasks by `approval.view`, but backend tasks are under `task.*`.
     has_tasks = _has_any(grants, "approval.view", "task.view")
     has_contractors = _has_any(grants, "contractor.view", "contractor.create", "contractor.update")
+    has_rates = _has_any(
+        grants,
+        "contractor_rates.view",
+        "contractor_rates.create",
+        "contractor_rates.update",
+        "contractor_rates.approve",
+    )
 
     modules: dict[str, Any] = {}
 
@@ -217,6 +225,79 @@ def get_dashboard_summary(
             # Backward-compat fields read by older clients.
             "total_contractors": total_contractors,
             "documents_with_expiry": expiring_documents_7_days + expired_documents,
+        }
+
+    if has_rates:
+        # Aggregate KPIs for the negotiation workflow widget.
+        rate_status_rows = db.execute(
+            select(ContractorRate.status, func.count())
+            .group_by(ContractorRate.status)
+        ).all()
+        by_rate_status: dict[str, int] = {str(s or "unknown"): int(c) for s, c in rate_status_rows}
+        total_negotiations = sum(by_rate_status.values())
+        pending_approvals = by_rate_status.get("pending_approval", 0)
+        approved_count = by_rate_status.get("approved", 0)
+        rejected_count = by_rate_status.get("rejected", 0)
+
+        # Negotiation savings — anchored on the contractor's initial ask
+        # (clamped at 0). This is procurement's "we shaved X off the opening
+        # price" story and is always non-negative.
+        total_savings = db.scalar(
+            select(func.coalesce(func.sum(ContractorRate.savings_amount), 0)).where(
+                ContractorRate.status == "approved",
+                ContractorRate.savings_amount.is_not(None),
+            )
+        ) or 0
+        avg_savings_pct = db.scalar(
+            select(func.coalesce(func.avg(ContractorRate.savings_percentage), 0)).where(
+                ContractorRate.status == "approved",
+                ContractorRate.savings_percentage.is_not(None),
+            )
+        ) or 0
+
+        # Vs-base metrics — signed differences against the procurement
+        # baseline. Computed in Python because we want bucketed counts
+        # (above/below/at) along with the totals, which is easier than three
+        # separate aggregate queries.
+        approved_above_base = 0
+        approved_below_base = 0
+        approved_at_base = 0
+        total_premium_above_base = 0.0
+        total_below_base_savings = 0.0
+        for negotiated, base in db.execute(
+            select(ContractorRate.negotiated_rate, RateMaster.base_rate)
+            .join(RateMaster, RateMaster.id == ContractorRate.rate_master_id)
+            .where(ContractorRate.status == "approved")
+        ).all():
+            if negotiated is None or base is None:
+                continue
+            diff = float(negotiated) - float(base)
+            if diff > 0:
+                approved_above_base += 1
+                total_premium_above_base += diff
+            elif diff < 0:
+                approved_below_base += 1
+                total_below_base_savings += -diff
+            else:
+                approved_at_base += 1
+
+        modules["contractor_rates"] = {
+            "total_negotiations": total_negotiations,
+            "pending_approvals": pending_approvals,
+            "approved": approved_count,
+            "rejected": rejected_count,
+            # Negotiation savings (initial ask -> final agreement, always >= 0).
+            "total_savings": float(total_savings or 0),
+            "avg_savings_percentage": float(avg_savings_pct or 0),
+            # Vs-base KPIs (signed).
+            "total_premium_above_base": round(total_premium_above_base, 2),
+            "total_below_base_savings": round(total_below_base_savings, 2),
+            "approved_above_base": approved_above_base,
+            "approved_below_base": approved_below_base,
+            "approved_at_base": approved_at_base,
+            "by_status": [
+                {"status": k, "count": v} for k, v in sorted(by_rate_status.items())
+            ],
         }
 
     return {"modules": modules}

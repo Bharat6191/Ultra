@@ -8,6 +8,7 @@ import {
   type ContractorsDashboardModule,
 } from "@/components/contractors/ContractorDashboard"
 import { ContractorCharts } from "@/components/contractors/ContractorCharts"
+import { RatesDashboard, type RatesDashboardModule } from "@/components/contractors/RatesDashboard"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { getJson } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
@@ -17,6 +18,7 @@ type DashboardSummary = {
     users?: UsersDashboardModule
     tasks?: TasksDashboardModule
     contractors?: ContractorsDashboardModule
+    contractor_rates?: RatesDashboardModule
     [k: string]: unknown
   }
 }
@@ -47,7 +49,9 @@ export function DashboardPage() {
   const usersModule = summary?.modules?.users
   const tasksModule = summary?.modules?.tasks
   const contractorsModule = summary?.modules?.contractors
+  const ratesModule = summary?.modules?.contractor_rates
   const canCreateContractor = hasPermission("contractor.create")
+  const canViewRates = hasPermission("contractor_rates.view")
 
   return (
     <div className="grid gap-6">
@@ -101,6 +105,8 @@ export function DashboardPage() {
           ) : null}
         </div>
       ) : null}
+
+      {ratesModule && canViewRates ? <RatesDashboard module={ratesModule} /> : null}
     </div>
   )
 }

@@ -20,6 +20,13 @@ from modules.roles.model import Role  # noqa: F401
 from modules.settings.model import Setting  # noqa: F401
 from modules.users.model import User  # noqa: F401
 from modules.contractor.models import Contractor, ContractorDocument  # noqa: F401
+from modules.contractor_rates.models import (  # noqa: F401
+    ContractorRate,
+    ContractorRateAuditLog,
+    NegotiationLog,
+    RateMaster,
+    RateMasterAuditLog,
+)
 from modules.notifications.model import NotificationSetting, NotificationDedupKey  # noqa: F401
 
 config.set_main_option("sqlalchemy.url", DATABASE_URL)

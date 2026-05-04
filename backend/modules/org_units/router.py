@@ -37,6 +37,14 @@ def list_org_units(
                 "contractor.view",
                 "contractor.update",
                 "contractor.manage_plants",
+                # Rate master + negotiated rates UIs need the plant catalog for
+                # plant filters / picker on the create / edit dialog.
+                "rate_master.view",
+                "rate_master.create",
+                "rate_master.update",
+                "contractor_rates.view",
+                "contractor_rates.create",
+                "contractor_rates.update",
             )
         ),
     ],
