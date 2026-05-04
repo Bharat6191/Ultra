@@ -55,6 +55,10 @@ const createUserSchema = z.object({
   username: z.string().min(3, "Username is required").max(64),
   phone: z.string().min(3, "Phone is required").max(32),
   email: z.string().email("Enter a valid email"),
+  employee_code: z.string().max(64).optional(),
+  department: z.string().max(128).optional(),
+  designation: z.string().max(128).optional(),
+  address: z.string().max(5000).optional(),
   role_id: z.string().min(1, "Role is required"),
   org_unit_id: z.string().min(1, "Plant is required"),
   is_active: z.boolean(),
@@ -77,6 +81,10 @@ export function UserCreatePage() {
       username: "",
       phone: "",
       email: "",
+      employee_code: "",
+      department: "",
+      designation: "",
+      address: "",
       role_id: "",
       org_unit_id: "",
       is_active: true,
@@ -143,6 +151,10 @@ export function UserCreatePage() {
         username: values.username.trim(),
         phone: values.phone.trim(),
         email,
+        employee_code: values.employee_code?.trim() || null,
+        department: values.department?.trim() || null,
+        designation: values.designation?.trim() || null,
+        address: values.address?.trim() || null,
         role_id: roleId,
         org_unit_id: orgUnitId,
         is_active: values.is_active,
@@ -214,6 +226,42 @@ export function UserCreatePage() {
                 <Input id="create-email" type="email" autoComplete="email" {...form.register("email")} />
                 {form.formState.errors.email?.message ? (
                   <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="create-employee-code">Employee code</Label>
+                <Input id="create-employee-code" {...form.register("employee_code")} placeholder="EMP-001" />
+                {form.formState.errors.employee_code?.message ? (
+                  <p className="text-xs text-destructive">{form.formState.errors.employee_code.message as any}</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="create-department">Department</Label>
+                <Input id="create-department" {...form.register("department")} placeholder="Operations" />
+                {form.formState.errors.department?.message ? (
+                  <p className="text-xs text-destructive">{form.formState.errors.department.message as any}</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="create-designation">Designation</Label>
+                <Input id="create-designation" {...form.register("designation")} placeholder="Supervisor" />
+                {form.formState.errors.designation?.message ? (
+                  <p className="text-xs text-destructive">{form.formState.errors.designation.message as any}</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="create-address">Address</Label>
+                <textarea
+                  id="create-address"
+                  className="min-h-[90px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+                  {...form.register("address")}
+                />
+                {form.formState.errors.address?.message ? (
+                  <p className="text-xs text-destructive">{form.formState.errors.address.message as any}</p>
                 ) : null}
               </div>
 

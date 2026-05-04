@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from core.auth import CurrentUser, get_current_user
@@ -14,7 +14,13 @@ from modules.approvals.model import ApprovalTask
 from modules.rbac_association import user_role
 from modules.roles.model import Role
 from modules.users.model import User
-from modules.contractor.models import Contractor, ContractorDocument
+from modules.contractor.models import (
+    Contractor,
+    ContractorDocument,
+    ContractorPlant,
+)
+from modules.contractor.compliance import evaluate_contractor_compliance
+from modules.org_units.model import OrgUnit
 
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -106,18 +112,111 @@ def get_dashboard_summary(
         }
 
     if has_contractors:
+        today = date.today()
+        seven_days = today + timedelta(days=7)
+
         total_contractors = int(db.scalar(select(func.count()).select_from(Contractor)) or 0)
-        docs_with_expiry = int(
+        active_contractors = int(
             db.scalar(
                 select(func.count())
-                .select_from(ContractorDocument)
-                .where(ContractorDocument.expiry_date.is_not(None))
+                .select_from(Contractor)
+                .where(Contractor.status == "active")
             )
             or 0
         )
+        non_compliant = int(
+            db.scalar(
+                select(func.count())
+                .select_from(Contractor)
+                .where(Contractor.status == "non_compliant")
+            )
+            or 0
+        )
+        suspended = int(
+            db.scalar(
+                select(func.count())
+                .select_from(Contractor)
+                .where(Contractor.status == "suspended")
+            )
+            or 0
+        )
+        blacklisted = int(
+            db.scalar(
+                select(func.count())
+                .select_from(Contractor)
+                .where(Contractor.status == "blacklisted")
+            )
+            or 0
+        )
+        pending = int(
+            db.scalar(
+                select(func.count())
+                .select_from(Contractor)
+                .where(Contractor.status == "pending")
+            )
+            or 0
+        )
+        expiring_documents_7_days = int(
+            db.scalar(
+                select(func.count())
+                .select_from(ContractorDocument)
+                .where(
+                    ContractorDocument.expiry_date.is_not(None),
+                    ContractorDocument.expiry_date >= today,
+                    ContractorDocument.expiry_date <= seven_days,
+                )
+            )
+            or 0
+        )
+        expired_documents = int(
+            db.scalar(
+                select(func.count())
+                .select_from(ContractorDocument)
+                .where(
+                    ContractorDocument.expiry_date.is_not(None),
+                    ContractorDocument.expiry_date < today,
+                )
+            )
+            or 0
+        )
+
+        # By status (for donut)
+        by_status_rows = db.execute(
+            select(Contractor.status, func.count())
+            .group_by(Contractor.status)
+            .order_by(Contractor.status.asc())
+        ).all()
+        by_status = [
+            {"status": str(s or "unknown"), "count": int(c)} for s, c in by_status_rows
+        ]
+
+        # Top plants by contractor count (bar)
+        plants_rows = db.execute(
+            select(OrgUnit.id, OrgUnit.name, func.count(ContractorPlant.id))
+            .join(ContractorPlant, ContractorPlant.org_unit_id == OrgUnit.id)
+            .group_by(OrgUnit.id, OrgUnit.name)
+            .order_by(func.count(ContractorPlant.id).desc())
+            .limit(8)
+        ).all()
+        contractors_by_plant = [
+            {"org_unit_id": int(pid), "name": str(pname), "count": int(cnt)}
+            for pid, pname, cnt in plants_rows
+        ]
+
         modules["contractors"] = {
+            "total": total_contractors,
+            "active": active_contractors,
+            "non_compliant": non_compliant,
+            "suspended": suspended,
+            "blacklisted": blacklisted,
+            "pending": pending,
+            "expiring_documents_7_days": expiring_documents_7_days,
+            "expired_documents": expired_documents,
+            "by_status": by_status,
+            "contractors_by_plant": contractors_by_plant,
+            # Backward-compat fields read by older clients.
             "total_contractors": total_contractors,
-            "documents_with_expiry": docs_with_expiry,
+            "documents_with_expiry": expiring_documents_7_days + expired_documents,
         }
 
     return {"modules": modules}

@@ -23,6 +23,10 @@ class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     phone: str = Field(min_length=3, max_length=32)
     email: EmailStr
+    employee_code: str | None = Field(default=None, max_length=64)
+    department: str | None = Field(default=None, max_length=128)
+    designation: str | None = Field(default=None, max_length=128)
+    address: str | None = None
     role_id: int = Field(ge=1)
     org_unit_id: int = Field(ge=1)
 
@@ -32,6 +36,10 @@ class UserUpdate(BaseModel):
     username: str | None = Field(default=None, min_length=3, max_length=64)
     phone: str | None = Field(default=None, min_length=3, max_length=32)
     email: EmailStr | None = None
+    employee_code: str | None = Field(default=None, max_length=64)
+    department: str | None = Field(default=None, max_length=128)
+    designation: str | None = Field(default=None, max_length=128)
+    address: str | None = None
     role_id: int | None = Field(default=None, ge=1)
     org_unit_id: int | None = Field(default=None, ge=1)
     is_active: bool | None = None
@@ -45,6 +53,10 @@ class UserPublic(BaseModel):
     username: str
     phone: str | None
     email: str | None
+    employee_code: str | None = None
+    department: str | None = None
+    designation: str | None = None
+    address: str | None = None
     is_active: bool
     is_superuser: bool
     created_at: datetime

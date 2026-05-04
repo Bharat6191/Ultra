@@ -17,6 +17,10 @@ type UserPublic = {
   username: string
   phone: string | null
   email: string | null
+  employee_code?: string | null
+  department?: string | null
+  designation?: string | null
+  address?: string | null
   is_active: boolean
   is_superuser: boolean
   mfa_setup_completed?: boolean
@@ -280,6 +284,10 @@ export function UserViewPage() {
                   <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Full name</dt>
                   <dd className="mt-0.5 font-medium text-foreground">{user.full_name}</dd>
                 </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Username</dt>
+                  <dd className="mt-0.5 text-foreground">{user.username ?? "—"}</dd>
+                </div>
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Phone</dt>
                   <dd className="mt-0.5 text-foreground">{user.phone ?? "—"}</dd>
@@ -289,12 +297,28 @@ export function UserViewPage() {
                   <dd className="mt-0.5 text-foreground">{user.email ?? "—"}</dd>
                 </div>
                 <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Employee code</dt>
+                  <dd className="mt-0.5 text-foreground">{user.employee_code ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Department</dt>
+                  <dd className="mt-0.5 text-foreground">{user.department ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Designation</dt>
+                  <dd className="mt-0.5 text-foreground">{user.designation ?? "—"}</dd>
+                </div>
+                <div>
                   <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Role</dt>
                   <dd className="mt-0.5 text-foreground">{user.role?.name ?? "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Plant</dt>
                   <dd className="mt-0.5 text-foreground">{user.org_unit?.name ?? "—"}</dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Address</dt>
+                  <dd className="mt-0.5 whitespace-pre-wrap text-foreground">{user.address ?? "—"}</dd>
                 </div>
                 <div className="sm:col-span-2">
                   <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</dt>

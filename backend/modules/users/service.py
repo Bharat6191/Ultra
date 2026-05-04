@@ -43,6 +43,9 @@ class DuplicatePhoneError(Exception):
 class DuplicateUsernameError(Exception):
     """Another user already owns this username."""
 
+class DuplicateEmployeeCodeError(Exception):
+    """Another user already owns this employee code."""
+
 
 class UserService:
     def __init__(self, db: Session) -> None:
@@ -75,6 +78,14 @@ class UserService:
         if existing_email is not None:
             raise DuplicateEmailError
 
+        employee_code_norm: str | None = None
+        if getattr(data, "employee_code", None):
+            employee_code_norm = str(data.employee_code).strip()
+            if employee_code_norm:
+                existing_emp = self._db.scalar(select(User.id).where(User.employee_code == employee_code_norm))
+                if existing_emp is not None:
+                    raise DuplicateEmployeeCodeError
+
         role = self._db.get(Role, data.role_id)
         if role is None:
             raise NotFoundError("Role", data.role_id)
@@ -93,6 +104,10 @@ class UserService:
             username=username_norm,
             phone=phone,
             email=email_norm,
+            employee_code=employee_code_norm,
+            department=str(data.department).strip() if getattr(data, "department", None) else None,
+            designation=str(data.designation).strip() if getattr(data, "designation", None) else None,
+            address=str(data.address) if getattr(data, "address", None) else None,
             hashed_password=hash_password(plain_password),
             password_changed_at=now,
             is_active=True,
@@ -154,6 +169,8 @@ class UserService:
                 raise DuplicateUsernameError from None
             if email_norm and self._db.scalar(select(User.id).where(User.email == email_norm)) is not None:
                 raise DuplicateEmailError from None
+            if employee_code_norm and self._db.scalar(select(User.id).where(User.employee_code == employee_code_norm)) is not None:
+                raise DuplicateEmployeeCodeError from None
             raise
         user_id = user.id
         self._db.expire_all()
@@ -247,6 +264,20 @@ class UserService:
                 if existing is not None:
                     raise DuplicateEmailError
             user.email = email_norm
+
+        if "employee_code" in updates:
+            emp = str(updates["employee_code"]).strip() if updates["employee_code"] else None
+            if emp and emp != user.employee_code:
+                existing_emp = self._db.scalar(select(User.id).where(and_(User.employee_code == emp, User.id != user.id)))
+                if existing_emp is not None:
+                    raise DuplicateEmployeeCodeError
+            user.employee_code = emp
+        if "department" in updates:
+            user.department = str(updates["department"]).strip() if updates["department"] else None
+        if "designation" in updates:
+            user.designation = str(updates["designation"]).strip() if updates["designation"] else None
+        if "address" in updates:
+            user.address = str(updates["address"]) if updates["address"] else None
 
         # Password updates intentionally removed from admin UI flow.
 

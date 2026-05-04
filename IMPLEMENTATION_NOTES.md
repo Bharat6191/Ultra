@@ -36,7 +36,7 @@ This document describes the work completed so far in this repo:
 
 | Action | Permission | Purpose |
 |--------|------------|---------|
-| **`GET /admin/org-units`** | **Any of** `org_units.view`, `users.create`, `users.update`, `roles.create`, `roles.update` | List plants for **Plants admin UI**, **user create/edit plant picker**, or **role–plant checkboxes**. |
+| **`GET /admin/org-units`** | **Any of** `org_units.view`, `users.create`, `users.update`, `roles.create`, `roles.update`, `contractor.view`, **`contractor.update`**, `contractor.manage_plants` | List plants for **Plants admin UI**, **user/role pickers**, **contractor list plant filter**, and **contractor plant-mapping dialog** without granting org-unit admin rights. |
 | **`POST /admin/org-units`** | **`org_units.create`** only | Create a new plant (org unit). Does **not** use user permissions. |
 
 This keeps **plant CRUD** under **`org_units.*`** while allowing **user/role assignment** pickers without granting Plants module view.
@@ -71,10 +71,13 @@ This keeps **plant CRUD** under **`org_units.*`** while allowing **user/role ass
 
 ### User workspace shell (`frontend/src/components/layout/app-shell-layout.tsx`)
 
-- Sidebar: Dashboard, Performance, Preferences, then RBAC-gated items (**Users**, **Plants**, **Roles**, **Permissions**, **System settings**).
+- **Layout**: full-width main area (`px-6 py-6`), off-white page background; **sticky top navbar** (`AppNavbar`) and **left sidebar** (`AppSidebar`, `w-64`, `bg-gray-50`, active row `bg-muted rounded-lg`).
+- **Navbar**: dynamic page title; **no search in navbar**; notifications placeholder; profile (avatar + email on wide screens). Sign-out in profile menu.
+- **Sidebar**: Dashboard, Performance, Preferences, then **all RBAC-gated items** the user is allowed to see — including **Users**, **Plants**, **Roles**, **Permissions**, **System settings**, **Contractors**, **My tasks** (each item gated by the same permission rules as routes below).
 - **Plants** nav: any of **`org_units.view|create|update|delete`** (Plants **module** only).
+- **My tasks** nav: **`approval.view` OR `task.view`** (matches `App.tsx` route guard for `/dashboard/tasks`).
 - **Performance / Preferences**: hidden when the user has **only** `users.*` permissions; shown if they have any **`roles.*`**, **`permissions.*`**, **`settings.*`**, **`features.*`**, or **`org_units.*`** (see **`hasAnyNonUsersRbacPermission`** in `frontend/src/lib/permissions.ts`).
-- **`canListOrgUnitsForAssignments()`** — mirrors **`GET /admin/org-units`** OR rule; used to load plant dropdowns on **Users** / **Roles** pages without requiring **`org_units.view`**.
+- **`canListOrgUnitsForAssignments()`** — mirrors **`GET /admin/org-units`** OR rule (includes **`contractor.view`**, **`contractor.update`**, **`contractor.manage_plants`**); used to load plant dropdowns on **Users** / **Roles** / **contractors** pages without requiring **`org_units.view`**.
 
 ### Auth snapshot (`frontend/src/lib/permissions.ts`)
 
@@ -87,9 +90,10 @@ This keeps **plant CRUD** under **`org_units.*`** while allowing **user/role ass
 | Area | File |
 |------|------|
 | Routes | `frontend/src/App.tsx` |
-| User login | `frontend/src/pages/app-login.tsx` (superuser blocked; must use `/admin/login`) |
-| Admin login | `frontend/src/pages/login.tsx` |
+| User login | `frontend/src/pages/app-login.tsx` (identifier **email or username**; superuser blocked; must use `/admin/login`) |
+| Admin login | `frontend/src/pages/login.tsx` (identifier **email or username**) |
 | Workspace layout | `frontend/src/components/layout/app-shell-layout.tsx` |
+| Workspace navbar / sidebar / page header | `frontend/src/components/layout/AppNavbar.tsx`, `AppSidebar.tsx`, `PageHeader.tsx` |
 | Admin layout | `frontend/src/components/layout/admin-layout.tsx` |
 | Permission gate | `frontend/src/components/admin/require-permission.tsx` |
 | Users UI | `frontend/src/pages/users.tsx` — **View** (read-only dialog), **Edit** only with **`users.update`**; plant column and pickers aligned with **`canListOrgUnitsForAssignments`**; table/header styling for workspace |
@@ -107,6 +111,7 @@ This keeps **plant CRUD** under **`org_units.*`** while allowing **user/role ass
 
 ### User login (`/login`)
 
+- **Identifier**: users may sign in with **email or username** in the first field; the client sends it as JSON `email` (backend `LoginRequest` accepts `username` as an alias and normalizes non-`@` identifiers to username vs phone).
 - Stores tokens, calls **`/me`**, **`persistAuthFromMe`**.
 - If **superuser**: clear tokens, error directing to **`/admin/login`**.
 - Else: navigate to **`/dashboard`**.
@@ -351,6 +356,9 @@ Module detection rules (current):
 
 - **Users dashboard** enabled when the user has `users.view`.
 - **Tasks dashboard** enabled when the user has `approval.view` or `task.view` (the system has both approval-style and unified task permissions).
+- **Contractors dashboard** enabled when the user has any of `contractor.view`, `contractor.create`, or `contractor.update` (KPIs, status mix, expiring documents, contractors-by-plant).
+
+**Database note:** contractor lifecycle uses a **`contractors.status`** column (draft / pending / active / suspended / etc.), introduced in Alembic **`032_contractor_enterprise_upgrade`**. It is **not** the same as **`contractors.state`** (Indian state / region on the address). If **`GET /dashboard/summary`** errors with *column contractors.status does not exist*, run **`alembic upgrade head`** from `backend/` (see §1).
 
 Response shape (high-level):
 
@@ -360,6 +368,8 @@ Response shape (high-level):
 - `modules.tasks`
   - `pending`, `approved`, `rejected`, `completed`
   - `completed` is treated as “finished work” and aggregates `approved + completed + closed` statuses for tasks assigned to the current user.
+- `modules.contractors` (when enabled)
+  - Totals by lifecycle **status**, document expiry counts, **by_status** breakdown, **contractors_by_plant** (joins `contractor_plants` → `org_units`).
 
 Files:
 
@@ -387,3 +397,63 @@ Module components:
 
 - Chart library: `recharts` (frontend dependency)
 - Dashboard uses an emerald accent / dark header style to keep a “green on black” feel while staying consistent with the rest of the ShadCN UI.
+
+---
+
+## 12) Workspace UI refresh, contractors, auth, and dev seed data
+
+### Global design system (ShadCN primitives)
+
+Shared styling is centralized on the UI primitives so most pages pick up the same look without one-off classes:
+
+- **`frontend/src/components/ui/button.tsx`** — primary emerald, outline/secondary/ghost/destructive variants; default height `h-10`, `rounded-xl`, icon+label `gap-2`.
+- **`frontend/src/components/ui/card.tsx`** — `rounded-2xl`, border, `shadow-sm`, consistent header/content padding.
+- **`frontend/src/components/ui/input.tsx`** — `h-10`, `rounded-lg`, emerald-tinted focus ring.
+- **`frontend/src/components/ui/badge.tsx`** — added semantic variants (`success`, `warning`, `error`) for status chips.
+- **`frontend/src/components/ui/table.tsx`** — header `bg-gray-50`, uppercase muted labels; body cells `px-6 py-4`; row hover/border-b via table defaults.
+- **`frontend/src/index.css`** — workspace background token tuned toward **gray-50**.
+
+Reusable layout pieces (workspace):
+
+- `PageHeader`, `DataTable` (card wrapper for tables), `EmptyState`, contractor-specific `ContractorCharts` / `ContractorDashboard` (used on the **main** `/dashboard` contractors section).
+
+### Contractors (app workspace)
+
+- **Route**: `/dashboard/contractors` is the **directory** (list + filters + table). Detail: `/dashboard/contractors/:id`, create: `/dashboard/contractors/new`.
+- **Document upload**: `POST /contractors/{id}/documents` uses multipart parsing; **`python-multipart`** is listed in `requirements.txt` and required in the venv (Starlette asserts otherwise).
+- **View uploaded files**: API returns paths like `/uploads/...`. The UI resolves relative URLs with **`API_BASE_URL`** so “View” opens the FastAPI static mount, not the Vite app route.
+- **Dashboard widgets on `/dashboard`**: summary from `GET /dashboard/summary` plus optional charts (`ContractorCharts`) and KPI cards (`ContractorDashboard`) when the contractors module is enabled; **“Open directory”** links to `/dashboard/contractors` (not a removed `/directory` path).
+
+### Contractor plants, timeline, and RBAC
+
+- **Plant mapping** (contractor ↔ plant `org_unit`, role, effective dates) is implemented in **`ContractorPlants`** (`frontend/src/components/contractors/ContractorPlants.tsx`) against **`GET/POST/PATCH/DELETE /contractors/{id}/plants`**.
+- **Mutations** (`POST` / `PATCH` / `DELETE` plant mappings) require **`contractor.manage_plants` OR `contractor.update`** (backend mirrors the same OR guard). The **Add mapping** button and row actions use that combined rule so editors with **`contractor.update`** are not blocked when they lack the narrower **`contractor.manage_plants`** permission.
+- **Plant catalog** for the picker uses **`GET /admin/org-units?type=PLANT`**, which also allows **`contractor.update`** (see §1 org-units table) so the dialog can load plants without **`org_units.view`**.
+- **Timeline** tab: **`GET /contractors/{id}/timeline`** merges **`contractor_audit_logs`** with contractor-related **approval** activity (`modules/contractor/timeline.py`). Rich history appears when the service writes audit rows on create/update/documents/plants; synthetic demo rows can be seeded (see below).
+
+### Login: email or username
+
+- **Workspace** (`app-login.tsx`): first field is text (“Email or username”), still posts `{ email: "<identifier>", password }` for backend normalization.
+- **Admin** (`login.tsx`): Zod no longer requires `.email()` on that field; same posting shape.
+- **`POST /login`**: on invalid credentials, detail text is **`Invalid credentials`** (not email-specific).
+
+### RBAC + navigation fixes
+
+- **My tasks** sidebar and **`/dashboard/tasks`** routes allow **`RequirePermission anyOf=[approval.view, task.view]`** so roles that only grant **`task.*`** still see the task inbox (backend task APIs already use **`task.view`**).
+
+### Dev seed scripts
+
+- **`scripts/seed_admin_test_data.py`** — syncs `MODULE_CONFIG` permissions via `sync_all_modules_to_db`, upserts several **global** test roles (empty `org_unit_ids`), creates test users (default password **`TestPass123!`**, overridable with `--password`), and seeds a few **manual** tasks for inbox testing. The **Contractor Manager** role includes **`contractor.manage_plants`** alongside view/create/update/delete and document upload so plant mapping is allowed when that role is used.
+- Run: `./venv/bin/python scripts/seed_admin_test_data.py` (from repo root, same DB as the app).
+
+- **`scripts/seed_manual_test_contractors.py`** — idempotent **contractor master** demo data for local UI testing:
+  - Upserts five contractors by **`contractor_code`** (Acme, Zenith, Orion, Delta, Nova) with mixed **active** / **inactive** and full address/contact fields.
+  - Ensures three **`org_units`** with **`type=PLANT`** named **`TiM Demo Plant — …`** if missing, then inserts **`contractor_plants`** rows (multiple mappings for Acme/Nova, expired engagement for Delta, etc.).
+  - Creates four **documents** per contractor (valid / expiring soon / expired / missing expiry) and writes tiny placeholder files under **`backend/uploads/contractor_documents/{id}/`**.
+  - Seeds **`contractor_audit_logs`** so the **Timeline** tab shows **CREATED**, **STATUS_CHANGED**, **UPDATED**, **DOCUMENT_***, **PLANT_MAPPING_***, and (for **CTR-NOVA-005**) **COMPLIANCE_FLAGGED**. Rows carry **`metadata_json.seed_tag` = `manual_test_contractors_timeline`** so re-running the script does not duplicate those synthetic events per contractor.
+- Run: `./venv/bin/python scripts/seed_manual_test_contractors.py` (from repo root).
+
+Other seeds:
+
+- `scripts/seed_manual_test_users.py` — sample users tied to the first org unit in the DB.
+- `python scripts/sync_modules.py` — canonical way to align **`features`** / **`permissions`** with **`MODULE_CONFIG`**.

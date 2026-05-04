@@ -14,7 +14,7 @@ import { getJson, postJson } from "@/lib/api"
 import { persistAuthFromMe } from "@/lib/permissions"
 
 const loginSchema = z.object({
-  email: z.string().email("Enter a valid email"),
+  email: z.string().min(1, "Email or username is required"),
   password: z.string().min(1, "Password is required"),
 })
 
@@ -201,12 +201,12 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
           ) : (
             <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
               <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email or username</Label>
                 <Input
                   id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="admin@example.com"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="admin@example.com or admin"
                   aria-invalid={!!form.formState.errors.email}
                   {...form.register("email")}
                 />

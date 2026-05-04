@@ -97,7 +97,7 @@ export function AppLoginPage() {
     const p = password
 
     if (!u || !p) {
-      setError("Email and password are required.")
+      setError("Email/username and password are required.")
       return
     }
 
@@ -195,12 +195,12 @@ export function AppLoginPage() {
           {step === "password" ? (
             <form onSubmit={onSubmitPassword} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Email</Label>
+                <Label htmlFor="username">Email or username</Label>
                 <Input
                   id="username"
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="you@example.com or username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   disabled={isSubmitting}

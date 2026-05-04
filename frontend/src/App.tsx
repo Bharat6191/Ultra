@@ -14,6 +14,7 @@ import { SettingsPage } from "@/pages/settings"
 import { UsersPage } from "@/pages/users"
 import { ContractorsPage } from "@/pages/contractors"
 import { ContractorDetailPage } from "@/pages/contractor-detail"
+import { ContractorCreatePage } from "@/pages/contractor-create"
 import { MyTasksPage } from "@/pages/my-tasks"
 import { WorkflowAssignmentPage } from "@/pages/workflow-assignment"
 import { EmailTemplatesPage } from "@/pages/email-templates"
@@ -82,7 +83,7 @@ function App() {
           <Route
             path="tasks"
             element={
-              <RequirePermission code="approval.view">
+              <RequirePermission anyOf={["approval.view", "task.view"]}>
                 <Outlet />
               </RequirePermission>
             }
@@ -131,6 +132,14 @@ function App() {
             }
           >
             <Route index element={<ContractorsPage />} />
+            <Route
+              path="new"
+              element={
+                <RequirePermission code="contractor.create">
+                  <ContractorCreatePage />
+                </RequirePermission>
+              }
+            />
             <Route path=":id" element={<ContractorDetailPage />} />
           </Route>
         </Route>

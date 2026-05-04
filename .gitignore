@@ -35,3 +35,6 @@ dist-ssr/
 # Cursor
 .cursor/
 
+# Local uploads (seed scripts write placeholders here; do not version binaries)
+backend/uploads/
+

@@ -42,6 +42,10 @@ type UserPublic = {
   username: string
   phone: string | null
   email: string | null
+  employee_code?: string | null
+  department?: string | null
+  designation?: string | null
+  address?: string | null
   is_active: boolean
   is_superuser: boolean
   role: { id: number; name: string } | null
@@ -55,6 +59,10 @@ const editUserSchema = z.object({
   username: z.string().min(3, "Username is required").max(64),
   phone: z.string().min(3, "Phone is required").max(32),
   email: z.string().email("Enter a valid email"),
+  employee_code: z.string().max(64).optional(),
+  department: z.string().max(128).optional(),
+  designation: z.string().max(128).optional(),
+  address: z.string().max(5000).optional(),
   role_id: z.string().min(1, "Role is required"),
   org_unit_id: z.string().min(1, "Plant is required"),
   is_active: z.boolean(),
@@ -81,6 +89,10 @@ export function UserEditPage() {
       username: "",
       phone: "",
       email: "",
+      employee_code: "",
+      department: "",
+      designation: "",
+      address: "",
       role_id: "",
       org_unit_id: "",
       is_active: true,
@@ -133,6 +145,10 @@ export function UserEditPage() {
             username: u.username ?? "",
             phone: u.phone ?? "",
             email: u.email ?? "",
+            employee_code: u.employee_code ?? "",
+            department: u.department ?? "",
+            designation: u.designation ?? "",
+            address: u.address ?? "",
             role_id: u.role?.id ? String(u.role.id) : "",
             org_unit_id: u.org_unit?.id ? String(u.org_unit.id) : "",
             is_active: u.is_active,
@@ -168,6 +184,10 @@ export function UserEditPage() {
         username: values.username.trim(),
         phone: values.phone.trim(),
         email,
+        employee_code: values.employee_code?.trim() || null,
+        department: values.department?.trim() || null,
+        designation: values.designation?.trim() || null,
+        address: values.address?.trim() || null,
         role_id: roleId,
         org_unit_id: orgUnitId,
         is_active: values.is_active,
@@ -260,6 +280,31 @@ export function UserEditPage() {
                   {form.formState.errors.email?.message ? (
                     <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
                   ) : null}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-employee-code">Employee code</Label>
+                  <Input id="edit-employee-code" {...form.register("employee_code")} disabled={user.is_superuser} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-department">Department</Label>
+                  <Input id="edit-department" {...form.register("department")} disabled={user.is_superuser} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-designation">Designation</Label>
+                  <Input id="edit-designation" {...form.register("designation")} disabled={user.is_superuser} />
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="edit-address">Address</Label>
+                  <textarea
+                    id="edit-address"
+                    className="min-h-[90px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+                    {...form.register("address")}
+                    disabled={user.is_superuser}
+                  />
                 </div>
 
                 <div className="space-y-2">

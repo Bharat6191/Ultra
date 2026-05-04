@@ -730,12 +730,49 @@ class ApprovalEngineService:
                 maybe_send_mfa_setup_for_user(self._db, user)
             return
 
-        if req.entity_type == "contractor_creation":
+        if req.entity_type in ("contractor_creation", "contractor_activation"):
             from modules.contractor.models import Contractor
+            from modules.contractor import audit as contractor_audit
+            from modules.contractor.compliance import recompute_contractor_status
 
             contractor = self._db.get(Contractor, int(req.entity_id))
             if contractor is None:
                 raise ApprovalError("Target contractor not found for approval request.")
+            old_status = contractor.status
             contractor.is_active = True
+            contractor.status = "active"
+            recompute_contractor_status(self._db, contractor)
+            contractor_audit.write_audit(
+                self._db,
+                contractor_id=int(contractor.id),
+                action=contractor_audit.ACTION_STATUS_CHANGED,
+                actor_user_id=None,
+                old_value={"status": old_status},
+                new_value={"status": contractor.status},
+                metadata={
+                    "approval_request_id": int(req.id),
+                    "entity_type": req.entity_type,
+                    "via": "approval_finalized",
+                },
+            )
+            return
+
+        if req.entity_type == "contractor_update":
+            # Contractor changes were already applied at update time. Approval here serves
+            # as the audit gate; we only record an audit log entry.
+            from modules.contractor import audit as contractor_audit
+
+            contractor_audit.write_audit(
+                self._db,
+                contractor_id=int(req.entity_id),
+                action=contractor_audit.ACTION_UPDATED,
+                actor_user_id=None,
+                old_value=(req.payload or {}).get("old"),
+                new_value=(req.payload or {}).get("new"),
+                metadata={
+                    "approval_request_id": int(req.id),
+                    "via": "approval_finalized",
+                },
+            )
             return
 

@@ -94,7 +94,13 @@ export function canListOrgUnitsForAssignments(): boolean {
       hasPermission("users.create") ||
       hasPermission("users.update") ||
       hasPermission("roles.create") ||
-      hasPermission("roles.update")
+      hasPermission("roles.update") ||
+      // Contractor master uses /admin/org-units (filtered to type=PLANT) to render
+      // the plant picker on the list page filter and on the per-contractor mapping
+      // dialog. Mirror the backend OR-permission list.
+      hasPermission("contractor.view") ||
+      hasPermission("contractor.update") ||
+      hasPermission("contractor.manage_plants")
     )
   } catch {
     return false

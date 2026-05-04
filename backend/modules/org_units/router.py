@@ -30,6 +30,13 @@ def list_org_units(
                 "users.update",
                 "roles.create",
                 "roles.update",
+                # Contractor master needs read-only plant catalog for picker UIs
+                # (mapping dialog + list page filter). We allow these explicitly
+                # rather than gating behind org_units.view to avoid forcing
+                # contractor managers to also receive admin org-unit edit rights.
+                "contractor.view",
+                "contractor.update",
+                "contractor.manage_plants",
             )
         ),
     ],

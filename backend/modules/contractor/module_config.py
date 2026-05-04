@@ -7,7 +7,15 @@ CONTRACTOR_MODULE_CONFIG = {
         {
             "key": "contractor",
             "title": "Contractors",
-            "actions": ["view", "create", "update", "delete"],
+            "actions": [
+                "view",
+                "create",
+                "update",
+                "delete",
+                "activate",
+                "verify_documents",
+                "manage_plants",
+            ],
         },
         {
             "key": "document",
@@ -16,4 +24,3 @@ CONTRACTOR_MODULE_CONFIG = {
         },
     ],
 }
-

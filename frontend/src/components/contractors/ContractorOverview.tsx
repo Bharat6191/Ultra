@@ -1,50 +1,107 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
-export function ContractorOverview({
-  contractor,
-}: {
-  contractor: {
-    name: string
-    contact_person: string | null
-    email: string | null
-    phone: string | null
-    address: string | null
-  }
-}) {
-  const left = [
-    { label: "Name", value: contractor.name },
-    { label: "Contact person", value: contractor.contact_person ?? "—" },
-  ]
-  const right = [
-    { label: "Email", value: contractor.email ?? "—" },
-    { label: "Phone", value: contractor.phone ?? "—" },
-    { label: "Address", value: contractor.address ?? "—" },
-  ]
+export type ContractorOverviewData = {
+  id?: number
+  contractor_code?: string | null
+  name: string
+  legal_name?: string | null
+  trade_name?: string | null
+  pan?: string | null
+  gstin?: string | null
+  cin?: string | null
+  contractor_type?: string | null
+  contact_person?: string | null
+  contact_person_title?: string | null
+  email?: string | null
+  alternate_email?: string | null
+  phone?: string | null
+  alternate_phone?: string | null
+  address?: string | null
+  city?: string | null
+  state?: string | null
+  country?: string | null
+  postal_code?: string | null
+  registration_number?: string | null
+  website?: string | null
+  notes?: string | null
+}
 
+function FieldRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Overview</CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-3">
-          {left.map((it) => (
-            <div key={it.label} className="grid gap-1">
-              <div className="text-xs text-muted-foreground">{it.label}</div>
-              <div className="text-sm font-medium">{it.value}</div>
-            </div>
-          ))}
-        </div>
-        <div className="grid gap-3">
-          {right.map((it) => (
-            <div key={it.label} className="grid gap-1">
-              <div className="text-xs text-muted-foreground">{it.label}</div>
-              <div className="text-sm font-medium">{it.value}</div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <div className="grid gap-1">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={`text-sm font-medium text-zinc-900 ${mono ? "font-mono" : ""}`}>{value || "—"}</div>
+    </div>
   )
 }
 
+export function ContractorOverview({ contractor }: { contractor: ContractorOverviewData }) {
+  const location = [contractor.city, contractor.state, contractor.country, contractor.postal_code]
+    .filter(Boolean)
+    .join(", ")
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <Card className="rounded-2xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Identity</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <FieldRow label="Contractor code" value={contractor.contractor_code} mono />
+          <FieldRow label="Display name" value={contractor.name} />
+          <FieldRow label="Legal name" value={contractor.legal_name} />
+          <FieldRow label="Trade name" value={contractor.trade_name} />
+          <FieldRow label="Type" value={contractor.contractor_type} />
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Statutory IDs</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <FieldRow label="PAN" value={contractor.pan} mono />
+          <FieldRow label="GSTIN" value={contractor.gstin} mono />
+          <FieldRow label="CIN" value={contractor.cin} mono />
+          <FieldRow label="Registration #" value={contractor.registration_number} mono />
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Contact</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <FieldRow label="Person" value={contractor.contact_person} />
+          <FieldRow label="Title" value={contractor.contact_person_title} />
+          <FieldRow label="Email" value={contractor.email} />
+          <FieldRow label="Alt email" value={contractor.alternate_email} />
+          <FieldRow label="Phone" value={contractor.phone} />
+          <FieldRow label="Alt phone" value={contractor.alternate_phone} />
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl lg:col-span-2">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Address</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <FieldRow label="Address" value={contractor.address} />
+          <FieldRow label="Location" value={location} />
+          <FieldRow label="Website" value={contractor.website} />
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Notes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="whitespace-pre-wrap text-sm text-zinc-700">
+            {contractor.notes || <span className="text-muted-foreground">No internal notes.</span>}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

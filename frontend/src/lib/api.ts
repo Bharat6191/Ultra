@@ -28,6 +28,21 @@ function parseErrorMessage(data: unknown, status: number): string {
   if (data && typeof data === "object") {
     const detail = (data as { detail?: unknown }).detail
     if (typeof detail === "string") return detail
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0] as { msg?: unknown; message?: unknown } | unknown
+      if (first && typeof first === "object") {
+        const msg = (first as { msg?: unknown }).msg
+        if (typeof msg === "string" && msg.trim()) return msg
+        const message = (first as { message?: unknown }).message
+        if (typeof message === "string" && message.trim()) return message
+      }
+      // Fall back to a compact JSON string for debuggability.
+      try {
+        return JSON.stringify(detail[0])
+      } catch {
+        // ignore
+      }
+    }
     const err = (data as { error?: unknown }).error
     if (typeof err === "string") return err
   }

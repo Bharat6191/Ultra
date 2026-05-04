@@ -1,0 +1,184 @@
+"""Contractor timeline: combines field-level audit logs with approval activity.
+
+Returned events are ordered by timestamp desc and shaped for the frontend timeline UI.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
+
+from modules.approvals.model import ApprovalAction, ApprovalRequest, ApprovalTask
+from modules.contractor.models import (
+    Contractor,
+    ContractorAuditLog,
+)
+from modules.errors import NotFoundError
+from modules.users.model import User
+
+
+def _user_label(db: Session, user_id: int | None) -> str | None:
+    if user_id is None:
+        return None
+    u = db.get(User, int(user_id))
+    if u is None:
+        return f"User #{user_id}"
+    return u.full_name or u.email or u.username or f"User #{user_id}"
+
+
+def _action_title(action: str) -> str:
+    mapping = {
+        "CREATED": "Contractor created",
+        "UPDATED": "Profile updated",
+        "STATUS_CHANGED": "Status changed",
+        "DOCUMENT_UPLOADED": "Document uploaded",
+        "DOCUMENT_UPDATED": "Document updated",
+        "DOCUMENT_VERIFIED": "Document verified",
+        "DOCUMENT_REJECTED": "Document rejected",
+        "DOCUMENT_DELETED": "Document removed",
+        "PLANT_MAPPING_ADDED": "Plant mapping added",
+        "PLANT_MAPPING_REMOVED": "Plant mapping removed",
+        "PLANT_MAPPING_UPDATED": "Plant mapping updated",
+        "COMPLIANCE_FLAGGED": "Compliance state changed",
+    }
+    return mapping.get(action, action.replace("_", " ").title())
+
+
+class ContractorTimelineService:
+    """Build a unified timeline for a single contractor."""
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def build_timeline(self, contractor_id: int) -> list[dict[str, Any]]:
+        contractor = self._db.get(Contractor, int(contractor_id))
+        if contractor is None:
+            raise NotFoundError("Contractor", contractor_id)
+
+        events: list[dict[str, Any]] = []
+
+        audit_rows = list(
+            self._db.scalars(
+                select(ContractorAuditLog)
+                .where(ContractorAuditLog.contractor_id == int(contractor_id))
+                .order_by(ContractorAuditLog.created_at.asc())
+            ).all()
+        )
+        for row in audit_rows:
+            actor = _user_label(self._db, row.changed_by)
+            events.append(
+                {
+                    "type": "audit",
+                    "action": row.action,
+                    "title": _action_title(row.action),
+                    "description": _describe_audit(row),
+                    "timestamp": row.created_at,
+                    "actor_user_id": row.changed_by,
+                    "actor_name": actor,
+                    "old_value": row.old_value,
+                    "new_value": row.new_value,
+                    "metadata": row.metadata_json,
+                }
+            )
+
+        # Approval activity: fetch every contractor-related approval request and combine with actions.
+        approval_reqs = list(
+            self._db.scalars(
+                select(ApprovalRequest)
+                .where(
+                    ApprovalRequest.entity_id == int(contractor_id),
+                    ApprovalRequest.entity_type.in_(
+                        ("contractor_creation", "contractor_update", "contractor_activation")
+                    ),
+                )
+                .order_by(ApprovalRequest.created_at.asc())
+                .options(selectinload(ApprovalRequest.tasks).selectinload(ApprovalTask.actions))
+            ).all()
+        )
+        for req in approval_reqs:
+            events.append(
+                {
+                    "type": "approval",
+                    "action": "REQUEST_CREATED",
+                    "title": _approval_request_title(req),
+                    "description": f"Approval request opened (status: {req.status}).",
+                    "timestamp": req.created_at,
+                    "actor_user_id": req.created_by,
+                    "actor_name": _user_label(self._db, req.created_by),
+                    "old_value": None,
+                    "new_value": {
+                        "request_id": int(req.id),
+                        "entity_type": req.entity_type,
+                        "status": req.status,
+                    },
+                    "metadata": {"current_step": int(req.current_step)},
+                }
+            )
+            for task in req.tasks or []:
+                for act in task.actions or []:
+                    events.append(
+                        {
+                            "type": "approval",
+                            "action": str(act.action).upper(),
+                            "title": (
+                                "Approval granted"
+                                if str(act.action).lower() == "approve"
+                                else "Approval rejected"
+                            ),
+                            "description": act.comment,
+                            "timestamp": act.created_at,
+                            "actor_user_id": act.user_id,
+                            "actor_name": _user_label(self._db, act.user_id),
+                            "old_value": None,
+                            "new_value": {
+                                "request_id": int(req.id),
+                                "task_id": int(task.id),
+                                "step_id": int(task.step_id) if task.step_id else None,
+                                "action": str(act.action).lower(),
+                            },
+                            "metadata": None,
+                        }
+                    )
+
+        # Order desc by timestamp; events with no timestamp sink to the bottom.
+        events.sort(key=lambda e: (e["timestamp"] is not None, e["timestamp"]), reverse=True)
+        return events
+
+
+def _approval_request_title(req: ApprovalRequest) -> str:
+    label = {
+        "contractor_creation": "Approval — contractor creation",
+        "contractor_update": "Approval — contractor update",
+        "contractor_activation": "Approval — contractor activation",
+    }.get(req.entity_type, f"Approval — {req.entity_type}")
+    return label
+
+
+def _describe_audit(row: ContractorAuditLog) -> str | None:
+    if row.action == "STATUS_CHANGED":
+        new = (row.new_value or {}).get("status")
+        old = (row.old_value or {}).get("status")
+        if new and old:
+            return f"Status changed from {old} to {new}."
+        if new:
+            return f"Status set to {new}."
+    if row.action == "UPDATED" and isinstance(row.new_value, dict):
+        keys = sorted(row.new_value.keys())
+        if keys:
+            return f"Updated fields: {', '.join(keys)}."
+    if row.action == "DOCUMENT_UPLOADED" and isinstance(row.new_value, dict):
+        name = row.new_value.get("document_name") or row.new_value.get("document_type")
+        if name:
+            return f"Uploaded document: {name}."
+    if row.action == "DOCUMENT_UPDATED" and isinstance(row.new_value, dict):
+        keys = sorted(row.new_value.keys())
+        if keys:
+            return f"Updated document fields: {', '.join(keys)}."
+    if row.action.startswith("PLANT_MAPPING_"):
+        meta = row.metadata_json or {}
+        org = meta.get("org_unit_id")
+        if org:
+            return f"Plant mapping (org_unit_id={org})."
+    return None
