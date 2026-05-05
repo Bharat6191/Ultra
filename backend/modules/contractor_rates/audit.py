@@ -18,8 +18,10 @@ from sqlalchemy.orm import Session
 from modules.contractor_rates.models import (
     ContractorRate,
     ContractorRateAuditLog,
+    ContractorRateVersion,
     RateMaster,
     RateMasterAuditLog,
+    RateMasterVersion,
 )
 
 
@@ -34,6 +36,10 @@ ACTION_RATE_ACTIVATED = "RATE_ACTIVATED"
 ACTION_RATE_DEACTIVATED = "RATE_DEACTIVATED"
 ACTION_CANCELLED = "CANCELLED"
 ACTION_EXPIRED = "EXPIRED"
+# 3.4 standardised action codes (apply to both rate master + contractor rate logs).
+ACTION_VERSION_CREATED = "VERSION_CREATED"
+ACTION_VALIDITY_CHANGED = "VALIDITY_CHANGED"
+ACTION_RATE_REPLACED = "RATE_REPLACED"
 
 # Canonical action codes for the rate master audit log.
 RM_ACTION_CREATED = "CREATED"
@@ -41,6 +47,9 @@ RM_ACTION_UPDATED = "UPDATED"
 RM_ACTION_ACTIVATED = "ACTIVATED"
 RM_ACTION_DEACTIVATED = "DEACTIVATED"
 RM_ACTION_SUPERSEDED = "SUPERSEDED"  # an older active row was replaced by a newer one
+RM_ACTION_VERSION_CREATED = ACTION_VERSION_CREATED
+RM_ACTION_VALIDITY_CHANGED = ACTION_VALIDITY_CHANGED
+RM_ACTION_RATE_REPLACED = ACTION_RATE_REPLACED
 
 
 # Snapshot fields for diff-style audits (CREATED / UPDATED).
@@ -167,6 +176,95 @@ def write_rate_master_audit(
         old_value=old_value or None,
         new_value=new_value or None,
         metadata_json=metadata or None,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+# ---------------------------------------------------------------------------
+# 3.4 — Standardised diff format + version snapshots
+# ---------------------------------------------------------------------------
+
+
+def standard_diff(
+    before: dict[str, Any], after: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Return the canonical diff list defined in the 3.4 spec::
+
+        [{"field": "base_rate", "old": 500, "new": 550}, ...]
+
+    Audit ``old_value`` / ``new_value`` JSON columns continue to store the
+    field-keyed dicts; ``standard_diff`` is the wire shape we expose to the UI
+    via the version history endpoint.
+    """
+    out: list[dict[str, Any]] = []
+    for key in sorted(set(before.keys()) | set(after.keys())):
+        ov = before.get(key)
+        nv = after.get(key)
+        if ov != nv:
+            out.append({"field": key, "old": ov, "new": nv})
+    return out
+
+
+def write_rate_master_version(
+    db: Session,
+    *,
+    rate: RateMaster,
+    actor_user_id: int | None,
+    change_reason: str | None = None,
+) -> RateMasterVersion:
+    """Append an immutable ``rate_master_versions`` snapshot. Never overwrites."""
+    from sqlalchemy import func, select
+
+    next_no = (
+        db.scalar(
+            select(func.coalesce(func.max(RateMasterVersion.version_number), 0)).where(
+                RateMasterVersion.rate_master_id == int(rate.id)
+            )
+        )
+        or 0
+    ) + 1
+    row = RateMasterVersion(
+        rate_master_id=int(rate.id),
+        version_number=int(next_no),
+        snapshot_json=snapshot_rate_master(rate),
+        change_reason=change_reason,
+        created_by=actor_user_id,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def write_contractor_rate_version(
+    db: Session,
+    *,
+    rate: ContractorRate,
+    actor_user_id: int | None,
+    change_reason: str | None = None,
+) -> ContractorRateVersion:
+    """Append an immutable ``contractor_rate_versions`` snapshot. Never overwrites."""
+    from sqlalchemy import func, select
+
+    next_no = (
+        db.scalar(
+            select(
+                func.coalesce(func.max(ContractorRateVersion.version_number), 0)
+            ).where(ContractorRateVersion.contractor_rate_id == int(rate.id))
+        )
+        or 0
+    ) + 1
+    row = ContractorRateVersion(
+        contractor_rate_id=int(rate.id),
+        version_number=int(next_no),
+        snapshot_json=snapshot_rate(
+            rate,
+            fields=TRACKED_FIELDS
+            + ("approved_at", "rejected_at", "approval_request_id", "current_round"),
+        ),
+        change_reason=change_reason,
+        created_by=actor_user_id,
     )
     db.add(row)
     db.flush()

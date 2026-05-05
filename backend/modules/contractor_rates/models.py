@@ -101,6 +101,13 @@ class RateMaster(Base):
         order_by="RateMasterAuditLog.created_at.asc()",
         lazy="select",
     )
+    versions = relationship(
+        "RateMasterVersion",
+        back_populates="rate_master",
+        cascade="all, delete-orphan",
+        order_by="RateMasterVersion.version_number.asc()",
+        lazy="select",
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -191,6 +198,13 @@ class ContractorRate(Base):
         order_by="ContractorRateAuditLog.created_at.asc()",
         lazy="select",
     )
+    versions = relationship(
+        "ContractorRateVersion",
+        back_populates="contractor_rate",
+        cascade="all, delete-orphan",
+        order_by="ContractorRateVersion.version_number.asc()",
+        lazy="select",
+    )
 
 
 class NegotiationLog(Base):
@@ -270,3 +284,76 @@ class RateMasterAuditLog(Base):
     )
 
     rate_master = relationship("RateMaster", back_populates="audit_logs")
+
+
+# ---------------------------------------------------------------------------
+# Versioning (3.4 Rate Master & Benchmark Control)
+#
+# Each mutation of ``rate_master`` / ``contractor_rates`` snapshots the row
+# into a *_versions table. Snapshots are immutable — historical data is never
+# overwritten. Combined with the audit logs we get full time-travel: the audit
+# log says *what changed* and the version snapshot says *what the row looked
+# like at that point*.
+# ---------------------------------------------------------------------------
+
+
+class RateMasterVersion(Base):
+    """Immutable snapshot of a ``rate_master`` row at a point in time."""
+
+    __tablename__ = "rate_master_versions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    rate_master_id: Mapped[int] = mapped_column(
+        ForeignKey("rate_master.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    change_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    rate_master = relationship("RateMaster", back_populates="versions")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "rate_master_id",
+            "version_number",
+            name="uq_rate_master_versions_parent_version",
+        ),
+    )
+
+
+class ContractorRateVersion(Base):
+    """Immutable snapshot of a ``contractor_rates`` row at a point in time."""
+
+    __tablename__ = "contractor_rate_versions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    contractor_rate_id: Mapped[int] = mapped_column(
+        ForeignKey("contractor_rates.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    change_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    contractor_rate = relationship("ContractorRate", back_populates="versions")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "contractor_rate_id",
+            "version_number",
+            name="uq_contractor_rate_versions_parent_version",
+        ),
+    )

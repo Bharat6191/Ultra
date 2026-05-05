@@ -38,7 +38,7 @@ export function AppSidebar({
   const location = useLocation()
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r border-gray-200 bg-gray-50 lg:flex">
+    <aside className="hidden h-svh min-h-0 w-64 shrink-0 flex-col border-r border-gray-200 bg-gray-50 lg:flex">
       <div className="flex h-14 shrink-0 items-center gap-3 px-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-xs font-semibold text-white">
           UL
@@ -51,7 +51,10 @@ export function AppSidebar({
 
       <Separator className="bg-gray-200" />
 
-      <nav className="flex flex-1 flex-col gap-1 px-3 py-4" aria-label="Workspace">
+      <nav
+        className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-4"
+        aria-label="Workspace"
+      >
         {items.map((item) => {
           const Icon = item.icon
           const isActive = pathMatches(location.pathname, item.to)

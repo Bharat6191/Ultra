@@ -510,10 +510,11 @@ export function ContractorRatesPanel({
       <NewNegotiationDialog
         open={newOpen}
         onOpenChange={setNewOpen}
+        fixedContractorId={contractorId}
         rateMasters={rateMasterPicks}
         saving={newSaving}
         error={newError}
-        onSave={createDraft}
+        onSave={async (form, _ctx) => createDraft(form)}
       />
       <NegotiationRoundDialog
         open={roundOpen}

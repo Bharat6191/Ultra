@@ -104,6 +104,9 @@ function orderedActionColumns(actions: string[]): string[] {
   return out
 }
 
+/** Fits below app chrome so permission matrices scroll inside the panel (not clipped). */
+const ROLES_SPLIT_MAX_H = "max-h-[calc(100svh-11rem)]"
+
 export function RolesPage() {
   const [roles, setRoles] = React.useState<RoleListItem[] | null>(null)
   const [plants, setPlants] = React.useState<OrgUnitPublic[] | null>(null)
@@ -313,9 +316,14 @@ export function RolesPage() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-[320px_1fr]">
-        <div className="rounded-lg border">
-          <div className="flex items-center justify-between gap-2 px-3 py-2">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:items-stretch">
+        <div
+          className={cn(
+            "flex min-h-[240px] flex-col overflow-hidden rounded-lg border",
+            ROLES_SPLIT_MAX_H,
+          )}
+        >
+          <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2">
             <div className="text-sm font-medium">Roles</div>
             {canCreateRole ? (
               <Dialog
@@ -416,7 +424,8 @@ export function RolesPage() {
             ) : null}
           </div>
           <Separator />
-          <Table>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -459,10 +468,16 @@ export function RolesPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </div>
 
-        <div className="rounded-lg border">
-          <div className="flex items-center justify-between gap-3 px-3 py-2">
+        <div
+          className={cn(
+            "flex min-h-[280px] flex-col overflow-hidden rounded-lg border",
+            ROLES_SPLIT_MAX_H,
+          )}
+        >
+          <div className="flex shrink-0 items-center justify-between gap-3 px-3 py-2">
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">
                 {selectedRole ? selectedRole.name : "Permissions"}
@@ -480,7 +495,7 @@ export function RolesPage() {
           </div>
           <Separator />
 
-          <ScrollArea className="h-[540px] p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
             {catalog === null ? (
               <div className="py-10 text-center text-sm text-muted-foreground">Loading…</div>
             ) : selectedRoleId == null ? (
@@ -610,7 +625,7 @@ export function RolesPage() {
                 ))}
               </div>
             )}
-          </ScrollArea>
+          </div>
         </div>
       </div>
     </div>

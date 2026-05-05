@@ -53,23 +53,35 @@ export function NewNegotiationDialog({
   saving,
   error,
   onSave,
+  fixedContractorId,
+  contractorChoices,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   rateMasters: RateMasterPick[]
   saving: boolean
   error: string | null
-  onSave: (form: NewRateForm) => Promise<void>
+  onSave: (form: NewRateForm, ctx: { contractorId: number }) => Promise<void>
+  fixedContractorId?: number
+  contractorChoices?: { id: number; name: string }[]
 }) {
   const [form, setForm] = React.useState<NewRateForm>(() => ({ ...EMPTY_RATE_FORM }))
   const [search, setSearch] = React.useState("")
+  const [pickedContractorId, setPickedContractorId] = React.useState<number | "">("")
 
   React.useEffect(() => {
     if (open) {
       setForm({ ...EMPTY_RATE_FORM })
       setSearch("")
+      setPickedContractorId("")
     }
   }, [open])
+
+  const effectiveContractorId: number | null =
+    fixedContractorId ??
+    (typeof pickedContractorId === "number" ? pickedContractorId : null)
+
+  const needContractorPick = Boolean(contractorChoices?.length && fixedContractorId == null)
 
   const selected = React.useMemo(
     () => rateMasters.find((rm) => rm.id === form.rate_master_id) ?? null,
@@ -119,10 +131,14 @@ export function NewNegotiationDialog({
       : null
 
   const canSave =
+    effectiveContractorId !== null &&
     form.rate_master_id !== null &&
     !!form.negotiated_rate.trim() &&
     Number.isFinite(negRate) &&
     !!form.effective_from
+
+  const SELECT_ROW_CLASS =
+    "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,13 +146,37 @@ export function NewNegotiationDialog({
         <DialogHeader>
           <DialogTitle>Start a new negotiation</DialogTitle>
           <DialogDescription>
-            Pick the base rate (job + skill + plant), enter the proposed negotiated rate, and add any
-            remarks. The contractor's previous approved rate is fetched automatically when calculating
-            savings.
+            Pick the contractor (if needed), then choose the base rate (job + skill + plant), enter the
+            proposed negotiated rate, and add any remarks. The contractor&apos;s previous approved rate is
+            fetched automatically when calculating savings.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
+          {needContractorPick ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">Contractor</label>
+              <select
+                className={SELECT_ROW_CLASS}
+                value={pickedContractorId === "" ? "" : String(pickedContractorId)}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setPickedContractorId(v === "" ? "" : Number(v))
+                }}
+              >
+                <option value="">Select contractor…</option>
+                {contractorChoices!.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Or open a contractor&apos;s profile — their <strong>Rates</strong> tab has the same flow.
+              </p>
+            </div>
+          ) : null}
+
           <div>
             <label className="mb-1 block text-sm font-medium text-foreground">Base rate</label>
             {selected ? (
@@ -346,7 +386,14 @@ export function NewNegotiationDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button disabled={!canSave || saving} onClick={() => void onSave(form)}>
+          <Button
+            disabled={!canSave || saving}
+            onClick={() =>
+              effectiveContractorId != null
+                ? void onSave(form, { contractorId: effectiveContractorId })
+                : undefined
+            }
+          >
             {saving ? "Saving…" : "Create draft"}
           </Button>
         </DialogFooter>

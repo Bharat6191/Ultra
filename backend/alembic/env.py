@@ -23,9 +23,11 @@ from modules.contractor.models import Contractor, ContractorDocument  # noqa: F4
 from modules.contractor_rates.models import (  # noqa: F401
     ContractorRate,
     ContractorRateAuditLog,
+    ContractorRateVersion,
     NegotiationLog,
     RateMaster,
     RateMasterAuditLog,
+    RateMasterVersion,
 )
 from modules.notifications.model import NotificationSetting, NotificationDedupKey  # noqa: F401
 

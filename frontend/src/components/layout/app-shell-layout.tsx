@@ -140,7 +140,7 @@ export function AppShellLayout({
     <div className="flex h-svh min-h-0 w-full bg-gray-50 text-foreground">
       <AppSidebar items={sidebarItems} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AppNavbar
           title={title}
           userEmail={userEmail}
@@ -148,7 +148,7 @@ export function AppShellLayout({
           onRefreshProfile={onRefreshProfile}
         />
 
-        <main className="min-h-0 flex-1 overflow-auto px-6 py-6">
+        <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-6 py-6">
           <div className="w-full">{children}</div>
         </main>
       </div>

@@ -132,6 +132,7 @@ function App() {
               </RequirePermission>
             }
           />
+          <Route path="rate-card" element={<Navigate to="/dashboard/rate-master" replace />} />
           <Route
             path="negotiated-rates"
             element={

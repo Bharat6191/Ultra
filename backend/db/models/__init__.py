@@ -22,6 +22,15 @@ from modules.roles.model import Role
 from modules.settings.model import Setting
 from modules.users.model import User
 from modules.contractor.models import Contractor, ContractorDocument
+from modules.contractor_rates.models import (
+    ContractorRate,
+    ContractorRateAuditLog,
+    ContractorRateVersion,
+    NegotiationLog,
+    RateMaster,
+    RateMasterAuditLog,
+    RateMasterVersion,
+)
 from modules.notifications.model import NotificationDedupKey, NotificationSetting
 
 __all__ = [
@@ -43,6 +52,13 @@ __all__ = [
     "User",
     "Contractor",
     "ContractorDocument",
+    "RateMaster",
+    "RateMasterAuditLog",
+    "RateMasterVersion",
+    "ContractorRate",
+    "ContractorRateAuditLog",
+    "ContractorRateVersion",
+    "NegotiationLog",
     "NotificationSetting",
     "NotificationDedupKey",
     "UserSession",

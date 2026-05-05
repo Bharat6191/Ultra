@@ -206,6 +206,72 @@ class ContractorRatePublic(BaseModel):
     rounds: list[NegotiationRoundPublic] = Field(default_factory=list)
 
 
+class RateVersionEntry(BaseModel):
+    """One immutable snapshot of a rate (base rate or contractor rate)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    parent_id: int = Field(description="rate_master_id or contractor_rate_id")
+    version_number: int
+    snapshot_json: dict[str, Any]
+    change_reason: str | None = None
+    created_by: int | None = None
+    created_by_name: str | None = None
+    created_at: datetime
+    # Derived: the standardised diff vs. the previous version (None for v1).
+    diff: list[dict[str, Any]] | None = None
+
+
+class RateCardRowPublic(BaseModel):
+    """One row in the unified Rate Card view."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    rate_master_id: int
+    job_type: str
+    skill_type: str
+    unit: str
+    org_unit_id: int
+    org_unit_name: str | None = None
+
+    base_rate: Decimal
+    base_rate_status: str
+    base_rate_is_active: bool
+    base_rate_effective_from: date
+    base_rate_effective_to: date | None = None
+    notes: str | None = None
+
+    contractor_id: int | None = None
+    contractor_name: str | None = None
+    contractor_rate_id: int | None = None
+    contractor_rate: Decimal | None = None
+    previous_rate: Decimal | None = None
+    contractor_rate_status: str | None = None
+    contractor_rate_effective_from: date | None = None
+    contractor_rate_effective_to: date | None = None
+
+    vs_base_amount: Decimal | None = None
+    vs_base_percentage: Decimal | None = None
+    vs_previous_amount: Decimal | None = None
+    vs_previous_percentage: Decimal | None = None
+
+
+class RateCardBenchmark(BaseModel):
+    total_rates: int
+    active: int
+    upcoming: int
+    expired: int
+    above_base: int
+    below_base: int
+    at_base: int
+    total_premium_above_base: Decimal
+    total_savings_below_base: Decimal
+    rates_with_previous: int
+    net_vs_previous: Decimal
+    net_vs_base: Decimal
+
+
 class ContractorRateTimelineEvent(BaseModel):
     """Unified timeline entry combining audit, rounds, and approval activity."""
 
@@ -231,6 +297,9 @@ __all__ = [
     "ContractorRateAuditEntry",
     "ContractorRatePublic",
     "ContractorRateTimelineEvent",
+    "RateVersionEntry",
+    "RateCardRowPublic",
+    "RateCardBenchmark",
     "CONTRACTOR_RATE_STATUSES",
     "RATE_UNITS",
     "SKILL_TYPES",

@@ -32,9 +32,11 @@ from modules.contractor_rates import audit as audit_helpers
 from modules.contractor_rates.models import (
     ContractorRate,
     ContractorRateAuditLog,
+    ContractorRateVersion,
     NegotiationLog,
     RateMaster,
     RateMasterAuditLog,
+    RateMasterVersion,
 )
 from modules.contractor_rates.schema import (
     ContractorRateCreate,
@@ -91,6 +93,45 @@ class RateMasterService:
     def _validate_dates(effective_from: date, effective_to: date | None) -> None:
         if effective_to is not None and effective_from > effective_to:
             raise ConflictError("effective_from must be on or before effective_to.")
+
+    def _check_overlap(
+        self,
+        *,
+        job_type: str,
+        skill_type: str,
+        unit: str,
+        org_unit_id: int,
+        effective_from: date,
+        effective_to: date | None,
+        exclude_id: int | None = None,
+    ) -> None:
+        """Strict 3.4 validity rule for **rate_master**.
+
+        Overlap is rejected for the same (job_type, skill_type, unit, plant) when
+        a candidate window collides with an existing **active** row's window.
+        Two intervals [a, b] and [c, d] overlap iff a <= d and c <= b. An
+        open-ended ``effective_to`` is treated as infinity.
+        """
+        from datetime import date as _date
+
+        stmt = select(RateMaster).where(
+            RateMaster.job_type == job_type.strip(),
+            RateMaster.skill_type == skill_type,
+            RateMaster.unit == unit,
+            RateMaster.org_unit_id == int(org_unit_id),
+            RateMaster.is_active.is_(True),
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(RateMaster.id != int(exclude_id))
+
+        for other in self._db.scalars(stmt).all():
+            other_to = other.effective_to or _date(9999, 12, 31)
+            cand_to = effective_to or _date(9999, 12, 31)
+            if effective_from <= other_to and other.effective_from <= cand_to:
+                raise ConflictError(
+                    "An active base rate already exists for this "
+                    "job/skill/unit/plant in the requested date range."
+                )
 
     def _public_dict(self, row: RateMaster) -> dict[str, Any]:
         org = self._db.get(OrgUnit, int(row.org_unit_id)) if row.org_unit_id else None
@@ -179,6 +220,37 @@ class RateMasterService:
         self._ensure_plant(int(payload.org_unit_id))
         self._validate_dates(payload.effective_from, payload.effective_to)
 
+        # Strict 3.4 validity: when activating, the candidate window cannot
+        # overlap any active row for the same combo. Existing active rows for
+        # the same combo are superseded (deactivated) below to satisfy "only
+        # one active rate at a time" — overlap is checked against ranges, not
+        # just ``effective_from``.
+        if payload.is_active:
+            # Pre-check: find an *active* row for the same combo whose window
+            # collides with [payload.effective_from, payload.effective_to].
+            # Note: when the new row's effective_from > previous row's range we
+            # still allow this (the previous row is superseded below). The only
+            # truly invalid case is when a future row's range starts BEFORE
+            # the new range begins and extends INTO it — which is the literal
+            # definition of overlap that we reject here.
+            from datetime import date as _date
+            stmt = select(RateMaster).where(
+                RateMaster.job_type == payload.job_type.strip(),
+                RateMaster.skill_type == payload.skill_type,
+                RateMaster.unit == payload.unit,
+                RateMaster.org_unit_id == int(payload.org_unit_id),
+                RateMaster.is_active.is_(True),
+                RateMaster.effective_from > payload.effective_from,
+            )
+            for fut in self._db.scalars(stmt).all():
+                fut_to = fut.effective_to or _date(9999, 12, 31)
+                cand_to = payload.effective_to or _date(9999, 12, 31)
+                if payload.effective_from <= fut_to and fut.effective_from <= cand_to:
+                    raise ConflictError(
+                        "Overlapping base rate exists for this "
+                        "job/skill/unit/plant in the requested date range."
+                    )
+
         # Deactivate any existing active row for the same combo so that
         # "is_active=True" remains unique per combo. Each superseded row gets
         # its own audit entry so the timeline is complete.
@@ -230,6 +302,33 @@ class RateMasterService:
             new_value=audit_helpers.snapshot_rate_master(row),
             metadata={"superseded_ids": superseded_ids} if superseded_ids else None,
         )
+        # v1 snapshot for the time-travel UI.
+        audit_helpers.write_rate_master_version(
+            self._db,
+            rate=row,
+            actor_user_id=actor_user_id,
+            change_reason=audit_helpers.RM_ACTION_CREATED,
+        )
+        audit_helpers.write_rate_master_audit(
+            self._db,
+            rate_master_id=int(row.id),
+            action=audit_helpers.ACTION_VERSION_CREATED,
+            actor_user_id=actor_user_id,
+            new_value={"version_number": 1},
+            metadata={"reason": audit_helpers.RM_ACTION_CREATED},
+        )
+        # If we superseded a previously-active row for the same combo, log
+        # RATE_REPLACED on the new row so the standardised diff timeline is
+        # explicit about the takeover.
+        if superseded_ids:
+            audit_helpers.write_rate_master_audit(
+                self._db,
+                rate_master_id=int(row.id),
+                action=audit_helpers.ACTION_RATE_REPLACED,
+                actor_user_id=actor_user_id,
+                new_value={"replaced_rate_master_ids": superseded_ids},
+                metadata={"superseded_ids": superseded_ids},
+            )
 
         self._db.commit()
         self._db.refresh(row)
@@ -289,6 +388,22 @@ class RateMasterService:
             row.is_active = new_active
 
         self._validate_dates(row.effective_from, row.effective_to)
+
+        # Re-check overlap if the candidate window changed AND the row remains
+        # active. Strict 3.4 validity rule.
+        if row.is_active and (
+            "effective_from" in upd or "effective_to" in upd or activation_change == audit_helpers.RM_ACTION_ACTIVATED
+        ):
+            self._check_overlap(
+                job_type=row.job_type,
+                skill_type=row.skill_type,
+                unit=row.unit,
+                org_unit_id=int(row.org_unit_id),
+                effective_from=row.effective_from,
+                effective_to=row.effective_to,
+                exclude_id=int(row.id),
+            )
+
         self._db.flush()
 
         after = audit_helpers.snapshot_rate_master(row)
@@ -302,6 +417,34 @@ class RateMasterService:
                 old_value=old_d,
                 new_value=new_d,
             )
+            # If the validity window was the (only) thing that changed, also
+            # log VALIDITY_CHANGED so reports / filters can pick it up cleanly.
+            validity_keys = {"effective_from", "effective_to"}
+            if validity_keys & set(new_d.keys()):
+                audit_helpers.write_rate_master_audit(
+                    self._db,
+                    rate_master_id=int(row.id),
+                    action=audit_helpers.ACTION_VALIDITY_CHANGED,
+                    actor_user_id=actor_user_id,
+                    old_value={k: old_d.get(k) for k in validity_keys if k in old_d},
+                    new_value={k: new_d.get(k) for k in validity_keys if k in new_d},
+                )
+            # Snapshot the new state. Snapshots are immutable; this guarantees
+            # full time-travel even when audit diffs are field-scoped.
+            ver = audit_helpers.write_rate_master_version(
+                self._db,
+                rate=row,
+                actor_user_id=actor_user_id,
+                change_reason=audit_helpers.RM_ACTION_UPDATED,
+            )
+            audit_helpers.write_rate_master_audit(
+                self._db,
+                rate_master_id=int(row.id),
+                action=audit_helpers.ACTION_VERSION_CREATED,
+                actor_user_id=actor_user_id,
+                new_value={"version_number": int(ver.version_number)},
+                metadata={"reason": audit_helpers.RM_ACTION_UPDATED},
+            )
         if activation_change is not None:
             audit_helpers.write_rate_master_audit(
                 self._db,
@@ -311,10 +454,82 @@ class RateMasterService:
                 new_value={"is_active": row.is_active},
                 metadata={"superseded_ids": superseded_ids} if superseded_ids else None,
             )
+            if superseded_ids:
+                audit_helpers.write_rate_master_audit(
+                    self._db,
+                    rate_master_id=int(row.id),
+                    action=audit_helpers.ACTION_RATE_REPLACED,
+                    actor_user_id=actor_user_id,
+                    new_value={"replaced_rate_master_ids": superseded_ids},
+                    metadata={"superseded_ids": superseded_ids},
+                )
 
         self._db.commit()
         self._db.refresh(row)
         return row
+
+    # --- versions / status engine ---
+
+    def list_versions(self, rate_master_id: int) -> list[RateMasterVersion]:
+        self.get_rate_master(rate_master_id)
+        stmt = (
+            select(RateMasterVersion)
+            .where(RateMasterVersion.rate_master_id == int(rate_master_id))
+            .order_by(RateMasterVersion.version_number.asc())
+        )
+        return list(self._db.scalars(stmt).all())
+
+    @staticmethod
+    def derive_status(row: RateMaster, *, today: date | None = None) -> str:
+        """Derive a human-friendly lifecycle status without overwriting ``is_active``.
+
+        Returns one of ``upcoming`` / ``active`` / ``expired`` / ``inactive``.
+        """
+        d = today or date.today()
+        if not bool(row.is_active):
+            return "inactive"
+        if row.effective_from and row.effective_from > d:
+            return "upcoming"
+        if row.effective_to is not None and row.effective_to < d:
+            return "expired"
+        return "active"
+
+    def mark_expired(self, *, today: date | None = None, actor_user_id: int | None = None) -> int:
+        """Auto-flip rows whose ``effective_to`` is in the past to ``is_active=False``.
+
+        Returns the number of rows updated. Idempotent — safe to run on a cron.
+        """
+        d = today or date.today()
+        stmt = select(RateMaster).where(
+            RateMaster.is_active.is_(True),
+            RateMaster.effective_to.is_not(None),
+            RateMaster.effective_to < d,
+        )
+        rows = list(self._db.scalars(stmt).all())
+        for row in rows:
+            before = audit_helpers.snapshot_rate_master(row)
+            row.is_active = False
+            self._db.flush()
+            after = audit_helpers.snapshot_rate_master(row)
+            old_d, new_d = audit_helpers.diff_dicts(before, after)
+            audit_helpers.write_rate_master_audit(
+                self._db,
+                rate_master_id=int(row.id),
+                action=audit_helpers.RM_ACTION_DEACTIVATED,
+                actor_user_id=actor_user_id,
+                old_value=old_d,
+                new_value=new_d,
+                metadata={"reason": "auto_expired", "today": d.isoformat()},
+            )
+            audit_helpers.write_rate_master_version(
+                self._db,
+                rate=row,
+                actor_user_id=actor_user_id,
+                change_reason="AUTO_EXPIRED",
+            )
+        if rows:
+            self._db.commit()
+        return len(rows)
 
 
 # ---------- Contractor rate (negotiation) ----------
@@ -603,6 +818,21 @@ class ContractorRateService:
                 "previous_rate": str(previous_rate) if previous_rate is not None else None,
             },
         )
+        # v1 snapshot.
+        audit_helpers.write_contractor_rate_version(
+            self._db,
+            rate=row,
+            actor_user_id=actor_user_id,
+            change_reason=audit_helpers.ACTION_CREATED,
+        )
+        audit_helpers.write_audit(
+            self._db,
+            contractor_rate_id=int(row.id),
+            action=audit_helpers.ACTION_VERSION_CREATED,
+            actor_user_id=actor_user_id,
+            new_value={"version_number": 1},
+            metadata={"reason": audit_helpers.ACTION_CREATED},
+        )
         self._db.commit()
         return self.get_rate(int(row.id))
 
@@ -649,6 +879,30 @@ class ContractorRateService:
                 old_value=old_d or None,
                 new_value=new_d or None,
                 metadata={"fields": sorted((old_d | new_d).keys())},
+            )
+            validity_keys = {"effective_from", "effective_to"}
+            if validity_keys & set(new_d.keys()):
+                audit_helpers.write_audit(
+                    self._db,
+                    contractor_rate_id=int(row.id),
+                    action=audit_helpers.ACTION_VALIDITY_CHANGED,
+                    actor_user_id=actor_user_id,
+                    old_value={k: old_d.get(k) for k in validity_keys if k in old_d},
+                    new_value={k: new_d.get(k) for k in validity_keys if k in new_d},
+                )
+            ver = audit_helpers.write_contractor_rate_version(
+                self._db,
+                rate=row,
+                actor_user_id=actor_user_id,
+                change_reason=audit_helpers.ACTION_UPDATED,
+            )
+            audit_helpers.write_audit(
+                self._db,
+                contractor_rate_id=int(row.id),
+                action=audit_helpers.ACTION_VERSION_CREATED,
+                actor_user_id=actor_user_id,
+                new_value={"version_number": int(ver.version_number)},
+                metadata={"reason": audit_helpers.ACTION_UPDATED},
             )
         self._db.commit()
         return self.get_rate(int(row.id))
@@ -972,6 +1226,16 @@ class ContractorRateService:
                 new_value={"status": "expired"},
                 metadata={"superseded_by": int(row.id)},
             )
+            # 3.4: log the takeover symmetrically on both sides.
+            audit_helpers.write_audit(
+                self._db,
+                contractor_rate_id=int(prev_active.id),
+                action=audit_helpers.ACTION_RATE_REPLACED,
+                actor_user_id=actor_user_id,
+                old_value={"contractor_rate_id": int(prev_active.id)},
+                new_value={"replaced_by_contractor_rate_id": int(row.id)},
+                metadata={"superseded_by": int(row.id)},
+            )
 
         # Final activation marker on this row (separate from the APPROVED audit so the
         # timeline can show "approved -> active" cleanly).
@@ -987,6 +1251,22 @@ class ContractorRateService:
                 "effective_to": row.effective_to.isoformat() if row.effective_to else None,
             },
             metadata={"via": via},
+        )
+        # Take a fresh version snapshot at activation: the row's effective
+        # numbers (previous_rate, savings, status) are now finalised.
+        ver = audit_helpers.write_contractor_rate_version(
+            self._db,
+            rate=row,
+            actor_user_id=actor_user_id,
+            change_reason="RATE_ACTIVATED",
+        )
+        audit_helpers.write_audit(
+            self._db,
+            contractor_rate_id=int(row.id),
+            action=audit_helpers.ACTION_VERSION_CREATED,
+            actor_user_id=actor_user_id,
+            new_value={"version_number": int(ver.version_number)},
+            metadata={"reason": "RATE_ACTIVATED"},
         )
 
     # --- notifications (best-effort, non-blocking) ---
@@ -1021,6 +1301,62 @@ class ContractorRateService:
         except Exception:
             # Non-fatal: missing template or transport must not break the workflow.
             pass
+
+    # --- versions / status engine ---
+
+    def list_versions(self, rate_id: int) -> list[ContractorRateVersion]:
+        self.get_rate(rate_id)
+        stmt = (
+            select(ContractorRateVersion)
+            .where(ContractorRateVersion.contractor_rate_id == int(rate_id))
+            .order_by(ContractorRateVersion.version_number.asc())
+        )
+        return list(self._db.scalars(stmt).all())
+
+    @staticmethod
+    def derive_status(row: ContractorRate, *, today: date | None = None) -> str:
+        """Lifecycle label that respects both ``status`` and the validity window."""
+        d = today or date.today()
+        if row.status == "approved":
+            if row.effective_from and row.effective_from > d:
+                return "upcoming"
+            if row.effective_to is not None and row.effective_to < d:
+                return "expired"
+            return "active"
+        return str(row.status)
+
+    def mark_expired(self, *, today: date | None = None, actor_user_id: int | None = None) -> int:
+        """Auto-flip approved rates whose ``effective_to`` is in the past to ``expired``.
+
+        Returns the number of rates updated. Idempotent.
+        """
+        d = today or date.today()
+        stmt = select(ContractorRate).where(
+            ContractorRate.status == "approved",
+            ContractorRate.effective_to.is_not(None),
+            ContractorRate.effective_to < d,
+        )
+        rows = list(self._db.scalars(stmt).all())
+        for row in rows:
+            row.status = "expired"
+            audit_helpers.write_audit(
+                self._db,
+                contractor_rate_id=int(row.id),
+                action=audit_helpers.ACTION_EXPIRED,
+                actor_user_id=actor_user_id,
+                old_value={"status": "approved"},
+                new_value={"status": "expired"},
+                metadata={"reason": "auto_expired", "today": d.isoformat()},
+            )
+            audit_helpers.write_contractor_rate_version(
+                self._db,
+                rate=row,
+                actor_user_id=actor_user_id,
+                change_reason="AUTO_EXPIRED",
+            )
+        if rows:
+            self._db.commit()
+        return len(rows)
 
     # --- aggregations / dashboard ---
 

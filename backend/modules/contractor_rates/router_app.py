@@ -41,17 +41,23 @@ from modules.contractor_rates.schema import (
     ContractorRateUpdate,
     NegotiationRoundCreate,
     NegotiationRoundPublic,
+    RateCardBenchmark,
+    RateCardRowPublic,
     RateMasterAuditEntry,
     RateMasterCreate,
     RateMasterPublic,
     RateMasterUpdate,
+    RateVersionEntry,
 )
 from modules.contractor_rates.service import (
     ContractorRateService,
     RateMasterService,
 )
+from modules.contractor_rates.audit import standard_diff
+from modules.contractor_rates.rate_card import RateCardService
 from modules.contractor_rates.timeline import ContractorRateTimelineService
 from modules.errors import ConflictError, NotFoundError
+from modules.users.model import User
 
 
 router = APIRouter(tags=["app", "contractor_rates"])
@@ -69,6 +75,49 @@ def _get_timeline_service(
     db: Annotated[Session, Depends(get_db)],
 ) -> ContractorRateTimelineService:
     return ContractorRateTimelineService(db)
+
+
+def _get_rate_card_service(
+    db: Annotated[Session, Depends(get_db)],
+) -> RateCardService:
+    return RateCardService(db)
+
+
+def _resolve_user_name(db: Session, user_id: int | None) -> str | None:
+    if user_id is None:
+        return None
+    u = db.get(User, int(user_id))
+    return getattr(u, "full_name", None) if u else None
+
+
+def _versions_to_public(db: Session, versions: list) -> list[RateVersionEntry]:
+    """Convert versioned rows into the API shape, attaching diffs vs. previous."""
+    entries: list[RateVersionEntry] = []
+    prev_snapshot: dict | None = None
+    for v in versions:
+        snap = dict(v.snapshot_json or {})
+        diff = standard_diff(prev_snapshot, snap) if prev_snapshot is not None else None
+        # ``parent_id`` is whichever FK the row stores.
+        parent_id = (
+            getattr(v, "rate_master_id", None)
+            if hasattr(v, "rate_master_id")
+            else getattr(v, "contractor_rate_id", None)
+        )
+        entries.append(
+            RateVersionEntry(
+                id=int(v.id),
+                parent_id=int(parent_id) if parent_id is not None else 0,
+                version_number=int(v.version_number),
+                snapshot_json=snap,
+                change_reason=v.change_reason,
+                created_by=v.created_by,
+                created_by_name=_resolve_user_name(db, v.created_by),
+                created_at=v.created_at,
+                diff=diff,
+            )
+        )
+        prev_snapshot = snap
+    return entries
 
 
 # ---------- Rate master ----------
@@ -168,6 +217,24 @@ def list_rate_master_audit_logs(
     except NotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return [RateMasterAuditEntry.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/rate-master/{rate_master_id:int}/versions",
+    response_model=list[RateVersionEntry],
+    dependencies=[Depends(require_permission("rate_master.view"))],
+)
+def list_rate_master_versions(
+    rate_master_id: int,
+    svc: Annotated[RateMasterService, Depends(_get_rate_master_service)],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[RateVersionEntry]:
+    """Time-travel snapshots for a base rate (oldest → newest, with diffs)."""
+    try:
+        versions = svc.list_versions(rate_master_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _versions_to_public(db, versions)
 
 
 # ---------- Contractor rates: list / create / get / patch ----------
@@ -344,3 +411,80 @@ def get_contractor_rate_timeline(
     except NotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return [ContractorRateTimelineEvent.model_validate(e) for e in events]
+
+
+@router.get(
+    "/contractor-rates/{rate_id:int}/versions",
+    response_model=list[RateVersionEntry],
+    dependencies=[Depends(require_permission("contractor_rates.view"))],
+)
+def list_contractor_rate_versions(
+    rate_id: int,
+    svc: Annotated[ContractorRateService, Depends(_get_rate_service)],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[RateVersionEntry]:
+    """Time-travel snapshots for a contractor's negotiated rate."""
+    try:
+        versions = svc.list_versions(rate_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _versions_to_public(db, versions)
+
+
+# ---------- Unified Rate Card ----------
+
+
+@router.get(
+    "/rate-card",
+    response_model=list[RateCardRowPublic],
+    dependencies=[Depends(require_permission("rate_master.view"))],
+)
+def get_rate_card(
+    svc: Annotated[RateCardService, Depends(_get_rate_card_service)],
+    plant_id: int | None = Query(None, alias="plant_id"),
+    contractor_id: int | None = Query(None),
+    job_type: str | None = Query(None),
+    skill_type: str | None = Query(None),
+    unit: str | None = Query(None),
+    active_base_only: bool = Query(True),
+) -> list[RateCardRowPublic]:
+    """Centralised Rate Card view: Plant + Contractor + Job + Skill + Unit."""
+    try:
+        rows = svc.get_rate_card(
+            plant_id=plant_id,
+            contractor_id=contractor_id,
+            job_type=job_type,
+            skill_type=skill_type,
+            unit=unit,
+            active_base_only=active_base_only,
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return [RateCardRowPublic.model_validate(r.as_dict()) for r in rows]
+
+
+@router.get(
+    "/rate-card/benchmark",
+    response_model=RateCardBenchmark,
+    dependencies=[Depends(require_permission("rate_master.view"))],
+)
+def get_rate_card_benchmark(
+    svc: Annotated[RateCardService, Depends(_get_rate_card_service)],
+    plant_id: int | None = Query(None),
+    contractor_id: int | None = Query(None),
+    job_type: str | None = Query(None),
+    skill_type: str | None = Query(None),
+    unit: str | None = Query(None),
+) -> RateCardBenchmark:
+    """Benchmark KPIs across the rate card filter."""
+    try:
+        kpis = svc.benchmark(
+            plant_id=plant_id,
+            contractor_id=contractor_id,
+            job_type=job_type,
+            skill_type=skill_type,
+            unit=unit,
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return RateCardBenchmark.model_validate(kpis)

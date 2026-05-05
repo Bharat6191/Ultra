@@ -21,6 +21,7 @@ import {
   NegotiationRoundDialog,
   type RoundForm,
 } from "@/components/contractors/ContractorRateDialog"
+import { RateVersionHistoryButton } from "@/components/contractors/RateVersionHistoryDrawer"
 
 /**
  * Single-rate detail page. The page focuses on **one** negotiated rate: header,
@@ -201,6 +202,12 @@ export function NegotiatedRateDetailPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={rateStatusVariant(rate.status)}>{rateStatusLabel(rate.status)}</Badge>
+          <RateVersionHistoryButton
+            resource="contractor-rates"
+            parentId={rate.id}
+            title={`${rate.job_type ?? "Rate"} · ${rate.contractor_name ?? `#${rate.contractor_id}`}`}
+            subtitle={`${rate.org_unit_name ?? "—"} · per ${rate.unit ?? "—"}`}
+          />
           {canSubmit ? (
             <Button size="sm" onClick={submitForApproval} disabled={actionBusy}>
               <Send className="size-3.5" /> Submit for approval

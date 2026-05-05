@@ -1,0 +1,383 @@
+"""Unified Rate Card view (3.4 Rate Master & Benchmark Control).
+
+This is intentionally a derived view (no new table). Each row joins:
+
+* one ``rate_master`` (the plant + job/skill/unit baseline)
+* an optional active or most-recent ``contractor_rates`` row for the requested
+  contractor
+* the previous approved ``contractor_rates`` row for the pair (for variance)
+
+Returned shape mirrors the spec:
+
+  base_rate, contractor_rate (current_active_rate), previous_rate,
+  variance % / amount, effective dates, status
+
+Status engine:
+
+  * ``active``   – approved + today is inside the validity window
+  * ``upcoming`` – approved but ``effective_from`` is in the future
+  * ``expired`` – ``effective_to`` is in the past (or status='expired')
+  * ``inactive`` – everything else (no contractor rate, draft, rejected, etc.)
+"""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Any
+
+from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import Session
+
+from modules.contractor.models import Contractor
+from modules.contractor_rates.models import ContractorRate, RateMaster
+from modules.contractor_rates.service import ContractorRateService, RateMasterService
+from modules.errors import NotFoundError
+from modules.org_units.model import OrgUnit
+
+
+def _q2(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+@dataclass
+class RateCardRow:
+    rate_master_id: int
+    job_type: str
+    skill_type: str
+    unit: str
+    org_unit_id: int
+    org_unit_name: str | None
+    base_rate: Decimal
+    base_rate_status: str
+    base_rate_is_active: bool
+    base_rate_effective_from: date
+    base_rate_effective_to: date | None
+    notes: str | None
+
+    contractor_id: int | None
+    contractor_name: str | None
+    contractor_rate_id: int | None
+    contractor_rate: Decimal | None
+    previous_rate: Decimal | None
+    contractor_rate_status: str | None
+    contractor_rate_effective_from: date | None
+    contractor_rate_effective_to: date | None
+
+    # Benchmarks (signed):
+    #   negative => below the comparator (saving)
+    #   positive => above the comparator (premium / increase)
+    vs_base_amount: Decimal | None
+    vs_base_percentage: Decimal | None
+    vs_previous_amount: Decimal | None
+    vs_previous_percentage: Decimal | None
+
+    def as_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        # Decimals → strings so the JSON encoder is happy across drivers.
+        for k, v in list(d.items()):
+            if isinstance(v, Decimal):
+                d[k] = str(v)
+        return d
+
+
+class RateCardService:
+    """Builds the derived Rate Card view from existing tables."""
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
+        self._rm_svc = RateMasterService(db)
+        self._rate_svc = ContractorRateService(db)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _current_contractor_rate(
+        self, contractor_id: int, rate_master_id: int, today: date
+    ) -> ContractorRate | None:
+        """Most relevant contractor rate for a (contractor, rate_master).
+
+        Preference order:
+          1. ``approved`` row whose validity window contains ``today``.
+          2. ``approved`` row whose ``effective_from`` is the latest in the past.
+          3. Most recently updated row of any status.
+        """
+        # 1) currently active
+        active_stmt = (
+            select(ContractorRate)
+            .where(
+                ContractorRate.contractor_id == int(contractor_id),
+                ContractorRate.rate_master_id == int(rate_master_id),
+                ContractorRate.status == "approved",
+                ContractorRate.effective_from <= today,
+                or_(
+                    ContractorRate.effective_to.is_(None),
+                    ContractorRate.effective_to >= today,
+                ),
+            )
+            .order_by(ContractorRate.effective_from.desc(), ContractorRate.id.desc())
+            .limit(1)
+        )
+        row = self._db.scalar(active_stmt)
+        if row is not None:
+            return row
+
+        # 2) most recent approved (past or future)
+        approved_stmt = (
+            select(ContractorRate)
+            .where(
+                ContractorRate.contractor_id == int(contractor_id),
+                ContractorRate.rate_master_id == int(rate_master_id),
+                ContractorRate.status.in_(("approved", "expired")),
+            )
+            .order_by(ContractorRate.effective_from.desc(), ContractorRate.id.desc())
+            .limit(1)
+        )
+        row = self._db.scalar(approved_stmt)
+        if row is not None:
+            return row
+
+        # 3) anything
+        any_stmt = (
+            select(ContractorRate)
+            .where(
+                ContractorRate.contractor_id == int(contractor_id),
+                ContractorRate.rate_master_id == int(rate_master_id),
+            )
+            .order_by(ContractorRate.updated_at.desc(), ContractorRate.id.desc())
+            .limit(1)
+        )
+        return self._db.scalar(any_stmt)
+
+    def _previous_contractor_rate(
+        self,
+        contractor_id: int,
+        rate_master_id: int,
+        *,
+        before_id: int | None,
+    ) -> ContractorRate | None:
+        stmt = (
+            select(ContractorRate)
+            .where(
+                ContractorRate.contractor_id == int(contractor_id),
+                ContractorRate.rate_master_id == int(rate_master_id),
+                ContractorRate.status.in_(("approved", "expired")),
+            )
+            .order_by(
+                ContractorRate.approved_at.desc().nullslast(),
+                ContractorRate.effective_from.desc(),
+                ContractorRate.id.desc(),
+            )
+        )
+        if before_id is not None:
+            stmt = stmt.where(ContractorRate.id != int(before_id))
+        return self._db.scalar(stmt.limit(1))
+
+    @staticmethod
+    def _variance(
+        negotiated: Decimal | None, baseline: Decimal | None
+    ) -> tuple[Decimal | None, Decimal | None]:
+        if negotiated is None or baseline is None or Decimal(baseline) == Decimal("0"):
+            return None, None
+        amount = _q2(Decimal(negotiated) - Decimal(baseline))
+        pct = _q2((amount / Decimal(baseline)) * Decimal("100"))
+        return amount, pct
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def get_rate_card(
+        self,
+        *,
+        plant_id: int | None = None,
+        contractor_id: int | None = None,
+        job_type: str | None = None,
+        skill_type: str | None = None,
+        unit: str | None = None,
+        active_base_only: bool = True,
+        today: date | None = None,
+    ) -> list[RateCardRow]:
+        """Build the unified rate card.
+
+        Filters:
+            plant_id        – limit to one plant
+            contractor_id   – join the named contractor's negotiated rate
+            job_type        – ``ilike '%...%'``
+            skill_type      – exact (lower-cased)
+            unit            – exact (lower-cased)
+            active_base_only– only include base rates that are currently active
+                              (default True; pass False to also see retired bases)
+        """
+        d = today or date.today()
+
+        # Contractor existence check (so the API can return 404 cleanly).
+        contractor_obj: Contractor | None = None
+        if contractor_id is not None:
+            contractor_obj = self._db.get(Contractor, int(contractor_id))
+            if contractor_obj is None:
+                raise NotFoundError("Contractor", contractor_id)
+
+        rm_stmt = select(RateMaster)
+        if plant_id is not None:
+            rm_stmt = rm_stmt.where(RateMaster.org_unit_id == int(plant_id))
+        if job_type:
+            rm_stmt = rm_stmt.where(RateMaster.job_type.ilike(f"%{job_type.strip()}%"))
+        if skill_type:
+            rm_stmt = rm_stmt.where(RateMaster.skill_type == skill_type.strip().lower())
+        if unit:
+            rm_stmt = rm_stmt.where(RateMaster.unit == unit.strip().lower())
+        if active_base_only:
+            rm_stmt = rm_stmt.where(RateMaster.is_active.is_(True))
+        rm_stmt = rm_stmt.order_by(
+            RateMaster.org_unit_id.asc(),
+            RateMaster.job_type.asc(),
+            RateMaster.skill_type.asc(),
+            RateMaster.unit.asc(),
+            RateMaster.effective_from.desc(),
+        )
+        rate_masters = list(self._db.scalars(rm_stmt).all())
+
+        plant_cache: dict[int, OrgUnit] = {}
+
+        out: list[RateCardRow] = []
+        for rm in rate_masters:
+            org = plant_cache.get(int(rm.org_unit_id))
+            if org is None:
+                org = self._db.get(OrgUnit, int(rm.org_unit_id))
+                if org is not None:
+                    plant_cache[int(rm.org_unit_id)] = org
+
+            cr: ContractorRate | None = None
+            cr_status: str | None = None
+            cr_rate: Decimal | None = None
+            cr_prev: Decimal | None = None
+            cr_id: int | None = None
+            cr_from: date | None = None
+            cr_to: date | None = None
+            contractor_name: str | None = None
+
+            if contractor_obj is not None:
+                cr = self._current_contractor_rate(int(contractor_obj.id), int(rm.id), d)
+                if cr is not None:
+                    cr_id = int(cr.id)
+                    cr_rate = Decimal(cr.negotiated_rate)
+                    cr_status = self._rate_svc.derive_status(cr, today=d)
+                    cr_from = cr.effective_from
+                    cr_to = cr.effective_to
+                    contractor_name = contractor_obj.name
+                    prev = self._previous_contractor_rate(
+                        int(contractor_obj.id), int(rm.id), before_id=int(cr.id)
+                    )
+                    cr_prev = (
+                        Decimal(prev.negotiated_rate) if prev is not None else cr.previous_rate
+                    )
+                else:
+                    contractor_name = contractor_obj.name
+
+            vs_base_amt, vs_base_pct = self._variance(cr_rate, Decimal(rm.base_rate))
+            vs_prev_amt, vs_prev_pct = self._variance(cr_rate, cr_prev)
+
+            out.append(
+                RateCardRow(
+                    rate_master_id=int(rm.id),
+                    job_type=rm.job_type,
+                    skill_type=rm.skill_type,
+                    unit=rm.unit,
+                    org_unit_id=int(rm.org_unit_id),
+                    org_unit_name=org.name if org else None,
+                    base_rate=Decimal(rm.base_rate),
+                    base_rate_status=self._rm_svc.derive_status(rm, today=d),
+                    base_rate_is_active=bool(rm.is_active),
+                    base_rate_effective_from=rm.effective_from,
+                    base_rate_effective_to=rm.effective_to,
+                    notes=rm.notes,
+                    contractor_id=int(contractor_obj.id) if contractor_obj else None,
+                    contractor_name=contractor_name,
+                    contractor_rate_id=cr_id,
+                    contractor_rate=cr_rate,
+                    previous_rate=cr_prev,
+                    contractor_rate_status=cr_status,
+                    contractor_rate_effective_from=cr_from,
+                    contractor_rate_effective_to=cr_to,
+                    vs_base_amount=vs_base_amt,
+                    vs_base_percentage=vs_base_pct,
+                    vs_previous_amount=vs_prev_amt,
+                    vs_previous_percentage=vs_prev_pct,
+                )
+            )
+        return out
+
+    def benchmark(
+        self,
+        *,
+        plant_id: int | None = None,
+        contractor_id: int | None = None,
+        job_type: str | None = None,
+        skill_type: str | None = None,
+        unit: str | None = None,
+        today: date | None = None,
+    ) -> dict[str, Any]:
+        """Aggregate benchmark KPIs across the rate-card rows that match the filters."""
+        rows = self.get_rate_card(
+            plant_id=plant_id,
+            contractor_id=contractor_id,
+            job_type=job_type,
+            skill_type=skill_type,
+            unit=unit,
+            active_base_only=True,
+            today=today,
+        )
+        total = 0
+        below_base = 0
+        above_base = 0
+        at_base = 0
+        active = 0
+        upcoming = 0
+        expired = 0
+        sum_premium = Decimal("0")
+        sum_savings_below_base = Decimal("0")
+        sum_vs_previous = Decimal("0")
+        comparable_vs_prev = 0
+        for r in rows:
+            if r.contractor_rate is None:
+                continue
+            total += 1
+            if r.contractor_rate_status == "active":
+                active += 1
+            elif r.contractor_rate_status == "upcoming":
+                upcoming += 1
+            elif r.contractor_rate_status == "expired":
+                expired += 1
+            if r.vs_base_amount is not None:
+                if r.vs_base_amount > Decimal("0"):
+                    above_base += 1
+                    sum_premium += Decimal(r.vs_base_amount)
+                elif r.vs_base_amount < Decimal("0"):
+                    below_base += 1
+                    sum_savings_below_base += Decimal(r.vs_base_amount).copy_abs()
+                else:
+                    at_base += 1
+            if r.vs_previous_amount is not None:
+                comparable_vs_prev += 1
+                sum_vs_previous += Decimal(r.vs_previous_amount)
+
+        return {
+            "total_rates": total,
+            "active": active,
+            "upcoming": upcoming,
+            "expired": expired,
+            "above_base": above_base,
+            "below_base": below_base,
+            "at_base": at_base,
+            "total_premium_above_base": _q2(sum_premium),
+            "total_savings_below_base": _q2(sum_savings_below_base),
+            "rates_with_previous": comparable_vs_prev,
+            "net_vs_previous": _q2(sum_vs_previous),
+            # Convenience: net "saving across the portfolio" vs base rate.
+            #   negative => the company is saving overall
+            #   positive => the company is paying a premium overall
+            "net_vs_base": _q2(sum_premium - sum_savings_below_base),
+        }

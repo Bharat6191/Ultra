@@ -722,10 +722,13 @@ def test_rate_master_create_writes_audit_row(
             .order_by(RateMasterAuditLog.id.asc())
         ).all()
     )
-    assert len(rows) == 1
-    assert rows[0].action == "CREATED"
-    assert rows[0].changed_by == int(actor.id)
-    new_value = rows[0].new_value or {}
+    # 3.4 adds a VERSION_CREATED audit alongside CREATED. Filter to assert
+    # the original lifecycle code stays present.
+    lifecycle = [r for r in rows if r.action != "VERSION_CREATED"]
+    assert len(lifecycle) == 1
+    assert lifecycle[0].action == "CREATED"
+    assert lifecycle[0].changed_by == int(actor.id)
+    new_value = lifecycle[0].new_value or {}
     assert new_value["job_type"] == "Welder"
     assert new_value["skill_type"] == "skilled"
     assert new_value["is_active"] is True
@@ -747,9 +750,12 @@ def test_rate_master_update_diff_audit(
             .order_by(RateMasterAuditLog.id.asc())
         ).all()
     )
-    actions = [r.action for r in rows]
+    # 3.4: filter out the auto-generated VERSION_CREATED rows to keep the
+    # original lifecycle assertion intact.
+    lifecycle = [r for r in rows if r.action != "VERSION_CREATED"]
+    actions = [r.action for r in lifecycle]
     assert actions == ["CREATED", "UPDATED"]
-    upd = rows[1]
+    upd = lifecycle[1]
     old_value = upd.old_value or {}
     new_value = upd.new_value or {}
     # Only the changed fields should be present.
@@ -798,7 +804,11 @@ def test_rate_master_supersession_writes_supersede_audit(
             .order_by(RateMasterAuditLog.id.asc())
         ).all()
     ]
-    assert new_actions == ["CREATED"]
+    # 3.4: CREATED of a row that supersedes another now also writes
+    # VERSION_CREATED + RATE_REPLACED audits.
+    assert "CREATED" in new_actions
+    assert "VERSION_CREATED" in new_actions
+    assert "RATE_REPLACED" in new_actions
     # The CREATED audit on the new row should reference the superseded row.
     new_create = db.scalar(
         select(RateMasterAuditLog)
@@ -829,7 +839,9 @@ def test_rate_master_deactivate_writes_deactivated_audit(
             .order_by(RateMasterAuditLog.id.asc())
         ).all()
     ]
-    assert actions == ["CREATED", "UPDATED", "DEACTIVATED"]
+    # 3.4: filter out VERSION_CREATED so the lifecycle sequence stays explicit.
+    lifecycle = [a for a in actions if a != "VERSION_CREATED"]
+    assert lifecycle == ["CREATED", "UPDATED", "DEACTIVATED"]
 
 
 def test_list_audit_logs_returns_actor_name(
@@ -837,7 +849,8 @@ def test_list_audit_logs_returns_actor_name(
 ) -> None:
     rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
     rows = RateMasterService(db).list_audit_logs(int(rm.id))
-    assert len(rows) == 1
-    assert rows[0]["action"] == "CREATED"
+    # 3.4: CREATED + VERSION_CREATED.
+    actions = [r["action"] for r in rows]
+    assert actions == ["CREATED", "VERSION_CREATED"]
     assert rows[0]["changed_by"] == int(actor.id)
     assert rows[0]["changed_by_name"] == "Op Admin"

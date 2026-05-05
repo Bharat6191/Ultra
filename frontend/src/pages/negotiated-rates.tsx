@@ -4,8 +4,10 @@ import {
   ChevronRight,
   Hourglass,
   MessagesSquare,
+  Plus,
   Search,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -13,7 +15,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { getJson } from "@/lib/api"
+import { ApiError, getJson, postJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission, isSuperuser } from "@/lib/permissions"
 import {
   CONTRACTOR_RATE_STATUS_OPTIONS,
@@ -22,6 +24,11 @@ import {
   rateStatusLabel,
   rateStatusVariant,
 } from "@/components/contractors/rateStatus"
+import {
+  NewNegotiationDialog,
+  type RateMasterPick,
+  type NewRateForm,
+} from "@/components/contractors/ContractorRateDialog"
 
 type ContractorRatePublic = {
   id: number
@@ -81,7 +88,16 @@ export function NegotiatedRatesPage() {
   const [statusFilter, setStatusFilter] = React.useState<string>("all")
   const [plantFilter, setPlantFilter] = React.useState<string>("all")
 
+  const [newOpen, setNewOpen] = React.useState(false)
+  const [newSaving, setNewSaving] = React.useState(false)
+  const [newError, setNewError] = React.useState<string | null>(null)
+  const [pickerContractors, setPickerContractors] = React.useState<{ id: number; name: string }[]>(
+    [],
+  )
+  const [pickerRateMasters, setPickerRateMasters] = React.useState<RateMasterPick[]>([])
+
   const canView = hasPermission("contractor_rates.view") || isSuperuser()
+  const canCreate = hasPermission("contractor_rates.create") || isSuperuser()
 
   React.useEffect(() => {
     if (!canView) return
@@ -136,6 +152,69 @@ export function NegotiatedRatesPage() {
     })
   }, [rows, search, statusFilter, plantFilter])
 
+  React.useEffect(() => {
+    if (!newOpen || !canCreate) return
+    void (async () => {
+      setNewError(null)
+      try {
+        const [clist, raws] = await Promise.all([
+          getJson<{ id: number; name: string }[]>("/contractors?limit=200&status=active"),
+          getJson<
+            {
+              id: number
+              job_type: string
+              skill_type: string
+              unit: string
+              base_rate: number | string
+              org_unit_id: number
+              org_unit_name: string | null
+            }[]
+          >("/rate-master?active=true").catch(() => []),
+        ])
+        setPickerContractors(clist)
+        setPickerRateMasters(
+          raws.map((rm) => ({
+            id: rm.id,
+            job_type: rm.job_type,
+            skill_type: rm.skill_type,
+            unit: rm.unit,
+            base_rate: rm.base_rate,
+            org_unit_id: rm.org_unit_id,
+            org_unit_name: rm.org_unit_name,
+          })),
+        )
+      } catch (e) {
+        setNewError(e instanceof Error ? e.message : "Failed to load picker data")
+      }
+    })()
+  }, [newOpen, canCreate])
+
+  async function createNegotiationFromHub(form: NewRateForm, ctx: { contractorId: number }) {
+    if (form.rate_master_id === null) return
+    setNewSaving(true)
+    setNewError(null)
+    try {
+      await postJson<ContractorRatePublic>("/contractor-rates", {
+        contractor_id: ctx.contractorId,
+        rate_master_id: form.rate_master_id,
+        negotiated_rate: form.negotiated_rate,
+        initial_rate: form.initial_rate.trim() ? form.initial_rate : null,
+        effective_from: form.effective_from,
+        effective_to: form.effective_to || null,
+        remarks: form.remarks || null,
+      })
+      toast.success("Draft negotiation created")
+      setNewOpen(false)
+      await load()
+    } catch (e) {
+      const msg =
+        e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to create draft"
+      setNewError(msg)
+    } finally {
+      setNewSaving(false)
+    }
+  }
+
   if (!canView) {
     return (
       <Alert>
@@ -157,7 +236,32 @@ export function NegotiatedRatesPage() {
             contractor and click a row to open the full negotiation timeline.
           </p>
         </div>
+        {canCreate ? (
+          <Button type="button" onClick={() => setNewOpen(true)}>
+            <Plus className="size-4" /> New negotiation
+          </Button>
+        ) : null}
       </div>
+
+      <Alert>
+        <AlertTitle>How rates fit together</AlertTitle>
+        <AlertDescription className="space-y-2 text-sm">
+          <p>
+            <strong>Base rates</strong> live under{" "}
+            <Link to="/dashboard/rate-master" className="font-medium underline underline-offset-2">
+              Rate master
+            </Link>
+            — one row per job, skill, unit and plant. You need{" "}
+            <span className="font-mono text-xs">rate_master.create</span> to add them.
+          </p>
+          <p>
+            <strong>Negotiations</strong> attach a contractor to a base rate. Use{" "}
+            <strong>New negotiation</strong> here, or open any contractor →{" "}
+            <strong>Rates</strong> tab. You need{" "}
+            <span className="font-mono text-xs">contractor_rates.create</span>.
+          </p>
+        </AlertDescription>
+      </Alert>
 
       {/* KPIs — only the lifecycle counters remain. The "savings"
           aggregates (negotiation savings, avg savings %, premium vs base)
@@ -330,6 +434,16 @@ export function NegotiatedRatesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <NewNegotiationDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        contractorChoices={pickerContractors}
+        rateMasters={pickerRateMasters}
+        saving={newSaving}
+        error={newError}
+        onSave={createNegotiationFromHub}
+      />
     </div>
   )
 }
