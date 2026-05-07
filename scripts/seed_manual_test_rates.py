@@ -584,6 +584,41 @@ def main() -> int:
             actor_user_id=actor_id,
         )
 
+        # Alternate vendor on the same welder base row — rate master “all contractors” grid.
+        zen_welder = _seed_contractor_rate(
+            db, rate_svc,
+            contractor_id=int(c_zen.id),
+            rate_master_id=int(rm_welder_active.id),
+            negotiated_rate="118.00",
+            initial_rate="125.00",
+            effective_from=today - timedelta(days=5),
+            marker_remarks="[seed] zen welder — second vendor vs same base job",
+            actor_user_id=actor_id,
+        )
+        if zen_welder.status == "draft":
+            try:
+                rate_svc.submit_for_approval(int(zen_welder.id), actor_user_id=actor_id)
+                zen_welder = rate_svc.get_rate(int(zen_welder.id))
+                if zen_welder.status == "pending_approval" and zen_welder.approval_request_id:
+                    eng = ApprovalEngineService(db)
+                    task = db.scalar(
+                        select(ApprovalTask)
+                        .where(ApprovalTask.request_id == int(zen_welder.approval_request_id))
+                        .where(ApprovalTask.status == "pending")
+                        .order_by(ApprovalTask.id.asc())
+                    )
+                    if task is not None:
+                        approver_id = int((approver or actor).id)
+                        eng.act_on_task(
+                            task_id=int(task.id),
+                            actor_user_id=approver_id,
+                            action="approve",
+                            comment="[seed] auto-approved zen welder rate",
+                        )
+                        zen_welder = rate_svc.get_rate(int(zen_welder.id))
+            except Exception as exc:  # noqa: BLE001
+                print(f"warn: could not approve seeded zen welder rate: {exc}", file=sys.stderr)
+
         # 3b. APPROVED — vendor opened well above base, we negotiated some
         # of it back. Final still lands ABOVE base, so this row contributes
         # to BOTH "negotiation savings" AND "premium vs base" on the dashboard.

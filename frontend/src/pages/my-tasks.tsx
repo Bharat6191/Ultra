@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError, getJson } from "@/lib/api"
-import { hasPermission, persistAuthFromMe } from "@/lib/permissions"
+import { hasPermission, isSuperuser, persistAuthFromMe } from "@/lib/permissions"
 
 type UnifiedTaskRow = {
   id: number
@@ -47,7 +47,11 @@ function InboxTable({ rows, loading, canView, emptyMessage, onOpen }: InboxTable
             {(rows ?? []).length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-muted-foreground">
-                  {!canView ? "Missing permission: task.view" : loading ? "Loading…" : emptyMessage}
+                  {!canView
+                    ? "Missing permission: task.view or approval.view"
+                    : loading
+                      ? "Loading…"
+                      : emptyMessage}
                 </TableCell>
               </TableRow>
             ) : (
@@ -79,7 +83,8 @@ export function MyTasksPage() {
   const navigate = useNavigate()
 
   const [, forcePermRefresh] = React.useReducer((x: number) => x + 1, 0)
-  const canView = hasPermission("task.view")
+  const canView =
+    hasPermission("task.view") || hasPermission("approval.view") || isSuperuser()
 
   const syncMe = React.useCallback(async () => {
     try {
@@ -107,11 +112,17 @@ export function MyTasksPage() {
   }, [inbox])
 
   React.useEffect(() => {
-    void (async () => {
-      await syncMe()
-      await load()
-    })()
-  }, [load, syncMe])
+    void syncMe()
+  }, [syncMe])
+
+  React.useEffect(() => {
+    if (!canView) {
+      setLoading(false)
+      setRows([])
+      return
+    }
+    void load()
+  }, [canView, load])
 
   return (
     <div className="w-full space-y-6">
@@ -133,7 +144,7 @@ export function MyTasksPage() {
             rows={rows}
             loading={loading}
             canView={canView}
-            onOpen={(id) => void navigate(String(id))}
+            onOpen={(id) => void navigate(`/dashboard/tasks/${id}`)}
             emptyMessage="No active tasks. Approvals and manual items that need you appear here."
           />
         </TabsContent>
@@ -142,7 +153,7 @@ export function MyTasksPage() {
             rows={rows}
             loading={loading}
             canView={canView}
-            onOpen={(id) => void navigate(String(id))}
+            onOpen={(id) => void navigate(`/dashboard/tasks/${id}`)}
             emptyMessage="No completed items yet. Finished approvals, rejections, and closed manual tasks show here."
           />
         </TabsContent>

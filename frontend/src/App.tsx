@@ -16,6 +16,7 @@ import { ContractorsPage } from "@/pages/contractors"
 import { ContractorDetailPage } from "@/pages/contractor-detail"
 import { ContractorCreatePage } from "@/pages/contractor-create"
 import { RateMasterPage } from "@/pages/rate-master"
+import { RateMasterDetailPage } from "@/pages/rate-master-detail"
 import { NegotiatedRatesPage } from "@/pages/negotiated-rates"
 import { NegotiatedRateDetailPage } from "@/pages/negotiated-rate-detail"
 import { MyTasksPage } from "@/pages/my-tasks"
@@ -128,10 +129,13 @@ function App() {
               <RequirePermission
                 anyOf={["rate_master.view", "rate_master.create", "rate_master.update"]}
               >
-                <RateMasterPage />
+                <Outlet />
               </RequirePermission>
             }
-          />
+          >
+            <Route index element={<RateMasterPage />} />
+            <Route path=":rateMasterId" element={<RateMasterDetailPage />} />
+          </Route>
           <Route path="rate-card" element={<Navigate to="/dashboard/rate-master" replace />} />
           <Route
             path="negotiated-rates"

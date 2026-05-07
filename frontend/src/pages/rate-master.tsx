@@ -1,7 +1,7 @@
 import * as React from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
-import { ArrowDown, ArrowUp, Equal, Handshake, History, Pencil, Plus, Power, Search } from "lucide-react"
+import { ArrowDown, ArrowUp, ArrowUpRight, Equal, Handshake, History, Pencil, Plus, Power, Search } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -50,6 +50,21 @@ type RateMasterPublic = {
   updated_at: string
 }
 
+type RateCardNegotiation = {
+  contractor_id: number
+  contractor_name: string
+  contractor_rate_id: number
+  negotiated_rate: string
+  previous_rate: string | null
+  contractor_rate_status: string | null
+  contractor_rate_effective_from: string | null
+  contractor_rate_effective_to: string | null
+  vs_base_amount: string | null
+  vs_base_percentage: string | null
+  vs_previous_amount: string | null
+  vs_previous_percentage: string | null
+}
+
 type RateCardRow = {
   rate_master_id: number
   job_type: string
@@ -75,6 +90,7 @@ type RateCardRow = {
   vs_base_percentage: string | null
   vs_previous_amount: string | null
   vs_previous_percentage: string | null
+  negotiations: RateCardNegotiation[]
 }
 
 type Benchmark = {
@@ -219,7 +235,44 @@ function ValidityBar({
   )
 }
 
+function NegotiatedByContractors({
+  negotiations,
+}: {
+  negotiations: RateCardNegotiation[]
+}) {
+  if (!negotiations.length) {
+    return <span className="text-xs text-muted-foreground">—</span>
+  }
+  return (
+    <div className="flex max-w-md flex-col gap-2 py-0.5">
+      {negotiations.map((n) => (
+        <div
+          key={n.contractor_rate_id}
+          className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border/60 pb-2 text-sm last:border-0 last:pb-0"
+        >
+          <Link
+            to={`/dashboard/negotiated-rates/${n.contractor_rate_id}`}
+            className="min-w-0 truncate font-medium hover:underline"
+          >
+            {n.contractor_name}
+          </Link>
+          <span className="tabular-nums font-medium">{formatMoney(n.negotiated_rate)}</span>
+          {n.contractor_rate_status === "active" ? (
+            <Badge className="h-5 shrink-0 rounded border-0 bg-emerald-600 px-1.5 text-[10px] text-white">
+              Active
+            </Badge>
+          ) : null}
+          <span className="text-muted-foreground">vs base</span>
+          <VarianceCell amount={n.vs_base_amount} percent={n.vs_base_percentage} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function RateMasterPage() {
+  const [searchParams] = useSearchParams()
+  const highlightId = searchParams.get("highlight")
   const [plants, setPlants] = React.useState<OrgUnitLite[]>([])
   const [contractors, setContractors] = React.useState<ContractorLite[]>([])
   const [cardRows, setCardRows] = React.useState<RateCardRow[] | null>(null)
@@ -283,7 +336,7 @@ export function RateMasterPage() {
         getJson<RateCardRow[]>(`/rate-card${qs ? `?${qs}` : ""}`),
         getJson<Benchmark>(`/rate-card/benchmark${qs ? `?${qs}` : ""}`),
       ])
-      setCardRows(data)
+      setCardRows(data.map((row) => ({ ...row, negotiations: row.negotiations ?? [] })))
       setBenchmark(kpis)
     } catch (e) {
       const msg =
@@ -319,6 +372,18 @@ export function RateMasterPage() {
     }
     return { total: displayed.length, activeFlag, plants: plantIds.size }
   }, [displayed])
+
+  React.useEffect(() => {
+    if (!highlightId || displayed.length === 0) return
+    const row = document.querySelector<HTMLTableRowElement>(
+      `tr[data-rate-master-id="${highlightId}"]`,
+    )
+    if (!row) return
+    row.scrollIntoView({ behavior: "smooth", block: "center" })
+    row.classList.add("bg-muted/70")
+    const t = window.setTimeout(() => row.classList.remove("bg-muted/70"), 2200)
+    return () => window.clearTimeout(t)
+  }, [highlightId, displayed])
 
   async function createRate() {
     if (!createForm.job_type.trim()) {
@@ -418,10 +483,12 @@ export function RateMasterPage() {
     )
   }
 
-  const tableNote =
-    contractorFilter === "all"
-      ? "Pick a contractor to see negotiated rates, variance and benchmark KPIs for that vendor."
-      : "Variance is negotiated rate vs base / previous approved rate. Negative = saving vs base."
+  const multiContractor = contractorFilter === "all"
+  const tableColSpan = multiContractor ? 9 : 12
+
+  const tableNote = multiContractor
+    ? "All contractors with a rate on this base row."
+    : "Single contractor vs base and previous."
 
   return (
     <div className="space-y-4">
@@ -429,8 +496,7 @@ export function RateMasterPage() {
         <div className="min-w-0">
           <h2 className="text-base font-medium">Rate master</h2>
           <p className="text-sm text-muted-foreground">
-            Base rates per job, skill, unit and plant — with optional contractor comparison and
-            benchmarks on the same grid.
+            Base rates with negotiated amounts by contractor on the same job.
           </p>
         </div>
         {canCreate ? (
@@ -452,27 +518,6 @@ export function RateMasterPage() {
           </Button>
         )}
       </div>
-
-      <Alert>
-        <AlertTitle>How to use this screen</AlertTitle>
-        <AlertDescription className="space-y-2 text-sm">
-          <p>
-            <strong>Step 1 — Base rate:</strong> Use <strong>New base rate</strong> (needs{" "}
-            <span className="font-mono text-xs">rate_master.create</span>). These rows are the standard
-            prices per job, skill, unit and plant.
-          </p>
-          <p>
-            <strong>Step 2 — Negotiation:</strong> Open{" "}
-            <Link to="/dashboard/negotiated-rates" className="font-medium underline underline-offset-2">
-              Negotiated rates
-            </Link>{" "}
-            and click <strong>New negotiation</strong>, or open a contractor → <strong>Rates</strong> tab (
-            needs <span className="font-mono text-xs">contractor_rates.create</span>). Pick the same base
-            rate row here in the grid to compare vendor price vs baseline when you choose a contractor
-            above.
-          </p>
-        </AlertDescription>
-      </Alert>
 
       {/* Base-rate KPIs */}
       <div className="grid gap-3 sm:grid-cols-3">
@@ -505,8 +550,8 @@ export function RateMasterPage() {
         </Card>
       </div>
 
-      {/* Contractor benchmark KPIs — meaningful when a contractor is selected */}
-      {benchmark && contractorFilter !== "all" ? (
+      {/* Negotiated-rate KPIs (any contractor or all) */}
+      {benchmark && benchmark.total_rates > 0 ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
@@ -588,10 +633,6 @@ export function RateMasterPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Filters</CardTitle>
-          <CardDescription>
-            Job search maps to job type (partial match). Pick a contractor to load negotiated rates and
-            benchmarks.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <div className="relative xl:col-span-2">
@@ -632,7 +673,7 @@ export function RateMasterPage() {
             value={contractorFilter}
             onChange={(e) => setContractorFilter(e.target.value)}
           >
-            <option value="all">Contractor — base only</option>
+            <option value="all">All contractors</option>
             {contractors.map((c) => (
               <option key={c.id} value={String(c.id)}>
                 {c.name}
@@ -666,10 +707,16 @@ export function RateMasterPage() {
                 <TableHead>Unit</TableHead>
                 <TableHead>Plant</TableHead>
                 <TableHead className="text-right">Base rate</TableHead>
-                <TableHead className="text-right">Contractor rate</TableHead>
-                <TableHead className="text-right">Previous</TableHead>
-                <TableHead>vs Base</TableHead>
-                <TableHead>vs Prev</TableHead>
+                {multiContractor ? (
+                  <TableHead className="min-w-[240px]">Negotiated by contractor</TableHead>
+                ) : (
+                  <>
+                    <TableHead className="text-right">Contractor rate</TableHead>
+                    <TableHead className="text-right">Previous</TableHead>
+                    <TableHead>vs Base</TableHead>
+                    <TableHead>vs Prev</TableHead>
+                  </>
+                )}
                 <TableHead>Status</TableHead>
                 <TableHead>Validity</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -678,22 +725,25 @@ export function RateMasterPage() {
             <TableBody>
               {cardLoading && !cardRows ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={tableColSpan} className="text-center text-sm text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : displayed.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={tableColSpan} className="text-center text-sm text-muted-foreground">
                     No rates match the current filters.
                   </TableCell>
                 </TableRow>
               ) : (
                 displayed.map((r) => {
-                  const status = r.contractor_rate_status ?? r.base_rate_status
-                  const showActiveBadge = r.contractor_rate_status === "active"
+                  const negs = r.negotiations ?? []
+                  const status = multiContractor
+                    ? r.base_rate_status
+                    : (r.contractor_rate_status ?? r.base_rate_status)
+                  const showActiveBadge = !multiContractor && r.contractor_rate_status === "active"
                   return (
-                    <TableRow key={r.rate_master_id}>
+                    <TableRow key={r.rate_master_id} data-rate-master-id={r.rate_master_id}>
                       <TableCell className="font-medium">{r.job_type}</TableCell>
                       <TableCell className="capitalize">{r.skill_type.replace(/_/g, " ")}</TableCell>
                       <TableCell className="capitalize">{r.unit}</TableCell>
@@ -701,33 +751,41 @@ export function RateMasterPage() {
                       <TableCell className="text-right font-medium tabular-nums">
                         {formatMoney(r.base_rate)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {r.contractor_rate !== null ? (
-                          <span className="inline-flex items-center justify-end gap-1.5">
-                            {formatMoney(r.contractor_rate)}
-                            {showActiveBadge ? (
-                              <Badge className="rounded-md border-0 bg-emerald-600 text-[10px] text-white">
-                                Active
-                              </Badge>
-                            ) : null}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {r.previous_rate !== null ? (
-                          formatMoney(r.previous_rate)
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <VarianceCell amount={r.vs_base_amount} percent={r.vs_base_percentage} />
-                      </TableCell>
-                      <TableCell>
-                        <VarianceCell amount={r.vs_previous_amount} percent={r.vs_previous_percentage} />
-                      </TableCell>
+                      {multiContractor ? (
+                        <TableCell>
+                          <NegotiatedByContractors negotiations={negs} />
+                        </TableCell>
+                      ) : (
+                        <>
+                          <TableCell className="text-right tabular-nums">
+                            {r.contractor_rate !== null ? (
+                              <span className="inline-flex items-center justify-end gap-1.5">
+                                {formatMoney(r.contractor_rate)}
+                                {showActiveBadge ? (
+                                  <Badge className="rounded-md border-0 bg-emerald-600 text-[10px] text-white">
+                                    Active
+                                  </Badge>
+                                ) : null}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {r.previous_rate !== null ? (
+                              formatMoney(r.previous_rate)
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <VarianceCell amount={r.vs_base_amount} percent={r.vs_base_percentage} />
+                          </TableCell>
+                          <TableCell>
+                            <VarianceCell amount={r.vs_previous_amount} percent={r.vs_previous_percentage} />
+                          </TableCell>
+                        </>
+                      )}
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           <Badge variant="outline" className={`w-fit rounded-md ${statusBadgeClass(status)}`}>
@@ -740,13 +798,26 @@ export function RateMasterPage() {
                       </TableCell>
                       <TableCell>
                         <ValidityBar
-                          from={r.contractor_rate_effective_from ?? r.base_rate_effective_from}
-                          to={r.contractor_rate_effective_to ?? r.base_rate_effective_to}
+                          from={
+                            multiContractor
+                              ? r.base_rate_effective_from
+                              : (r.contractor_rate_effective_from ?? r.base_rate_effective_from)
+                          }
+                          to={
+                            multiContractor
+                              ? r.base_rate_effective_to
+                              : (r.contractor_rate_effective_to ?? r.base_rate_effective_to)
+                          }
                           status={status}
                         />
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex flex-wrap items-center justify-end gap-1">
+                          <Button asChild variant="outline" size="sm">
+                            <Link to={`/dashboard/rate-master/${r.rate_master_id}`}>
+                              <ArrowUpRight className="size-3.5" /> View
+                            </Link>
+                          </Button>
                           <RateVersionHistoryButton
                             resource="rate-master"
                             parentId={r.rate_master_id}
@@ -765,7 +836,7 @@ export function RateMasterPage() {
                               </Button>
                             </>
                           ) : null}
-                          {r.contractor_rate_id ? (
+                          {!multiContractor && r.contractor_rate_id ? (
                             <Button asChild variant="ghost" size="sm">
                               <Link to={`/dashboard/negotiated-rates/${r.contractor_rate_id}`}>
                                 <History className="mr-1 size-3.5" />

@@ -443,6 +443,7 @@ def get_rate_card(
     svc: Annotated[RateCardService, Depends(_get_rate_card_service)],
     plant_id: int | None = Query(None, alias="plant_id"),
     contractor_id: int | None = Query(None),
+    rate_master_id: int | None = Query(None),
     job_type: str | None = Query(None),
     skill_type: str | None = Query(None),
     unit: str | None = Query(None),
@@ -453,6 +454,7 @@ def get_rate_card(
         rows = svc.get_rate_card(
             plant_id=plant_id,
             contractor_id=contractor_id,
+            rate_master_id=rate_master_id,
             job_type=job_type,
             skill_type=skill_type,
             unit=unit,
@@ -472,18 +474,22 @@ def get_rate_card_benchmark(
     svc: Annotated[RateCardService, Depends(_get_rate_card_service)],
     plant_id: int | None = Query(None),
     contractor_id: int | None = Query(None),
+    rate_master_id: int | None = Query(None),
     job_type: str | None = Query(None),
     skill_type: str | None = Query(None),
     unit: str | None = Query(None),
+    active_base_only: bool = Query(True),
 ) -> RateCardBenchmark:
     """Benchmark KPIs across the rate card filter."""
     try:
         kpis = svc.benchmark(
             plant_id=plant_id,
             contractor_id=contractor_id,
+            rate_master_id=rate_master_id,
             job_type=job_type,
             skill_type=skill_type,
             unit=unit,
+            active_base_only=active_base_only,
         )
     except NotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

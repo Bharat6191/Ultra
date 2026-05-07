@@ -1,4 +1,3 @@
-import * as React from "react"
 import type { LucideIcon } from "lucide-react"
 import { LayoutDashboard, BriefcaseBusiness } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"

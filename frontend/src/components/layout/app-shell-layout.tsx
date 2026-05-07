@@ -7,11 +7,8 @@ import {
   Handshake,
   KeyRound,
   LayoutDashboard,
-  LogOut,
-  PanelLeft,
   Settings,
   Shield,
-  User2,
   Users,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"

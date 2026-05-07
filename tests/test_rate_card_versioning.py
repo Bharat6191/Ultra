@@ -400,6 +400,92 @@ def test_rate_card_without_contractor_rate_returns_blank_negotiated(
     assert rows[0].vs_base_amount is None
 
 
+def test_rate_card_filter_by_rate_master_id(db: Session, actor: User, plant: OrgUnit) -> None:
+    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00")
+    rows = RateCardService(db).get_rate_card(rate_master_id=int(rm.id))
+    assert len(rows) == 1
+    assert rows[0].rate_master_id == int(rm.id)
+    assert rows[0].base_rate == Decimal("100.00")
+
+
+def test_rate_card_without_contractor_filter_lists_negotiations_per_vendor(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    today = date.today()
+    rm = _make_rate_master(
+        db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
+    )
+    beta = ContractorService(db).create_contractor(
+        ContractorCreate(name="Beta Vendor", contractor_type="vendor"),
+        actor_user_id=int(actor.id),
+    )
+    svc = ContractorRateService(db)
+    svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            rate_master_id=int(rm.id),
+            negotiated_rate=Decimal("90"),
+            effective_from=today,
+        ),
+        actor_user_id=int(actor.id),
+    )
+    svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(beta.id),
+            rate_master_id=int(rm.id),
+            negotiated_rate=Decimal("95"),
+            effective_from=today,
+        ),
+        actor_user_id=int(actor.id),
+    )
+
+    rows = RateCardService(db).get_rate_card(plant_id=int(plant.id))
+    assert len(rows) == 1
+    assert rows[0].contractor_rate is None
+    assert rows[0].negotiations is not None
+    assert len(rows[0].negotiations) == 2
+    by_name = {n.contractor_name: n.negotiated_rate for n in rows[0].negotiations}
+    assert by_name["Acme Vendor"] == Decimal("90.00")
+    assert by_name["Beta Vendor"] == Decimal("95.00")
+
+
+def test_benchmark_without_contractor_counts_all_negotiations(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    today = date.today()
+    rm = _make_rate_master(
+        db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
+    )
+    beta = ContractorService(db).create_contractor(
+        ContractorCreate(name="Beta Vendor", contractor_type="vendor"),
+        actor_user_id=int(actor.id),
+    )
+    svc = ContractorRateService(db)
+    svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            rate_master_id=int(rm.id),
+            negotiated_rate=Decimal("90"),
+            effective_from=today,
+        ),
+        actor_user_id=int(actor.id),
+    )
+    svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(beta.id),
+            rate_master_id=int(rm.id),
+            negotiated_rate=Decimal("110"),
+            effective_from=today,
+        ),
+        actor_user_id=int(actor.id),
+    )
+
+    kpis = RateCardService(db).benchmark(plant_id=int(plant.id))
+    assert kpis["total_rates"] == 2
+    assert kpis["below_base"] == 1
+    assert kpis["above_base"] == 1
+
+
 def test_rate_card_benchmark_kpis(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:

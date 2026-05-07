@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 import { ArrowLeft, Building2, CalendarDays, Send, X } from "lucide-react"
 
@@ -33,7 +33,6 @@ import { RateVersionHistoryButton } from "@/components/contractors/RateVersionHi
  */
 export function NegotiatedRateDetailPage() {
   const params = useParams()
-  const navigate = useNavigate()
   const rateId = Number(params.rateId)
 
   const [rate, setRate] = React.useState<ContractorRatePublic | null>(null)
@@ -238,7 +237,9 @@ export function NegotiatedRateDetailPage() {
           setRoundOpen(o)
           if (!o) setRoundError(null)
         }}
-        onSubmit={addRound}
+        currentRate={rate.negotiated_rate}
+        baseRate={rate.base_rate}
+        onSave={addRound}
         saving={roundSaving}
         error={roundError}
       />

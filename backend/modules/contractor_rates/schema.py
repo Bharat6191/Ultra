@@ -223,6 +223,23 @@ class RateVersionEntry(BaseModel):
     diff: list[dict[str, Any]] | None = None
 
 
+class RateCardNegotiationPublic(BaseModel):
+    """One contractor line item when the rate card is built without ``contractor_id``."""
+
+    contractor_id: int
+    contractor_name: str
+    contractor_rate_id: int
+    negotiated_rate: Decimal
+    previous_rate: Decimal | None = None
+    contractor_rate_status: str | None = None
+    contractor_rate_effective_from: date | None = None
+    contractor_rate_effective_to: date | None = None
+    vs_base_amount: Decimal | None = None
+    vs_base_percentage: Decimal | None = None
+    vs_previous_amount: Decimal | None = None
+    vs_previous_percentage: Decimal | None = None
+
+
 class RateCardRowPublic(BaseModel):
     """One row in the unified Rate Card view."""
 
@@ -255,6 +272,8 @@ class RateCardRowPublic(BaseModel):
     vs_base_percentage: Decimal | None = None
     vs_previous_amount: Decimal | None = None
     vs_previous_percentage: Decimal | None = None
+
+    negotiations: list[RateCardNegotiationPublic] = Field(default_factory=list)
 
 
 class RateCardBenchmark(BaseModel):
@@ -298,6 +317,7 @@ __all__ = [
     "ContractorRatePublic",
     "ContractorRateTimelineEvent",
     "RateVersionEntry",
+    "RateCardNegotiationPublic",
     "RateCardRowPublic",
     "RateCardBenchmark",
     "CONTRACTOR_RATE_STATUSES",
