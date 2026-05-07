@@ -11,7 +11,7 @@ from db.session import get_db
 from modules.errors import NotFoundError, RbacSafetyError
 from modules.users.model import User
 from modules.users.schema import UserCreate, UserPublic, UserUpdate
-from modules.users.service import DuplicateEmailError, DuplicatePhoneError, DuplicateUsernameError, UserService
+from modules.users.service import DuplicateEmailError, DuplicateEmployeeCodeError, DuplicatePhoneError, DuplicateUsernameError, UserService
 
 router = APIRouter(prefix="/users", tags=["admin", "users"])
 
@@ -47,6 +47,11 @@ def create_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Username already registered",
+        ) from None
+    except DuplicateEmployeeCodeError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Employee code already registered",
         ) from None
     except DuplicatePhoneError:
         raise HTTPException(
@@ -93,6 +98,11 @@ def update_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Username already registered",
+        ) from None
+    except DuplicateEmployeeCodeError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Employee code already registered",
         ) from None
     except DuplicatePhoneError:
         raise HTTPException(

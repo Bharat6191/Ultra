@@ -119,7 +119,40 @@ function entityLabel(task: UnifiedTaskDetail): string {
   const et = a?.entity_type ?? task.entity_type
   const eid = a?.entity_id ?? task.entity_id
   if (!et) return "—"
-  return `${et} #${eid ?? "—"}`
+  // Pretty labels for the entity types we know about. Falls back to the raw key.
+  const pretty: Record<string, string> = {
+    contractor_creation: "Contractor approval",
+    contractor_activation: "Contractor activation",
+    contractor_update: "Contractor update",
+    contractor_rate_approval: "Negotiated rate",
+  }
+  return `${pretty[et] ?? et} #${eid ?? "—"}`
+}
+
+/**
+ * Resolve a deep-link to the source record for a task so an approver can review
+ * the actual entity (contractor profile, negotiated rate detail, …) without
+ * leaving the inbox.  Returns null if we don't have enough context to link.
+ */
+function entityLink(task: UnifiedTaskDetail): { href: string; label: string } | null {
+  const a = task.approval
+  const et = a?.entity_type ?? task.entity_type
+  const eid = a?.entity_id ?? task.entity_id
+  if (!et || !eid) return null
+  if (et === "contractor_rate_approval") {
+    return {
+      href: `/dashboard/negotiated-rates/${eid}`,
+      label: "Open rate",
+    }
+  }
+  if (
+    et === "contractor_creation" ||
+    et === "contractor_activation" ||
+    et === "contractor_update"
+  ) {
+    return { href: `/dashboard/contractors/${eid}`, label: "Open contractor" }
+  }
+  return null
 }
 
 type TaskCommentsCardProps = {
@@ -621,9 +654,22 @@ export function MyTaskDetailPage() {
                       {task.due_date ? formatDateTime(task.due_date) : "—"}
                     </div>
                     {entityLabel(task) !== "—" ? (
-                      <div>
-                        <span className="text-muted-foreground">Entity: </span>
-                        {entityLabel(task)}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>
+                          <span className="text-muted-foreground">Entity: </span>
+                          {entityLabel(task)}
+                        </span>
+                        {(() => {
+                          const lnk = entityLink(task)
+                          return lnk ? (
+                            <Link
+                              to={lnk.href}
+                              className="text-xs text-primary underline-offset-2 hover:underline"
+                            >
+                              {lnk.label} →
+                            </Link>
+                          ) : null
+                        })()}
                       </div>
                     ) : null}
                     {task.request_id ? (
@@ -640,9 +686,22 @@ export function MyTaskDetailPage() {
                   <CardDescription className="text-xs">Summary</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-1.5 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Entity: </span>
-                    {entityLabel(task)}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span>
+                      <span className="text-muted-foreground">Entity: </span>
+                      {entityLabel(task)}
+                    </span>
+                    {(() => {
+                      const lnk = entityLink(task)
+                      return lnk ? (
+                        <Link
+                          to={lnk.href}
+                          className="text-xs text-primary underline-offset-2 hover:underline"
+                        >
+                          {lnk.label} →
+                        </Link>
+                      ) : null
+                    })()}
                   </div>
                   <div>
                     <span className="text-muted-foreground">Status: </span>
@@ -671,20 +730,30 @@ export function MyTaskDetailPage() {
                       : "Approval step"}
                   </CardDescription>
                 </div>
-                <Badge
-                  variant={
-                    task.status === "completed"
-                      ? "default"
-                      : task.status === "closed"
-                        ? "secondary"
-                        : task.status === "rejected"
-                          ? "destructive"
-                          : "outline"
-                  }
-                  className="w-fit shrink-0"
-                >
-                  {task.status}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const lnk = entityLink(task)
+                    return lnk ? (
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={lnk.href}>{lnk.label}</Link>
+                      </Button>
+                    ) : null
+                  })()}
+                  <Badge
+                    variant={
+                      task.status === "completed"
+                        ? "default"
+                        : task.status === "closed"
+                          ? "secondary"
+                          : task.status === "rejected"
+                            ? "destructive"
+                            : "outline"
+                    }
+                    className="w-fit shrink-0"
+                  >
+                    {task.status}
+                  </Badge>
+                </div>
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-end sm:gap-6">

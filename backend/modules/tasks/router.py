@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from core.auth import CurrentUser, get_current_user
-from core.permissions import require_permission
+from core.permissions import require_any_permission, require_permission
 from db.session import get_db
 from modules.errors import NotFoundError
 from modules.tasks.schema import (
@@ -30,7 +30,10 @@ def get_task_service(db: Session = Depends(get_db)) -> TaskService:
 def my_tasks(
     current: Annotated[CurrentUser, Depends(get_current_user)],
     svc: Annotated[TaskService, Depends(get_task_service)],
-    _: Annotated[object, Depends(require_permission("task.view"))],
+    _: Annotated[
+        object,
+        Depends(require_any_permission("task.view", "approval.view")),
+    ],
     status_filter: str | None = Query(default=None, alias="status"),
     priority: str | None = Query(default=None),
     task_type: str | None = Query(default=None),
@@ -89,7 +92,10 @@ def get_task(
     task_id: int,
     current: Annotated[CurrentUser, Depends(get_current_user)],
     svc: Annotated[TaskService, Depends(get_task_service)],
-    _: Annotated[object, Depends(require_permission("task.view"))],
+    _: Annotated[
+        object,
+        Depends(require_any_permission("task.view", "approval.view")),
+    ],
     db: Session = Depends(get_db),
 ) -> TaskDetailPublic:
     try:
@@ -181,7 +187,10 @@ def add_comment(
     payload: TaskCommentCreateRequest,
     current: Annotated[CurrentUser, Depends(get_current_user)],
     svc: Annotated[TaskService, Depends(get_task_service)],
-    _: Annotated[object, Depends(require_permission("task.view"))],
+    _: Annotated[
+        object,
+        Depends(require_any_permission("task.view", "approval.view")),
+    ],
 ) -> dict:
     try:
         t = svc.get_task(task_id=task_id)

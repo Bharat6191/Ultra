@@ -14,6 +14,9 @@ from modules.permissions.router import router as permissions_router
 from modules.roles.router import router as roles_router
 from modules.settings.router import router as settings_router
 from modules.users.router import router as users_router
+from modules.contractor.router_admin import router as contractors_router
+from modules.contractor_rates.router_admin import router as contractor_rates_router
+from modules.notifications.admin_router import router as notification_settings_router
 
 _admin_dependencies = []
 if get_settings().enforce_superuser_on_admin:
@@ -30,3 +33,6 @@ router.include_router(email_templates_router)
 router.include_router(permissions_router)
 router.include_router(roles_router)
 router.include_router(settings_router)
+router.include_router(contractors_router)
+router.include_router(contractor_rates_router)
+router.include_router(notification_settings_router)

@@ -34,8 +34,16 @@ class PermissionService:
         if row is not None:
             return row
         if "." in canonical_code:
-            legacy = canonical_code.replace(".", ":", 1)
-            return self._db.scalar(select(Permission).where(Permission.code == legacy))
+            legacy_first = canonical_code.replace(".", ":", 1)
+            row = self._db.scalar(select(Permission).where(Permission.code == legacy_first))
+            if row is not None:
+                return row
+            # Older installs sometimes stored every segment with colons (e.g. ``a:b:c``).
+            legacy_all = canonical_code.replace(".", ":")
+            if legacy_all != legacy_first:
+                row = self._db.scalar(select(Permission).where(Permission.code == legacy_all))
+            if row is not None:
+                return row
         return None
 
     def list_permissions(

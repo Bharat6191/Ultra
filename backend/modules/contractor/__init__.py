@@ -1,0 +1,2 @@
+"""Contractor master management module."""
+

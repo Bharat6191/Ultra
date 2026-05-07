@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -39,37 +39,94 @@ def _db(db: Session = Depends(get_db)) -> Session:
     "",
     response_model=EmailTemplatePublic,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permission("email_templates.create"))],
+    dependencies=[Depends(require_permission("email_templates.manage"))],
 )
 def create_template(
-    payload: EmailTemplateCreate,
+    payload: dict,
     db: Annotated[Session, Depends(_db)],
 ) -> EmailTemplatePublic:
-    t = EmailTemplate(
-        name=payload.name.strip(),
-        event_code=payload.event_code.strip().upper(),
-        subject=payload.subject,
-        body_html=payload.body_html,
-        body_text=payload.body_text,
-        is_active=bool(payload.is_active),
-    )
-    db.add(t)
+    """
+    Backward compatible create endpoint:
+    - If body matches EmailTemplateCreate -> create a new template row.
+    - Else treat as an upsert-by-event_code payload (control center):
+      {event_code, subject, body_html, is_active?}
+    """
+    try:
+        parsed = EmailTemplateCreate.model_validate(payload)
+        t = EmailTemplate(
+            name=parsed.name.strip(),
+            event_code=parsed.event_code.strip().upper(),
+            subject=parsed.subject,
+            body_html=parsed.body_html,
+            body_text=parsed.body_text,
+            is_active=bool(parsed.is_active),
+        )
+        db.add(t)
+        db.commit()
+        db.refresh(t)
+        return EmailTemplatePublic.model_validate(t)
+    except Exception:
+        pass
+
+    event_code = str(payload.get("event_code") or "").strip().upper()
+    if not event_code:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="event_code is required")
+    if event_code not in EVENT_CODES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid event_code")
+    subject = str(payload.get("subject") or "").strip()
+    body_html = str(payload.get("body_html") or payload.get("body") or "").strip()
+    if not subject or not body_html:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="subject and body_html are required")
+    is_active = bool(payload.get("is_active", True))
+
+    existing = db.scalar(select(EmailTemplate).where(EmailTemplate.event_code == event_code).order_by(EmailTemplate.id.desc()))
+    if existing is None:
+        existing = EmailTemplate(
+            name=f"{event_code} (managed)",
+            event_code=event_code,
+            subject=subject,
+            body_html=body_html,
+            body_text=None,
+            is_active=is_active,
+        )
+        db.add(existing)
+        db.flush()
+    else:
+        existing.subject = subject
+        existing.body_html = body_html
+        existing.is_active = is_active
+
+    # Ensure a mapping exists and is enabled.
+    mapping = db.scalar(select(EmailTemplateMapping).where(EmailTemplateMapping.event_code == event_code))
+    if mapping is None:
+        mapping = EmailTemplateMapping(event_code=event_code, template_id=int(existing.id), is_enabled=True)
+        db.add(mapping)
+    else:
+        mapping.template_id = int(existing.id)
+        mapping.is_enabled = bool(payload.get("is_enabled", True))
+
     try:
         db.commit()
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    db.refresh(t)
-    return EmailTemplatePublic.model_validate(t)
+    db.refresh(existing)
+    return EmailTemplatePublic.model_validate(existing)
 
 
 @router.get(
     "",
     response_model=list[EmailTemplatePublic],
-    dependencies=[Depends(require_permission("email_templates.view"))],
+    dependencies=[Depends(require_permission("email_templates.manage"))],
 )
-def list_templates(db: Annotated[Session, Depends(_db)]) -> list[EmailTemplatePublic]:
-    rows = db.scalars(select(EmailTemplate).order_by(EmailTemplate.id.desc())).all()
+def list_templates(
+    db: Annotated[Session, Depends(_db)],
+    event_code: str | None = Query(None),
+) -> list[EmailTemplatePublic]:
+    stmt = select(EmailTemplate)
+    if event_code:
+        stmt = stmt.where(EmailTemplate.event_code == event_code.strip().upper())
+    rows = db.scalars(stmt.order_by(EmailTemplate.id.desc())).all()
     return [EmailTemplatePublic.model_validate(r) for r in rows]
 
 
@@ -138,6 +195,15 @@ def variables_for_event(event_code: str) -> EmailVariablesResponse:
         "MFA_SETUP_REQUIRED": ["user_name", "email", "setup_link"],
         "MFA_SETUP_REMINDER": ["user_name", "email", "setup_link"],
         "MFA_ENABLED": ["user_name", "email"],
+        "CONTRACTOR_DOC_EXPIRY": [
+            "user_name",
+            "email",
+            "contractor_name",
+            "document_name",
+            "document_type",
+            "expiry_date",
+            "days_left",
+        ],
     }
     return EmailVariablesResponse(event_code=code, variables=vars_by_event.get(code, []))
 

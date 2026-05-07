@@ -1,8 +1,10 @@
 import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from starlette.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from admin_api.routes import router as admin_api_router
 from app_api.routes import router as app_api_router
@@ -42,3 +44,8 @@ def admin_login_redirect() -> RedirectResponse:
 
 app.include_router(app_api_router)
 app.include_router(admin_api_router, prefix="/admin")
+
+# Serve local uploads (dev/simple deployments).
+_uploads_dir = Path(__file__).resolve().parents[1] / "uploads"
+_uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")

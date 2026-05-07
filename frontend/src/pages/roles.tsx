@@ -12,7 +12,12 @@ import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { getJson, patchJson, postJson } from "@/lib/api"
-import { canListOrgUnitsForAssignments, hasPermission, isSuperuser } from "@/lib/permissions"
+import {
+  canListOrgUnitsForAssignments,
+  hasPermission,
+  isSuperuser,
+  persistAuthFromMe,
+} from "@/lib/permissions"
 
 type OrgUnitPublic = {
   id: number
@@ -98,6 +103,9 @@ function orderedActionColumns(actions: string[]): string[] {
   out.push(...rest)
   return out
 }
+
+/** Fits below app chrome so permission matrices scroll inside the panel (not clipped). */
+const ROLES_SPLIT_MAX_H = "max-h-[calc(100svh-11rem)]"
 
 export function RolesPage() {
   const [roles, setRoles] = React.useState<RoleListItem[] | null>(null)
@@ -194,6 +202,19 @@ export function RolesPage() {
 
   const hasDirty = hasDirtyPermissions || hasDirtyPlants
 
+  const catalogMissingPermissionCount = React.useMemo(() => {
+    if (!catalog?.modules?.length) return 0
+    let n = 0
+    for (const mod of catalog.modules) {
+      for (const tab of mod.tabs) {
+        for (const p of tab.permissions) {
+          if (p.id == null) n += 1
+        }
+      }
+    }
+    return n
+  }, [catalog])
+
   const canSaveRole = hasPermission("roles.update") || isSuperuser()
 
   async function createRole() {
@@ -236,7 +257,20 @@ export function RolesPage() {
     toast.loading("Saving…", { id: "save-perms" })
     try {
       await patchJson<RoleDetail>(`/admin/roles/${selectedRoleId}`, body)
-      toast.success("Saved", { id: "save-perms" })
+      // If the editor happens to be in this role too, refresh their own RBAC
+      // snapshot so menus / tabs / buttons update immediately. The dashboard
+      // app shell also auto-refreshes on focus, so users in other tabs pick
+      // up the change on their next switch back.
+      try {
+        const me = await getJson<{ is_superuser?: boolean; permissions?: string[] }>("/me")
+        persistAuthFromMe(me)
+      } catch {
+        // ignore — a stale snapshot will be cleared on next focus / login.
+      }
+      toast.success(
+        "Saved. Affected users will see new menus on their next page focus, or via Profile → Refresh permissions.",
+        { id: "save-perms" },
+      )
       await loadRole(selectedRoleId)
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to save"
@@ -269,9 +303,27 @@ export function RolesPage() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-[320px_1fr]">
-        <div className="rounded-lg border">
-          <div className="flex items-center justify-between gap-2 px-3 py-2">
+      {catalogMissingPermissionCount > 0 ? (
+        <Alert>
+          <AlertTitle>Permission rows missing in the database</AlertTitle>
+          <AlertDescription>
+            {catalogMissingPermissionCount} checkbox(es) are disabled because there is no matching row in{" "}
+            <span className="font-mono">permissions</span> yet (the Roles UI cannot tick them until they exist). From
+            the repo root run{" "}
+            <span className="font-mono">python scripts/sync_modules.py</span> against this environment&apos;s
+            database, then reload this page.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:items-stretch">
+        <div
+          className={cn(
+            "flex min-h-[240px] flex-col overflow-hidden rounded-lg border",
+            ROLES_SPLIT_MAX_H,
+          )}
+        >
+          <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2">
             <div className="text-sm font-medium">Roles</div>
             {canCreateRole ? (
               <Dialog
@@ -372,7 +424,8 @@ export function RolesPage() {
             ) : null}
           </div>
           <Separator />
-          <Table>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -415,10 +468,16 @@ export function RolesPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </div>
 
-        <div className="rounded-lg border">
-          <div className="flex items-center justify-between gap-3 px-3 py-2">
+        <div
+          className={cn(
+            "flex min-h-[280px] flex-col overflow-hidden rounded-lg border",
+            ROLES_SPLIT_MAX_H,
+          )}
+        >
+          <div className="flex shrink-0 items-center justify-between gap-3 px-3 py-2">
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">
                 {selectedRole ? selectedRole.name : "Permissions"}
@@ -436,7 +495,7 @@ export function RolesPage() {
           </div>
           <Separator />
 
-          <ScrollArea className="h-[540px] p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
             {catalog === null ? (
               <div className="py-10 text-center text-sm text-muted-foreground">Loading…</div>
             ) : selectedRoleId == null ? (
@@ -566,7 +625,7 @@ export function RolesPage() {
                 ))}
               </div>
             )}
-          </ScrollArea>
+          </div>
         </div>
       </div>
     </div>

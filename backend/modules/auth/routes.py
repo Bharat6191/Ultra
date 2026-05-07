@@ -133,7 +133,7 @@ async def login(
         record_login_failure(client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail="Invalid credentials",
         ) from None
     clear_login_failures(client_ip)
     if isinstance(out, LoginOutcomeTokens):

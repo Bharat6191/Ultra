@@ -8,6 +8,11 @@ from __future__ import annotations
 
 from typing import TypedDict
 
+from modules.contractor.module_config import CONTRACTOR_MODULE_CONFIG
+from modules.contractor_rates.module_config import (
+    CONTRACTOR_RATES_MODULE_CONFIG,
+    RATE_MASTER_MODULE_CONFIG,
+)
 
 class TabConfigDict(TypedDict):
     key: str
@@ -113,6 +118,31 @@ MODULE_CONFIG: list[ModuleConfigDict] = [
             },
         ],
     },
+    {
+        "key": "notification_settings",
+        "title": "Notification settings",
+        "tabs": [
+            {
+                "key": "notification_settings",
+                "title": "Notification settings",
+                "actions": ["manage"],
+            },
+        ],
+    },
+    {
+        "key": "email_templates",
+        "title": "Email templates",
+        "tabs": [
+            {
+                "key": "email_templates",
+                "title": "Email templates",
+                "actions": ["manage"],
+            },
+        ],
+    },
+    CONTRACTOR_MODULE_CONFIG,
+    RATE_MASTER_MODULE_CONFIG,
+    CONTRACTOR_RATES_MODULE_CONFIG,
 ]
 
 

@@ -40,6 +40,23 @@ def render_template(content: str, payload: dict[str, Any]) -> str:
     return tmpl.render(**(payload or {}))
 
 
+def render_template_loose(content: str, payload: dict[str, Any]) -> str:
+    """
+    Simple, best-effort renderer.
+
+    Replaces ``{{var}}`` with payload[var] (stringified) and uses empty string when missing.
+    """
+
+    def repl(match: re.Match[str]) -> str:
+        key = match.group(1)
+        val = (payload or {}).get(key)
+        if val is None:
+            return ""
+        return str(val)
+
+    return _VAR_RE.sub(repl, content or "")
+
+
 @dataclass(frozen=True)
 class TriggerResult:
     status: str  # sent|failed|skipped
@@ -133,6 +150,50 @@ class EmailNotificationService:
                 error_message="Missing recipient email (payload.email or payload.to_email)",
             )
 
+        try:
+            self._sender.send_email(to_email=to_email, subject=rendered_subject, body=rendered_body)
+            return self._log(code, payload, status="sent", subject=rendered_subject, body=rendered_body, error_message=None)
+        except Exception as exc:  # pragma: no cover
+            return self._log(
+                code,
+                payload,
+                status="failed",
+                subject=rendered_subject,
+                body=rendered_body,
+                error_message=str(exc),
+            )
+
+    def trigger_event_best_effort(self, *, event_code: str, payload: dict[str, Any]) -> TriggerResult:
+        """
+        Best-effort send:
+        - skips if mapping/template disabled
+        - missing variables are rendered as empty strings (no failure)
+        """
+        code = (event_code or "").strip().upper()
+        if code not in EVENT_CODES:
+            return self._log(code, payload, status="failed", subject="", body="", error_message="Unknown event_code")
+
+        mapping = self._db.scalar(select(EmailTemplateMapping).where(EmailTemplateMapping.event_code == code))
+        if mapping is None or not bool(mapping.is_enabled):
+            return TriggerResult(status="skipped", missing_variables=[], error=None)
+
+        template = self._db.get(EmailTemplate, int(mapping.template_id))
+        if template is None or not bool(template.is_active):
+            return TriggerResult(status="skipped", missing_variables=[], error=None)
+
+        rendered_subject = render_template_loose(template.subject, payload or {})
+        rendered_body = render_template_loose(template.body_html, payload or {})
+
+        to_email = str(payload.get("email") or payload.get("to_email") or "").strip()
+        if not to_email:
+            return self._log(
+                code,
+                payload,
+                status="failed",
+                subject=rendered_subject,
+                body=rendered_body,
+                error_message="Missing recipient email (payload.email or payload.to_email)",
+            )
         try:
             self._sender.send_email(to_email=to_email, subject=rendered_subject, body=rendered_body)
             return self._log(code, payload, status="sent", subject=rendered_subject, body=rendered_body, error_message=None)
