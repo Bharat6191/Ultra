@@ -30,9 +30,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+_SCRIPTS_ROOT = Path(__file__).resolve().parent
 _BACKEND_ROOT = Path(__file__).resolve().parents[1] / "backend"
-if str(_BACKEND_ROOT) not in sys.path:
-    sys.path.insert(0, str(_BACKEND_ROOT))
+for _p in (_BACKEND_ROOT, _SCRIPTS_ROOT):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -47,6 +49,8 @@ from modules.rbac_association import user_org_unit
 from modules.rbac_sync import sync_all_modules_to_db
 from modules.roles.model import Role
 from modules.users.model import User
+
+from _work_order_demo_workflow import ensure_work_orders_create_workflow
 
 
 # ---------- role catalog -----------------------------------------------------
@@ -93,20 +97,33 @@ ROLES: dict[str, dict] = {
         ],
     },
     "Procurement Negotiator": {
-        "description": "Creates and negotiates contractor rate proposals.",
+        "description": "Creates and negotiates contractor rate proposals; submits work orders for approval.",
         "perms": [
             "contractor.view",
             "rate_master.view",
             "contractor_rates.view", "contractor_rates.create", "contractor_rates.update",
+            "work_orders.view",
+            "work_orders.create",
+            "work_orders.update",
+            "work_orders.manage_completion",
             "approval.view",
         ],
     },
     "Procurement Approver": {
-        "description": "Approves negotiated rate requests sitting in the inbox.",
+        "description": "Level-1 inbox for negotiated contractor rates.",
         "perms": [
             "contractor.view",
             "contractor_rates.view", "contractor_rates.approve",
             "approval.view", "approval.act",
+        ],
+    },
+    "Work Order Approver (L1)": {
+        "description": "Operations level-1 approver for submitted work orders (Tasks inbox).",
+        "perms": [
+            "work_orders.view",
+            "work_orders.approve",
+            "approval.view",
+            "approval.act",
         ],
     },
     "Approval Workflow Manager": {
@@ -155,7 +172,9 @@ USERS: list[tuple[str, str, str, str, list[str]]] = [
     ("ctr_auditor",   "ctr.auditor@demo.test",   "Aisha Auditor",     "+15550200003", ["Contractor Auditor"]),
     ("rate_admin",    "rate.admin@demo.test",    "Ravi Rates",        "+15550200004", ["Rate Master Admin"]),
     ("negotiator",    "negotiator@demo.test",    "Nora Negotiator",   "+15550200005", ["Procurement Negotiator"]),
-    ("rate_approver", "rate.approver@demo.test", "Aaron Approver",    "+15550200006", ["Procurement Approver"]),
+    ("rate_approver", "rate.approver@demo.test", "Aaron Approver",    "+15550200006",
+     ["Procurement Approver", "Work Order Approver (L1)"]),
+    ("wo_approver1", "wo.approver1@demo.test", "Owen WO Approver", "+15550200011", ["Work Order Approver (L1)"]),
     ("wf_manager",    "wf.manager@demo.test",    "Wendy Workflow",    "+15550200007", ["Approval Workflow Manager"]),
     ("task_operator", "task.operator@demo.test", "Tara Tasks",        "+15550200008", ["Task Operator"]),
     ("notif_admin",   "notif.admin@demo.test",   "Nikhil Notify",     "+15550200009", ["Notifications Admin"]),
@@ -163,7 +182,7 @@ USERS: list[tuple[str, str, str, str, list[str]]] = [
     # Stacked persona: a single user holding multiple roles. Lets QA verify
     # OR-style permission guards (e.g. plant pickers gated on any-of).
     ("super_demo",    "super.demo@demo.test",    "Sam Super",         "+15550200099",
-     ["Contractor Manager", "Procurement Negotiator", "Procurement Approver"]),
+     ["Contractor Manager", "Procurement Negotiator", "Procurement Approver", "Work Order Approver (L1)"]),
 ]
 
 
@@ -268,6 +287,69 @@ def _upsert_user(
     return existing
 
 
+def _upsert_all_access_user(db: Session, *, password: str, org: OrgUnit) -> User:
+    """
+    Create/update a single *normal* demo user with all access via RBAC.
+
+    This user is NOT a superuser. Instead, we create/update an "All Access"
+    role containing every permission code present in the DB and assign it.
+    """
+    username = "all_access"
+    email = "all.access@demo.test"
+    full_name = "All Access Admin"
+    phone = "+15550999999"
+
+    # Ensure an RBAC role that includes *all* permissions currently in the DB.
+    sync_all_modules_to_db(db)
+    all_codes = list(db.scalars(select(Permission.code).order_by(Permission.code.asc())).all())
+    all_role = _upsert_role(
+        db,
+        name="All Access",
+        description="All permissions (seeded). Normal user, not superadmin.",
+        permission_codes=all_codes,
+    )
+
+    existing = db.scalar(select(User).where((User.username == username) | (User.email == email)))
+    now = datetime.now(timezone.utc)
+    if existing is None:
+        u = User(
+            full_name=full_name,
+            username=username,
+            email=email,
+            phone=phone,
+            hashed_password=hash_password(password),
+            password_changed_at=now,
+            is_active=True,
+            is_superuser=False,
+        )
+        u.roles = [all_role]
+        db.add(u)
+        db.flush()
+        db.execute(delete(user_org_unit).where(user_org_unit.c.user_id == u.id))
+        db.execute(user_org_unit.insert().values(user_id=u.id, org_unit_id=org.id))
+        db.commit()
+        db.refresh(u)
+        return u
+
+    existing.full_name = full_name
+    existing.username = username
+    existing.email = email
+    existing.phone = phone
+    if not existing.is_active:
+        existing.is_active = True
+    if existing.is_superuser:
+        existing.is_superuser = False
+    # Force role membership to the all-permissions role.
+    existing.roles = [all_role]
+    db.execute(delete(user_org_unit).where(user_org_unit.c.user_id == existing.id))
+    db.execute(user_org_unit.insert().values(user_id=existing.id, org_unit_id=org.id))
+    existing.hashed_password = hash_password(password)
+    existing.password_changed_at = now
+    db.commit()
+    db.refresh(existing)
+    return existing
+
+
 def _reset_demo_users(db: Session) -> int:
     """Delete previously-seeded demo users (matched by username).
 
@@ -335,6 +417,21 @@ def main() -> int:
                 permission_codes=list(cfg["perms"]),
             )
 
+        if ensure_work_orders_create_workflow(
+            db, approver_role=created_roles["Work Order Approver (L1)"]
+        ):
+            print(
+                "Approval mapping: work_orders.create → single-step workflow "
+                '(role "Work Order Approver (L1)" → e.g. wo.approver1@demo.test). '
+                "Other mappings for that action were deactivated."
+            )
+        else:
+            print(
+                "warning: could not map work_orders.create (missing permission?) — "
+                "run scripts/sync_modules.py then re-run this seed.",
+                file=sys.stderr,
+            )
+
         # 2) Users.
         seeded: list[tuple[str, str, str, list[str], User]] = []
         for username, email, full_name, phone, role_names in USERS:
@@ -350,6 +447,10 @@ def main() -> int:
                 org=org,
             )
             seeded.append((username, email, full_name, role_names, u))
+
+        # 2b) One normal user with all access (RBAC role with all perms).
+        all_access = _upsert_all_access_user(db, password=args.password, org=org)
+        seeded.append((all_access.username, all_access.email, all_access.full_name, ["All Access (all perms)"], all_access))
 
         # 3) Pretty-print credentials table.
         print()

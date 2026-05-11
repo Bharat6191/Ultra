@@ -22,6 +22,8 @@ from modules.contractor.models import (
 from modules.contractor.compliance import evaluate_contractor_compliance
 from modules.contractor_rates.models import ContractorRate, RateMaster
 from modules.org_units.model import OrgUnit
+from modules.work_orders.models import WorkOrder
+from modules.invoices.models import Invoice, ContractorInvoiceCompliance
 
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -69,6 +71,23 @@ def get_dashboard_summary(
         "contractor_rates.update",
         "contractor_rates.approve",
     )
+    has_work_orders = _has_any(
+        grants,
+        "work_orders.view",
+        "work_orders.create",
+        "work_orders.update",
+        "work_orders.approve",
+        "work_orders.manage_completion",
+        "work_orders.track_completion",
+    )
+    has_invoices = _has_any(
+        grants,
+        "invoices.view",
+        "invoices.create",
+        "invoices.update",
+        "invoices.validate",
+        "invoices.submit",
+    )
 
     modules: dict[str, Any] = {}
 
@@ -100,17 +119,32 @@ def get_dashboard_summary(
         }
 
     if has_tasks:
-        # Viewer-scoped status stats for inbox
+        # Same visibility as TaskService.my_tasks (direct assignee, creator, or role-based inbox).
+        role_ids_set = {
+            int(rid)
+            for rid in db.execute(select(user_role.c.role_id).where(user_role.c.user_id == user_id)).scalars().all()
+        }
+        visibility = (ApprovalTask.assigned_to_user_id == user_id) | (ApprovalTask.assigned_user_id == user_id) | (
+            ApprovalTask.created_by == user_id
+        )
+        if role_ids_set:
+            visibility = visibility | (
+                ApprovalTask.assigned_role_id.is_not(None) & ApprovalTask.assigned_role_id.in_(role_ids_set)
+            )
         base = (
             select(ApprovalTask.status, func.count())
             .select_from(ApprovalTask)
-            .where((ApprovalTask.assigned_to_user_id == user_id) | (ApprovalTask.assigned_user_id == user_id))
+            .where(visibility)
             .group_by(ApprovalTask.status)
         )
         rows = db.execute(base).all()
         by_status: dict[str, int] = {str(s): int(c) for s, c in rows if s is not None}
+        # "Pending" matches actionable inbox work: approval `pending` plus manual `open` / `in_progress`.
+        pending_actionable = (
+            by_status.get("pending", 0) + by_status.get("open", 0) + by_status.get("in_progress", 0)
+        )
         modules["tasks"] = {
-            "pending": by_status.get("pending", 0),
+            "pending": pending_actionable,
             "approved": by_status.get("approved", 0),
             "rejected": by_status.get("rejected", 0),
             # "Completed" should reflect finished work:
@@ -298,6 +332,33 @@ def get_dashboard_summary(
             "by_status": [
                 {"status": k, "count": v} for k, v in sorted(by_rate_status.items())
             ],
+        }
+
+    if has_work_orders:
+        wo_by_status_rows = db.execute(
+            select(WorkOrder.status, func.count()).group_by(WorkOrder.status)
+        ).all()
+        wo_by_status: dict[str, int] = {str(s or "unknown"): int(c) for s, c in wo_by_status_rows}
+        modules["work_orders"] = {
+            "total": int(sum(wo_by_status.values())),
+            "active": int(wo_by_status.get("active", 0)),
+            "pending_approval": int(wo_by_status.get("pending_approval", 0)),
+            "draft": int(wo_by_status.get("draft", 0)),
+            "by_status": [{"status": k, "count": v} for k, v in sorted(wo_by_status.items())],
+        }
+
+    if has_invoices:
+        inv_by_status_rows = db.execute(
+            select(Invoice.status, func.count()).group_by(Invoice.status)
+        ).all()
+        inv_by_status: dict[str, int] = {str(s or "unknown"): int(c) for s, c in inv_by_status_rows}
+        blocked = int(inv_by_status.get("blocked", 0))
+        pending_ex = int(inv_by_status.get("pending_exception_approval", 0))
+        modules["invoices"] = {
+            "total": int(sum(inv_by_status.values())),
+            "blocked": blocked,
+            "pending_exception_approval": pending_ex,
+            "by_status": [{"status": k, "count": v} for k, v in sorted(inv_by_status.items())],
         }
 
     return {"modules": modules}

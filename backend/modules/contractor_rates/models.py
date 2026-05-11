@@ -48,7 +48,8 @@ CONTRACTOR_RATE_STATUSES: tuple[str, ...] = (
 )
 
 # Free-form "unit of work" — kept open for plant-specific extensions.
-RATE_UNITS: tuple[str, ...] = ("hour", "day", "shift", "job", "month")
+# Common add-ons for industrial billing: kg (material) and job (lumpsum).
+RATE_UNITS: tuple[str, ...] = ("hour", "day", "shift", "job", "month", "kg")
 
 SKILL_TYPES: tuple[str, ...] = ("skilled", "semi_skilled", "unskilled")
 

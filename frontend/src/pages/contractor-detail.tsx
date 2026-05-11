@@ -34,6 +34,19 @@ type Compliance = {
   next_expiry: string | null
 }
 
+type ContractorInvoiceAnalytics = {
+  tolerance_pct_config: number
+  invoices_total: number
+  invoices_blocked: number
+  pending_variance_approvals: number
+  variance_issues_tracked: number
+  average_variance_pct: number | null
+  overbilling_invoice_count: number
+  invoice_accuracy_score: number | null
+  approval_dependency_rate: number | null
+  tolerance_usage_pressure_pct: number | null
+}
+
 type ContractorPublic = {
   id: number
   contractor_code: string | null
@@ -64,6 +77,8 @@ type ContractorPublic = {
   is_active: boolean
   plant_count: number
   compliance: Compliance | null
+  invoice_compliance_score?: number | null
+  invoice_analytics?: ContractorInvoiceAnalytics | null
   created_by: number | null
   updated_by: number | null
   created_at: string
@@ -227,6 +242,77 @@ export function ContractorDetailPage() {
         warnDays={warnDays}
         contractorUpdatedAt={contractor.updated_at}
       />
+
+      {contractor.invoice_compliance_score != null ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Invoice compliance score</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-muted-foreground">
+                Based on invoice validation outcomes, blocked invoices, and exception patterns.
+              </div>
+              <div className="text-2xl font-semibold tabular-nums">{contractor.invoice_compliance_score.toFixed(2)}</div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {contractor.invoice_analytics ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Invoice governance analytics</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Invoices tracked</div>
+              <div className="text-lg font-semibold tabular-nums">{contractor.invoice_analytics.invoices_total}</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Blocked / variance</div>
+              <div className="text-lg font-semibold tabular-nums">
+                {contractor.invoice_analytics.invoices_blocked} blocked · {contractor.invoice_analytics.pending_variance_approvals}{" "}
+                pending approvals
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Avg variance %</div>
+              <div className="text-lg font-semibold tabular-nums">
+                {contractor.invoice_analytics.average_variance_pct != null
+                  ? `${contractor.invoice_analytics.average_variance_pct.toFixed(2)}%`
+                  : "—"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Tolerance config</div>
+              <div className="text-lg font-semibold tabular-nums">
+                {(contractor.invoice_analytics.tolerance_pct_config ?? 5).toFixed(2)}%
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Overbilling flags</div>
+              <div className="text-lg font-semibold tabular-nums">{contractor.invoice_analytics.overbilling_invoice_count}</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Approval dependency rate</div>
+              <div className="text-lg font-semibold tabular-nums">
+                {contractor.invoice_analytics.approval_dependency_rate != null
+                  ? `${(contractor.invoice_analytics.approval_dependency_rate * 100).toFixed(1)}%`
+                  : "—"}
+              </div>
+            </div>
+            <div className="sm:col-span-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Pressure from tolerance exhaustion</div>
+              <div className="text-lg font-semibold tabular-nums">
+                {contractor.invoice_analytics.tolerance_usage_pressure_pct != null
+                  ? `${contractor.invoice_analytics.tolerance_usage_pressure_pct.toFixed(2)}% of invoices blocked`
+                  : "—"}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {error ? <div className="text-sm text-destructive">{error}</div> : null}
 

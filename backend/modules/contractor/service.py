@@ -12,6 +12,7 @@ Routes are thin wrappers around these methods.
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 import re
 from typing import Any
@@ -38,6 +39,8 @@ from modules.contractor.models import (
     ContractorPlant,
     DOCUMENT_VERIFICATION_STATUSES,
 )
+from modules.invoices.models import ContractorInvoiceCompliance, Invoice, InvoiceValidationIssue
+from modules.invoices.validation import invoice_tolerance_percentage
 from modules.contractor.schema import (
     ComplianceConfigCreate,
     ComplianceConfigUpdate,
@@ -1005,9 +1008,90 @@ class ContractorService:
 
     # ---------- Public projection ----------
 
+    def contractor_invoice_analytics(self, contractor_id: int) -> dict[str, Any]:
+        cid = int(contractor_id)
+        tol = float(invoice_tolerance_percentage(self._db))
+        invoices_total = int(self._db.scalar(select(func.count()).select_from(Invoice).where(Invoice.contractor_id == cid)) or 0)
+        invoices_blocked = int(
+            self._db.scalar(select(func.count()).select_from(Invoice).where(Invoice.contractor_id == cid, Invoice.status == "blocked"))
+            or 0
+        )
+        pending_variance = int(
+            self._db.scalar(
+                select(func.count()).select_from(Invoice).where(Invoice.contractor_id == cid, Invoice.status == "pending_exception_approval")
+            )
+            or 0
+        )
+
+        pct_list: list[float] = []
+        rows = (
+            self._db.execute(
+                select(InvoiceValidationIssue.actual_value, InvoiceValidationIssue.allowed_value)
+                .join(Invoice, Invoice.id == InvoiceValidationIssue.invoice_id)
+                .where(
+                    Invoice.contractor_id == cid,
+                    InvoiceValidationIssue.actual_value.is_not(None),
+                    InvoiceValidationIssue.allowed_value.is_not(None),
+                    InvoiceValidationIssue.allowed_value != 0,
+                )
+            )
+        ).all()
+        for av_raw, lv_raw in rows:
+            av = Decimal(str(av_raw))
+            lv = Decimal(str(lv_raw))
+            if lv == 0:
+                continue
+            pct_list.append(abs(float(av - lv)) / float(lv) * 100.0)
+        avg_var = sum(pct_list) / len(pct_list) if pct_list else None
+
+        over_ids = (
+            self._db.scalars(
+                select(InvoiceValidationIssue.invoice_id)
+                .join(Invoice, Invoice.id == InvoiceValidationIssue.invoice_id)
+                .where(
+                    Invoice.contractor_id == cid,
+                    InvoiceValidationIssue.severity == "blocker",
+                )
+                .distinct()
+            )
+            .all()
+        )
+        overbilling_invoice_count = len(set(over_ids))
+
+        invc = self._db.scalar(
+            select(ContractorInvoiceCompliance).where(ContractorInvoiceCompliance.contractor_id == cid)
+        )
+        accuracy = float(invc.compliance_score) if invc is not None and invc.compliance_score is not None else None
+
+        approval_dependency = None
+        if invoices_total > 0:
+            approval_dependency = float(pending_variance + invoices_blocked) / float(invoices_total)
+
+        tolerance_pressure = None
+        if invoices_total > 0:
+            tolerance_pressure = float(invoices_blocked) / float(invoices_total) * 100.0
+
+        return {
+            "tolerance_pct_config": tol,
+            "invoices_total": invoices_total,
+            "invoices_blocked": invoices_blocked,
+            "pending_variance_approvals": pending_variance,
+            "variance_issues_tracked": len(pct_list),
+            "average_variance_pct": avg_var,
+            "overbilling_invoice_count": overbilling_invoice_count,
+            "invoice_accuracy_score": accuracy,
+            "approval_dependency_rate": approval_dependency,
+            "tolerance_usage_pressure_pct": tolerance_pressure,
+        }
+
     def to_public_dict(self, contractor: Contractor) -> dict[str, Any]:
         plant_count = len(list(contractor.plants or []))
         compliance = self.get_compliance_summary(int(contractor.id))
+        invc = self._db.scalar(
+            select(ContractorInvoiceCompliance).where(
+                ContractorInvoiceCompliance.contractor_id == int(contractor.id)
+            )
+        )
         data: dict[str, Any] = {
             "id": int(contractor.id),
             "contractor_code": contractor.contractor_code,
@@ -1038,6 +1122,10 @@ class ContractorService:
             "is_active": bool(contractor.is_active),
             "plant_count": plant_count,
             "compliance": compliance.model_dump() if compliance else None,
+            "invoice_compliance_score": float(invc.compliance_score)
+            if invc is not None and invc.compliance_score is not None
+            else None,
+            "invoice_analytics": self.contractor_invoice_analytics(int(contractor.id)),
             "created_by": contractor.created_by,
             "updated_by": contractor.updated_by,
             "created_at": contractor.created_at,

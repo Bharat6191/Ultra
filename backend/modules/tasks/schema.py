@@ -9,7 +9,6 @@ WorkflowStepPhase = Literal["completed", "current", "upcoming", "rejected"]
 
 
 TaskType = Literal["approval", "manual", "rework"]
-TaskPriority = Literal["low", "medium", "high"]
 TaskStatus = Literal["open", "in_progress", "completed", "rejected", "closed", "pending", "approved"]
 
 
@@ -19,7 +18,6 @@ class TaskInboxItem(BaseModel):
     id: int
     task_type: TaskType
     title: str | None = None
-    priority: str | None = None
     status: str
     assigned_to_user_id: int | None = None
     due_date: datetime | None = None
@@ -35,7 +33,6 @@ class TaskCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=50_000)
     assigned_to: int = Field(ge=1)
-    priority: TaskPriority = "medium"
     due_date: datetime | None = None
     entity_type: str | None = Field(default=None, max_length=64)
     entity_id: int | None = Field(default=None, ge=1)
@@ -127,7 +124,6 @@ class TaskDetailPublic(BaseModel):
     task_type: str
     title: str | None = None
     description: str | None = None
-    priority: str | None = None
     status: str
     due_date: datetime | None = None
     created_by: int | None = None

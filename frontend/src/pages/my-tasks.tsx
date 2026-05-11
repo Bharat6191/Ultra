@@ -13,7 +13,6 @@ type UnifiedTaskRow = {
   id: number
   task_type: "approval" | "manual" | "rework"
   title: string | null
-  priority: string | null
   status: string
 }
 
@@ -38,7 +37,6 @@ function InboxTable({ rows, loading, canView, emptyMessage, onOpen }: InboxTable
             <TableRow>
               <TableHead>Title</TableHead>
               <TableHead>Type</TableHead>
-              <TableHead>Priority</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -46,7 +44,7 @@ function InboxTable({ rows, loading, canView, emptyMessage, onOpen }: InboxTable
           <TableBody>
             {(rows ?? []).length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground">
+                <TableCell colSpan={4} className="text-muted-foreground">
                   {!canView
                     ? "Missing permission: task.view or approval.view"
                     : loading
@@ -59,10 +57,9 @@ function InboxTable({ rows, loading, canView, emptyMessage, onOpen }: InboxTable
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">{r.title ?? "(untitled)"}</TableCell>
                   <TableCell className="text-sm capitalize">{r.task_type}</TableCell>
-                  <TableCell className="text-sm capitalize">{r.priority ?? "—"}</TableCell>
                   <TableCell className="text-sm capitalize">{r.status}</TableCell>
                   <TableCell className="text-right space-x-2">
-                    <Button type="button" size="sm" variant="outline" onClick={() => onOpen(r.id)}>
+                    <Button type="button" size="sm" variant="default" onClick={() => onOpen(r.id)}>
                       View
                     </Button>
                   </TableCell>

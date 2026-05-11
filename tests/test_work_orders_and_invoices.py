@@ -1,0 +1,197 @@
+from __future__ import annotations
+
+import uuid
+from datetime import date, timedelta
+from decimal import Decimal
+
+import pytest
+from sqlalchemy import select
+
+import db.models  # noqa: F401
+from db.session import SessionLocal
+from modules.contractor.models import Contractor
+from modules.contractor_rates.models import RateMaster
+from modules.org_units.model import OrgUnit
+from modules.users.model import User
+from modules.work_orders.schema import (
+    WorkOrderCreate,
+    WorkOrderContractorCreate,
+    WorkOrderDraftUpdate,
+    WorkOrderItemCreate,
+    WorkOrderItemProgressCreate,
+)
+from modules.work_orders.service import WorkOrderService
+from modules.invoices.schema import InvoiceCreate, InvoiceLineCreate
+from modules.invoices.service import InvoiceService
+
+
+@pytest.fixture()
+def db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def _first_user(db) -> int:
+    u = db.scalars(select(User).order_by(User.id.asc())).first()
+    if u is None:
+        pytest.skip("No users seeded in DB")
+    return int(u.id)
+
+
+def _first_plant(db) -> OrgUnit:
+    org = db.scalars(select(OrgUnit).order_by(OrgUnit.id.asc())).first()
+    if org is None:
+        pytest.skip("No org units seeded in DB")
+    return org
+
+
+def _first_contractor(db) -> Contractor:
+    c = db.scalars(select(Contractor).order_by(Contractor.id.asc())).first()
+    if c is None:
+        pytest.skip("No contractors seeded in DB")
+    return c
+
+
+def _first_rate_master_for_org(db, org_unit_id: int) -> RateMaster:
+    rm = db.scalars(select(RateMaster).where(RateMaster.org_unit_id == int(org_unit_id)).order_by(RateMaster.id.asc())).first()
+    if rm is None:
+        pytest.skip("No rate master seeded in DB for this org unit")
+    return rm
+
+
+def test_work_order_create_and_invoice_validate(db):
+    actor = _first_user(db)
+    org = _first_plant(db)
+    contractor = _first_contractor(db)
+    rm = _first_rate_master_for_org(db, int(org.id))
+
+    wo = WorkOrderService(db).create(
+        WorkOrderCreate(
+            org_unit_id=int(org.id),
+            title="Test WO",
+            description=None,
+            work_date=date.today(),
+            contractors=[
+                WorkOrderContractorCreate(
+                    contractor_id=int(contractor.id),
+                    scope_notes=None,
+                    items=[
+                        WorkOrderItemCreate(
+                            rate_master_id=int(rm.id),
+                            progress_type="quantity",
+                            planned_quantity=Decimal("10"),
+                            planned_percentage=None,
+                            notes=None,
+                        )
+                    ],
+                )
+            ],
+        ),
+        actor_user_id=actor,
+    )
+    assert wo.id > 0
+    svc_w = WorkOrderService(db)
+    wo2 = svc_w.submit_for_approval(int(wo.id), actor_user_id=actor)
+    if str(wo2.status) == "pending_approval":
+        wo2 = svc_w.finalize_approval(int(wo2.id), approver_user_id=actor, approval_request_id=wo2.approval_request_id)
+    assert str(wo2.status) == "active"
+    item_id = int(wo2.contractors[0].items[0].id)
+
+    # Snapshot completion (eligible invoice qty follows latest cumulative snapshot).
+    WorkOrderService(db).add_progress(
+        item_id,
+        WorkOrderItemProgressCreate(
+            completed_quantity=Decimal("5"), completed_percentage=None, remarks="done"
+        ),
+        actor_user_id=actor,
+    )
+
+    inv = InvoiceService(db).create(
+        InvoiceCreate(
+            contractor_id=int(contractor.id),
+            org_unit_id=int(org.id),
+            invoice_number=f"INV-{date.today().strftime('%Y%m%d')}-TEST-{uuid.uuid4().hex[:8]}",
+            invoice_date=date.today(),
+            lines=[
+                InvoiceLineCreate(work_order_item_id=item_id, quantity=Decimal("5"), rate=None, notes=None)
+            ],
+        ),
+        actor_user_id=actor,
+    )
+    inv2 = InvoiceService(db).submit(int(inv.id), actor_user_id=actor)
+    validated = InvoiceService(db).validate(int(inv2.id), actor_user_id=actor)
+    assert validated.validation_status in ("pass", "warn", "fail", "blocked")
+
+
+def test_work_order_draft_update_replaces_lines(db):
+    actor = _first_user(db)
+    org = _first_plant(db)
+    contractor = _first_contractor(db)
+    rm = _first_rate_master_for_org(db, int(org.id))
+
+    svc = WorkOrderService(db)
+    wo = svc.create(
+        WorkOrderCreate(
+            org_unit_id=int(org.id),
+            title="Draft lines",
+            description="ref1",
+            work_date=date.today(),
+            contractors=[
+                WorkOrderContractorCreate(
+                    contractor_id=int(contractor.id),
+                    scope_notes=None,
+                    items=[
+                        WorkOrderItemCreate(
+                            rate_master_id=int(rm.id),
+                            progress_type="quantity",
+                            planned_quantity=Decimal("1"),
+                            planned_percentage=None,
+                            notes=None,
+                        )
+                    ],
+                )
+            ],
+        ),
+        actor_user_id=actor,
+    )
+    assert len(wo.contractors[0].items) == 1
+
+    updated = svc.update_draft(
+        int(wo.id),
+        WorkOrderDraftUpdate(
+            title="Draft lines 2",
+            description="ref2",
+            contractors=[
+                WorkOrderContractorCreate(
+                    contractor_id=int(contractor.id),
+                    scope_notes=None,
+                    items=[
+                        WorkOrderItemCreate(
+                            rate_master_id=int(rm.id),
+                            progress_type="quantity",
+                            planned_quantity=Decimal("3"),
+                            planned_percentage=None,
+                            notes="note a",
+                        ),
+                        WorkOrderItemCreate(
+                            rate_master_id=int(rm.id),
+                            progress_type="quantity",
+                            planned_quantity=Decimal("5"),
+                            planned_percentage=None,
+                            notes="note b",
+                        ),
+                    ],
+                )
+            ],
+        ),
+        actor_user_id=actor,
+    )
+    assert updated.title == "Draft lines 2"
+    assert updated.description == "ref2"
+    assert len(updated.contractors) == 1
+    assert len(updated.contractors[0].items) == 2
+    assert updated.contractors[0].items[0].notes == "note a"
+

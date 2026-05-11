@@ -7,6 +7,7 @@ import {
   Handshake,
   KeyRound,
   LayoutDashboard,
+  Receipt,
   Settings,
   Shield,
   Users,
@@ -92,6 +93,20 @@ const shellNavItems: ShellNavItem[] = [
       "contractor_rates.update",
       "contractor_rates.approve",
     ],
+  },
+  {
+    id: "work-orders",
+    label: "Work orders",
+    icon: BriefcaseBusiness,
+    to: "/dashboard/work-orders",
+    permission: ["work_orders.view", "work_orders.create", "work_orders.update", "work_orders.approve"],
+  },
+  {
+    id: "invoices",
+    label: "Invoices",
+    icon: Receipt,
+    to: "/dashboard/invoices",
+    permission: ["invoices.view", "invoices.create", "invoices.update", "invoices.validate"],
   },
 ]
 

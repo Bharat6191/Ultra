@@ -40,7 +40,6 @@ class TaskService:
         *,
         viewer_id: int,
         status: str | None = None,
-        priority: str | None = None,
         task_type: str | None = None,
         due_before: datetime | None = None,
         limit: int = 100,
@@ -73,8 +72,6 @@ class TaskService:
             stmt = stmt.where(ApprovalTask.status.in_(("approved", "rejected", "completed", "closed")))
         if status:
             stmt = stmt.where(ApprovalTask.status == status)
-        if priority:
-            stmt = stmt.where(ApprovalTask.priority == priority)
         if task_type:
             stmt = stmt.where(ApprovalTask.task_type == task_type)
         if due_before is not None:
@@ -154,7 +151,6 @@ class TaskService:
         title: str,
         description: str | None,
         assigned_to_user_id: int,
-        priority: str,
         due_date: datetime | None,
         entity_type: str | None,
         entity_id: int | None,
@@ -165,7 +161,6 @@ class TaskService:
             task_type="manual",
             title=title,
             description=description,
-            priority=priority,
             due_date=due_date,
             created_by=actor_user_id,
             assigned_to_user_id=assigned_to_user_id,
@@ -494,7 +489,6 @@ def build_task_detail_public(db: Session, t: ApprovalTask) -> TaskDetailPublic:
         task_type=str(t.task_type),
         title=t.title,
         description=t.description,
-        priority=t.priority,
         status=t.status,
         due_date=t.due_date,
         created_by=t.created_by,

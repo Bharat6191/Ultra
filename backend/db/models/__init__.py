@@ -32,6 +32,21 @@ from modules.contractor_rates.models import (
     RateMasterVersion,
 )
 from modules.notifications.model import NotificationDedupKey, NotificationSetting
+from modules.work_orders.models import (
+    WorkOrder,
+    WorkOrderAuditLog,
+    WorkOrderContractor,
+    WorkOrderItem,
+    WorkOrderItemProgress,
+)
+from modules.invoices.models import (
+    ContractorInvoiceCompliance,
+    Invoice,
+    InvoiceAttachment,
+    InvoiceAuditLog,
+    InvoiceLine,
+    InvoiceValidationIssue,
+)
 
 __all__ = [
     "AuditLog",
@@ -68,4 +83,15 @@ __all__ = [
     "MfaChallenge",
     "MfaSetupToken",
     "role_permission",
+    "WorkOrder",
+    "WorkOrderContractor",
+    "WorkOrderItem",
+    "WorkOrderItemProgress",
+    "WorkOrderAuditLog",
+    "Invoice",
+    "InvoiceLine",
+    "InvoiceValidationIssue",
+    "InvoiceAttachment",
+    "InvoiceAuditLog",
+    "ContractorInvoiceCompliance",
 ]

@@ -13,6 +13,8 @@ from modules.contractor_rates.module_config import (
     CONTRACTOR_RATES_MODULE_CONFIG,
     RATE_MASTER_MODULE_CONFIG,
 )
+from modules.work_orders.module_config import WORK_ORDERS_MODULE_CONFIG
+from modules.invoices.module_config import INVOICES_MODULE_CONFIG
 
 class TabConfigDict(TypedDict):
     key: str
@@ -143,6 +145,8 @@ MODULE_CONFIG: list[ModuleConfigDict] = [
     CONTRACTOR_MODULE_CONFIG,
     RATE_MASTER_MODULE_CONFIG,
     CONTRACTOR_RATES_MODULE_CONFIG,
+    WORK_ORDERS_MODULE_CONFIG,
+    INVOICES_MODULE_CONFIG,
 ]
 
 

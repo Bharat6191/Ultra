@@ -54,7 +54,9 @@ export function TaskDashboard({ data }: { data: TasksDashboardModule }) {
       <Card className="border-emerald-100">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Status breakdown</CardTitle>
-          <CardDescription className="text-xs">Counts across your assigned tasks</CardDescription>
+          <CardDescription className="text-xs">
+            Tasks assigned to you, created by you, or routed to your roles (same scope as My tasks).
+          </CardDescription>
         </CardHeader>
         <CardContent className="h-64">
           <ResponsiveContainer width="100%" height="100%">

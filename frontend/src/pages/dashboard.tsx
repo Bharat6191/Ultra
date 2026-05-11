@@ -9,6 +9,8 @@ import {
 } from "@/components/contractors/ContractorDashboard"
 import { ContractorCharts } from "@/components/contractors/ContractorCharts"
 import { RatesDashboard, type RatesDashboardModule } from "@/components/contractors/RatesDashboard"
+import { WorkOrdersDashboard, type WorkOrdersDashboardModule } from "@/components/dashboard/work-orders-dashboard"
+import { InvoicesDashboard, type InvoicesDashboardModule } from "@/components/dashboard/invoices-dashboard"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { getJson } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
@@ -19,6 +21,8 @@ type DashboardSummary = {
     tasks?: TasksDashboardModule
     contractors?: ContractorsDashboardModule
     contractor_rates?: RatesDashboardModule
+    work_orders?: WorkOrdersDashboardModule
+    invoices?: InvoicesDashboardModule
     [k: string]: unknown
   }
 }
@@ -50,6 +54,8 @@ export function DashboardPage() {
   const tasksModule = summary?.modules?.tasks
   const contractorsModule = summary?.modules?.contractors
   const ratesModule = summary?.modules?.contractor_rates
+  const workOrdersModule = summary?.modules?.work_orders
+  const invoicesModule = summary?.modules?.invoices
   const canCreateContractor = hasPermission("contractor.create")
   const canViewRates = hasPermission("contractor_rates.view")
 
@@ -107,6 +113,12 @@ export function DashboardPage() {
       ) : null}
 
       {ratesModule && canViewRates ? <RatesDashboard module={ratesModule} /> : null}
+      {workOrdersModule && (hasPermission("work_orders.view") || hasPermission("work_orders.create")) ? (
+        <WorkOrdersDashboard module={workOrdersModule} />
+      ) : null}
+      {invoicesModule && (hasPermission("invoices.view") || hasPermission("invoices.create")) ? (
+        <InvoicesDashboard module={invoicesModule} />
+      ) : null}
     </div>
   )
 }

@@ -1,0 +1,321 @@
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from core.auth import CurrentUser, get_current_user
+from core.permissions import require_any_permission, require_permission
+from db.session import get_db
+from modules.errors import ConflictError, NotFoundError
+from modules.work_orders.models import WorkOrder
+from modules.work_orders.schema import (
+    WorkOrderCreate,
+    WorkOrderDraftUpdate,
+    WorkOrderItemProgressHistoryEntry,
+    WorkOrderPublic,
+    WorkOrderProgressUpsertResponse,
+    WorkOrderRateOverrideRequest,
+    WorkOrderAuditEntry,
+    WorkOrderItemProgressCreate,
+)
+from modules.work_orders.service import WorkOrderService
+
+
+router = APIRouter(tags=["app", "work_orders"])
+
+
+def _svc(db: Session = Depends(get_db)) -> WorkOrderService:
+    return WorkOrderService(db)
+
+
+def _to_public(db: Session, row: WorkOrder) -> dict:
+    svc = WorkOrderService(db)
+    return {
+        "id": int(row.id),
+        "work_order_number": row.work_order_number,
+        "org_unit_id": int(row.org_unit_id),
+        "title": row.title,
+        "description": row.description,
+        "work_date": row.work_date,
+        "status": row.status,
+        "approval_request_id": row.approval_request_id,
+        "created_by": row.created_by,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+        "contractors": [
+            {
+                "id": int(c.id),
+                "contractor_id": int(c.contractor_id),
+                "scope_notes": c.scope_notes,
+                "items": [
+                    {
+                        "id": int(i.id),
+                        "rate_master_id": int(i.rate_master_id),
+                        "job_type": i.job_type,
+                        "skill_type": i.skill_type,
+                        "unit": i.unit,
+                        "progress_type": i.progress_type,
+                        "planned_quantity": i.planned_quantity,
+                        "planned_percentage": i.planned_percentage,
+                        "resolved_rate": i.resolved_rate,
+                        "rate_source": i.rate_source,
+                        "contractor_rate_id": i.contractor_rate_id,
+                        "override_rate": i.override_rate,
+                        "override_reason": i.override_reason,
+                        "override_status": i.override_status,
+                        "notes": i.notes,
+                        "completion": svc.item_completion_projection(i),
+                    }
+                    for i in (c.items or [])
+                ],
+            }
+            for c in (row.contractors or [])
+        ],
+    }
+
+
+@router.get(
+    "/work-orders",
+    response_model=list[WorkOrderPublic],
+    dependencies=[Depends(require_permission("work_orders.view"))],
+)
+def list_work_orders(
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+    db: Session = Depends(get_db),
+    org_unit_id: int | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    limit: int = Query(100, ge=1, le=200),
+) -> list[WorkOrderPublic]:
+    rows = svc.list(org_unit_id=org_unit_id, status=status_filter, limit=limit)
+    return [WorkOrderPublic.model_validate(_to_public(db, r)) for r in rows]
+
+
+@router.post(
+    "/work-orders",
+    response_model=WorkOrderPublic,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("work_orders.create"))],
+)
+def create_work_order(
+    payload: WorkOrderCreate,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> WorkOrderPublic:
+    try:
+        row = svc.create(payload, actor_user_id=int(current.subject))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return WorkOrderPublic.model_validate(_to_public(db, row))
+
+
+@router.get(
+    "/work-orders/{work_order_id:int}",
+    response_model=WorkOrderPublic,
+    dependencies=[Depends(require_any_permission("work_orders.view", "work_orders.approve"))],
+)
+def get_work_order(
+    work_order_id: int,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+    db: Session = Depends(get_db),
+) -> WorkOrderPublic:
+    try:
+        row = svc.get(work_order_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return WorkOrderPublic.model_validate(_to_public(db, row))
+
+
+@router.get(
+    "/work-orders/{work_order_id:int}/audit-logs",
+    response_model=list[WorkOrderAuditEntry],
+    dependencies=[
+        Depends(
+            require_any_permission(
+                "work_orders.view",
+                "work_orders.manage_completion",
+                "work_orders.track_completion",
+                "work_orders.approve",
+            )
+        )
+    ],
+)
+def work_order_audit_logs(
+    work_order_id: int,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+) -> list[WorkOrderAuditEntry]:
+    rows = svc.get(work_order_id).audit_logs or []
+    out: list[WorkOrderAuditEntry] = []
+    for a in rows:
+        out.append(
+            WorkOrderAuditEntry(
+                id=int(a.id),
+                work_order_id=int(a.work_order_id),
+                action=str(a.action),
+                changed_by=int(a.actor_user_id) if a.actor_user_id is not None else None,
+                actor_name=svc._user_display_name(a.actor_user_id) if a.actor_user_id is not None else None,
+                old_value=a.old_value,
+                new_value=a.new_value,
+                metadata=a.metadata_json,
+                created_at=a.created_at,
+            )
+        )
+    return out
+
+
+@router.patch(
+    "/work-orders/{work_order_id:int}",
+    response_model=WorkOrderPublic,
+    dependencies=[Depends(require_permission("work_orders.create"))],
+)
+def update_work_order_draft(
+    work_order_id: int,
+    payload: WorkOrderDraftUpdate,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> WorkOrderPublic:
+    try:
+        row = svc.update_draft(work_order_id, payload, actor_user_id=int(current.subject))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return WorkOrderPublic.model_validate(_to_public(db, row))
+
+
+@router.post(
+    "/work-orders/{work_order_id:int}/submit",
+    response_model=WorkOrderPublic,
+    dependencies=[Depends(require_permission("work_orders.create"))],
+)
+def submit_work_order(
+    work_order_id: int,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> WorkOrderPublic:
+    try:
+        row = svc.submit_for_approval(work_order_id, actor_user_id=int(current.subject))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return WorkOrderPublic.model_validate(_to_public(db, row))
+
+
+@router.post(
+    "/work-orders/items/{work_order_item_id:int}/progress",
+    response_model=WorkOrderProgressUpsertResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_any_permission("work_orders.manage_completion", "work_orders.track_completion"))],
+)
+def add_progress(
+    work_order_item_id: int,
+    payload: WorkOrderItemProgressCreate,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+) -> WorkOrderProgressUpsertResponse:
+    try:
+        row = svc.add_progress(work_order_item_id, payload, actor_user_id=int(current.subject))
+        return WorkOrderProgressUpsertResponse(
+            ok=True,
+            id=int(row.id),
+            completed_quantity=float(row.completed_quantity) if row.completed_quantity is not None else None,
+            completed_percentage=float(row.completed_percentage) if row.completed_percentage is not None else 0.0,
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get(
+    "/work-orders/items/{work_order_item_id:int}/completion-history",
+    response_model=list[WorkOrderItemProgressHistoryEntry],
+    dependencies=[
+        Depends(
+            require_any_permission(
+                "work_orders.view",
+                "work_orders.manage_completion",
+                "work_orders.track_completion",
+            )
+        )
+    ],
+)
+def work_order_item_completion_history(
+    work_order_item_id: int,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+) -> list[WorkOrderItemProgressHistoryEntry]:
+    try:
+        rows = svc.list_item_progress_history(work_order_item_id)
+        return [WorkOrderItemProgressHistoryEntry.model_validate(x) for x in rows]
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post(
+    "/work-orders/items/{work_order_item_id:int}/override-rate",
+    dependencies=[Depends(require_permission("work_orders.override_rate"))],
+)
+def request_override(
+    work_order_item_id: int,
+    payload: WorkOrderRateOverrideRequest,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+) -> dict:
+    try:
+        item = svc.request_rate_override(work_order_item_id, payload, actor_user_id=int(current.subject))
+        return {
+            "ok": True,
+            "work_order_item_id": int(item.id),
+            "override_status": item.override_status,
+            "override_approval_request_id": item.override_approval_request_id,
+        }
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/work-orders/{work_order_id:int}",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_permission("work_orders.delete"))],
+)
+def archive_work_order(
+    work_order_id: int,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+) -> dict:
+    try:
+        row = svc.archive(work_order_id, actor_user_id=int(current.subject))
+        return {"ok": True, "id": int(row.id), "is_active": bool(row.is_active), "status": row.status}
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/work-orders/{work_order_id:int}/hard",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_permission("work_orders.delete"))],
+)
+def hard_delete_work_order(
+    work_order_id: int,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+) -> dict:
+    try:
+        svc.hard_delete(work_order_id, actor_user_id=int(current.subject))
+        return {"ok": True, "id": int(work_order_id), "deleted": True}
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+

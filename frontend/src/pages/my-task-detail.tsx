@@ -9,8 +9,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { ApprovalWorkflowTimeline, type TaskApprovalStepLine } from "@/components/approval-workflow-timeline"
+import {
+  WorkOrderApprovalReview,
+  WorkOrderRateOverrideApprovalReview,
+} from "@/components/tasks/work-order-task-review"
 import { ApiError, getJson, postJson } from "@/lib/api"
-import { hasPermission, persistAuthFromMe } from "@/lib/permissions"
+import { hasPermission, isSuperuser, persistAuthFromMe } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
 type TaskComment = {
@@ -52,7 +56,6 @@ type UnifiedTaskDetail = {
   task_type: "approval" | "manual" | "rework"
   title: string | null
   description: string | null
-  priority: string | null
   status: string
   due_date: string | null
   created_by: number | null
@@ -114,6 +117,25 @@ function formatPayloadValue(v: unknown): string {
   }
 }
 
+function taskStatusBadgeVariant(status: string): React.ComponentProps<typeof Badge>["variant"] {
+  switch (status) {
+    case "pending":
+    case "pending_approval":
+      return "warning"
+    case "approved":
+    case "completed":
+      return "success"
+    case "closed":
+      return "secondary"
+    case "rejected":
+      return "destructive"
+    case "open":
+    case "in_progress":
+    default:
+      return "outline"
+  }
+}
+
 function entityLabel(task: UnifiedTaskDetail): string {
   const a = task.approval
   const et = a?.entity_type ?? task.entity_type
@@ -125,6 +147,10 @@ function entityLabel(task: UnifiedTaskDetail): string {
     contractor_activation: "Contractor activation",
     contractor_update: "Contractor update",
     contractor_rate_approval: "Negotiated rate",
+    work_order_approval: "Work order submission",
+    work_order_rate_override: "Work order rate override",
+    invoice_exception_approval: "Invoice exception",
+    user_creation: "New user account",
   }
   return `${pretty[et] ?? et} #${eid ?? "—"}`
 }
@@ -152,6 +178,63 @@ function entityLink(task: UnifiedTaskDetail): { href: string; label: string } | 
   ) {
     return { href: `/dashboard/contractors/${eid}`, label: "Open contractor" }
   }
+  if (et === "work_order_approval") {
+    return { href: `/dashboard/work-orders/${eid}`, label: "Open work order" }
+  }
+  if (et === "work_order_rate_override") {
+    const pl = a?.payload as { work_order_id?: unknown }
+    const wid = pl?.work_order_id != null ? Number(pl.work_order_id) : NaN
+    if (Number.isFinite(wid) && wid > 0) {
+      return { href: `/dashboard/work-orders/${wid}`, label: "Open work order" }
+    }
+  }
+  if (et === "user_creation") {
+    return { href: `/dashboard/users/${eid}`, label: "Open user" }
+  }
+  if (et === "invoice_exception_approval") {
+    return { href: `/dashboard/invoices/${eid}`, label: "Open invoice" }
+  }
+  return null
+}
+
+/** Single deep-link to the related business record, only when the viewer can access that module. */
+function openRecordAction(task: UnifiedTaskDetail): { href: string; label: string } | null {
+  const base = entityLink(task)
+  if (!base) return null
+  const a = task.approval
+  const et = a?.entity_type ?? task.entity_type
+  if (!et) return null
+  if (isSuperuser()) return base
+
+  const woAccess =
+    hasPermission("work_orders.view") ||
+    hasPermission("work_orders.approve") ||
+    hasPermission("work_orders.create")
+  if (et === "work_order_approval" || et === "work_order_rate_override") return woAccess ? base : null
+
+  if (et === "contractor_rate_approval") return hasPermission("contractor_rates.view") ? base : null
+
+  if (
+    et === "contractor_creation" ||
+    et === "contractor_activation" ||
+    et === "contractor_update"
+  ) {
+    return hasPermission("contractor.view") ? base : null
+  }
+
+  if (et === "user_creation") {
+    return hasPermission("users.view") || hasPermission("users.update") ? base : null
+  }
+
+  if (et === "invoice_exception_approval") {
+    return hasPermission("invoices.view") ||
+      hasPermission("invoices.validate") ||
+      hasPermission("invoices.update") ||
+      hasPermission("invoices.create")
+      ? base
+      : null
+  }
+
   return null
 }
 
@@ -187,7 +270,7 @@ function TaskCommentsCard({ comment, onCommentChange, sortedComments, onAddComme
           />
         </div>
         <div className="flex justify-end">
-          <Button type="button" size="sm" variant="outline" onClick={onAddComment} disabled={commenting || !comment.trim()}>
+          <Button type="button" size="sm" variant="secondary" onClick={onAddComment} disabled={commenting || !comment.trim()}>
             {commenting ? "Adding…" : "Add comment"}
           </Button>
         </div>
@@ -467,6 +550,8 @@ export function MyTaskDetailPage() {
     }
   }
 
+  const recordOpen = task ? openRecordAction(task) : null
+
   return (
     <div className="w-full space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -478,19 +563,40 @@ export function MyTaskDetailPage() {
             {(() => {
               if (!task) return "Task"
               if (isApprovalLike && task.approval) {
-                const p = task.approval.payload as { full_name?: unknown }
+                const p = task.approval.payload as {
+                  full_name?: unknown
+                  title?: unknown
+                  work_order_number?: unknown
+                  work_order_title?: unknown
+                }
                 if (task.approval.entity_type === "user_creation" && typeof p.full_name === "string" && p.full_name.trim() !== "")
                   return p.full_name
                 if (task.approval.entity_type === "user_creation") return "New user account"
+                if (task.approval.entity_type === "work_order_approval") {
+                  if (typeof p.title === "string" && p.title.trim() !== "") return p.title
+                  if (typeof p.work_order_number === "string" && p.work_order_number.trim() !== "") return p.work_order_number
+                  return "Work order submission"
+                }
+                if (task.approval.entity_type === "work_order_rate_override") {
+                  if (typeof p.work_order_title === "string" && p.work_order_title.trim() !== "") return p.work_order_title
+                  return "Rate override request"
+                }
                 return task.approval.entity_type.replace(/_/g, " ")
               }
               return task.title ?? "Task"
             })()}
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link to="..">Back</Link>
-        </Button>
+        <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+          {!loading && recordOpen ? (
+            <Button asChild size="sm" variant="default">
+              <Link to={recordOpen.href}>{recordOpen.label}</Link>
+            </Button>
+          ) : null}
+          <Button asChild variant="outline" size="sm">
+            <Link to="..">Back</Link>
+          </Button>
+        </div>
       </div>
 
       {error ? (
@@ -517,7 +623,7 @@ export function MyTaskDetailPage() {
                   <Link to={userCreationEditPath}>Edit user details</Link>
                 </Button>
               ) : null}
-              <Button type="button" size="sm" onClick={() => void resubmitForApproval()} disabled={acting}>
+              <Button type="button" size="sm" variant="default" onClick={() => void resubmitForApproval()} disabled={acting}>
                 {acting ? "Submitting…" : "Resubmit for approval"}
               </Button>
             </div>
@@ -539,7 +645,7 @@ export function MyTaskDetailPage() {
                   <Link to={userCreationEditPath}>Edit user details</Link>
                 </Button>
               ) : null}
-              <Button type="button" size="sm" onClick={() => void resubmitForApproval()} disabled={acting}>
+              <Button type="button" size="sm" variant="default" onClick={() => void resubmitForApproval()} disabled={acting}>
                 {acting ? "Submitting…" : "Resubmit for approval"}
               </Button>
             </div>
@@ -562,34 +668,62 @@ export function MyTaskDetailPage() {
         <div className="space-y-4">
           {isApprovalLike && task.approval ? (
             <>
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+              <div
+                className={cn(
+                  "grid grid-cols-1 gap-4 lg:items-start",
+                  task.approval.entity_type === "work_order_approval" ||
+                    task.approval.entity_type === "work_order_rate_override"
+                    ? ""
+                    : "lg:grid-cols-2",
+                )}
+              >
                 <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
-                <CardHeader className="space-y-0 border-b border-border/60 bg-muted/20 py-3">
-                  <CardTitle className="text-base">What you&apos;re approving</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-3">
-                  {(() => {
-                    const rows = approvalPayloadEntries(task.approval!.payload, task.approval!.entity_type)
-                    if (rows.length === 0) return <p className="text-sm text-muted-foreground">No request details available.</p>
-                    return (
-                      <dl className="divide-y divide-border/60">
-                        {rows.map((row) => (
-                          <div key={row.key} className="grid grid-cols-1 gap-0.5 py-2 first:pt-0 sm:grid-cols-3 sm:gap-3">
-                            <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:col-span-1">{row.label}</dt>
-                            <dd className="text-sm text-foreground sm:col-span-2">{row.value}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                    )
-                  })()}
-                  <p className="mt-3 border-t border-border/60 pt-2 text-xs text-muted-foreground">
-                    Submitted by{" "}
-                    {task.approval!.created_by_display_name ??
-                      (task.approval!.created_by != null ? `User #${task.approval!.created_by}` : "—")}{" "}
-                    · Request #{task.approval!.request_id}
-                  </p>
-                </CardContent>
-              </Card>
+                  <CardHeader className="space-y-1 border-b border-border/60 bg-muted/20 py-3">
+                    <CardTitle className="text-base">What you&apos;re approving</CardTitle>
+                    {task.approval.entity_type === "work_order_approval" ? (
+                      <CardDescription className="text-xs">
+                        Full work order detail — same execution sheet as the work order screen (live record when available).
+                      </CardDescription>
+                    ) : task.approval.entity_type === "work_order_rate_override" ? (
+                      <CardDescription className="text-xs">
+                        Governed rate vs requested override for this line item.
+                      </CardDescription>
+                    ) : null}
+                  </CardHeader>
+                  <CardContent className="pt-3">
+                    {task.approval.entity_type === "work_order_approval" &&
+                    task.approval.entity_id != null &&
+                    Number.isFinite(Number(task.approval.entity_id)) ? (
+                      <WorkOrderApprovalReview
+                        workOrderId={Number(task.approval.entity_id)}
+                        fallbackPayload={task.approval.payload ?? {}}
+                      />
+                    ) : task.approval.entity_type === "work_order_rate_override" ? (
+                      <WorkOrderRateOverrideApprovalReview payload={task.approval.payload ?? {}} />
+                    ) : (
+                      (() => {
+                        const rows = approvalPayloadEntries(task.approval!.payload, task.approval!.entity_type)
+                        if (rows.length === 0) return <p className="text-sm text-muted-foreground">No request details available.</p>
+                        return (
+                          <dl className="divide-y divide-border/60">
+                            {rows.map((row) => (
+                              <div key={row.key} className="grid grid-cols-1 gap-0.5 py-2 first:pt-0 sm:grid-cols-3 sm:gap-3">
+                                <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:col-span-1">{row.label}</dt>
+                                <dd className="text-sm text-foreground sm:col-span-2">{row.value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        )
+                      })()
+                    )}
+                    <p className="mt-6 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                      Submitted by{" "}
+                      {task.approval!.created_by_display_name ??
+                        (task.approval!.created_by != null ? `User #${task.approval!.created_by}` : "—")}{" "}
+                      · Request #{task.approval!.request_id}
+                    </p>
+                  </CardContent>
+                </Card>
                 <TaskCommentsCard
                   comment={comment}
                   onCommentChange={setComment}
@@ -616,28 +750,17 @@ export function MyTaskDetailPage() {
                 <CardContent className="space-y-3 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant={
-                          task.status === "completed"
-                            ? "default"
-                            : task.status === "closed"
-                              ? "secondary"
-                              : task.status === "rejected"
-                                ? "destructive"
-                                : "outline"
-                        }
-                      >
+                      <Badge variant={taskStatusBadgeVariant(task.status)}>
                         {task.status}
                       </Badge>
-                      <span className="text-xs text-muted-foreground capitalize">{task.priority ?? "—"} priority</span>
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
                       {task.task_type === "manual" ? (
                         <>
-                          <Button type="button" size="sm" variant="outline" onClick={() => void start()} disabled={acting || !canTaskAct}>
+                          <Button type="button" size="sm" variant="secondary" onClick={() => void start()} disabled={acting || !canTaskAct}>
                             Start
                           </Button>
-                          <Button type="button" size="sm" onClick={() => void complete()} disabled={acting || !canTaskAct}>
+                          <Button type="button" size="sm" variant="default" onClick={() => void complete()} disabled={acting || !canTaskAct}>
                             Complete
                           </Button>
                           <Button type="button" size="sm" variant="outline" onClick={() => void close()} disabled={acting || !canTaskClose}>
@@ -654,22 +777,9 @@ export function MyTaskDetailPage() {
                       {task.due_date ? formatDateTime(task.due_date) : "—"}
                     </div>
                     {entityLabel(task) !== "—" ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span>
-                          <span className="text-muted-foreground">Entity: </span>
-                          {entityLabel(task)}
-                        </span>
-                        {(() => {
-                          const lnk = entityLink(task)
-                          return lnk ? (
-                            <Link
-                              to={lnk.href}
-                              className="text-xs text-primary underline-offset-2 hover:underline"
-                            >
-                              {lnk.label} →
-                            </Link>
-                          ) : null
-                        })()}
+                      <div>
+                        <span className="text-muted-foreground">Entity: </span>
+                        {entityLabel(task)}
                       </div>
                     ) : null}
                     {task.request_id ? (
@@ -686,22 +796,9 @@ export function MyTaskDetailPage() {
                   <CardDescription className="text-xs">Summary</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-1.5 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span>
-                      <span className="text-muted-foreground">Entity: </span>
-                      {entityLabel(task)}
-                    </span>
-                    {(() => {
-                      const lnk = entityLink(task)
-                      return lnk ? (
-                        <Link
-                          to={lnk.href}
-                          className="text-xs text-primary underline-offset-2 hover:underline"
-                        >
-                          {lnk.label} →
-                        </Link>
-                      ) : null
-                    })()}
+                  <div>
+                    <span className="text-muted-foreground">Entity: </span>
+                    {entityLabel(task)}
                   </div>
                   <div>
                     <span className="text-muted-foreground">Status: </span>
@@ -730,30 +827,9 @@ export function MyTaskDetailPage() {
                       : "Approval step"}
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
-                  {(() => {
-                    const lnk = entityLink(task)
-                    return lnk ? (
-                      <Button asChild size="sm" variant="outline">
-                        <Link to={lnk.href}>{lnk.label}</Link>
-                      </Button>
-                    ) : null
-                  })()}
-                  <Badge
-                    variant={
-                      task.status === "completed"
-                        ? "default"
-                        : task.status === "closed"
-                          ? "secondary"
-                          : task.status === "rejected"
-                            ? "destructive"
-                            : "outline"
-                    }
-                    className="w-fit shrink-0"
-                  >
-                    {task.status}
-                  </Badge>
-                </div>
+                <Badge variant={taskStatusBadgeVariant(task.status)} className="w-fit shrink-0">
+                  {task.status}
+                </Badge>
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-end sm:gap-6">
@@ -774,14 +850,13 @@ export function MyTaskDetailPage() {
                           <Button
                             type="button"
                             size="sm"
-                            variant="outline"
-                            className="border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900/50 dark:text-red-200 dark:hover:bg-red-950/30"
+                            variant="destructive"
                             onClick={() => void approveOrReject("reject")}
                             disabled={acting || !canApprovalAct}
                           >
                             Reject
                           </Button>
-                          <Button type="button" size="sm" onClick={() => void approveOrReject("approve")} disabled={acting || !canApprovalAct}>
+                          <Button type="button" size="sm" variant="default" onClick={() => void approveOrReject("approve")} disabled={acting || !canApprovalAct}>
                             Approve
                           </Button>
                         </div>

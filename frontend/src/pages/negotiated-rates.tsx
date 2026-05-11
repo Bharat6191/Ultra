@@ -158,7 +158,7 @@ export function NegotiatedRatesPage() {
       setNewError(null)
       try {
         const [clist, raws] = await Promise.all([
-          getJson<{ id: number; name: string }[]>("/contractors?limit=200&status=active"),
+          getJson<{ id: number; name: string }[]>("/contractors/lookup?limit=200&status=active"),
           getJson<
             {
               id: number

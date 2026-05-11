@@ -23,13 +23,15 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[1] / "backend"
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 import db.models  # noqa: F401
 from core.password_policy import PasswordPolicyError, validate_password
 from core.security import hash_password
 from db.session import SessionLocal
+from modules.approvals.assignment_service import resolve_registered_action_code
+from modules.approvals.model import ApprovalStep, ApprovalWorkflow, ApprovalWorkflowMapping
 from modules.org_units.model import OrgUnit
 from modules.permissions.model import Permission
 from modules.rbac_association import user_org_unit
@@ -116,6 +118,83 @@ def _upsert_user(
     return existing
 
 
+def _ensure_work_orders_create_workflow_if_unmapped(
+    db: Session,
+    *,
+    approver_role: Role,
+    creator_user_id: int | None,
+) -> bool:
+    """
+    If ``work_orders.create`` has no active workflow mapping yet, attach a single-step
+    workflow so submitted work orders create Level-1 inbox tasks (Ops Approver role).
+
+    Skips quietly when already configured so admins are not overwritten.
+    """
+    canonical = resolve_registered_action_code(db, "work_orders.create")
+    if canonical is None:
+        print(
+            "warning: permission work_orders.create not found in DB — run sync_modules before seed.",
+            file=sys.stderr,
+        )
+        return False
+
+    already = db.scalar(
+        select(ApprovalWorkflowMapping.id)
+        .join(ApprovalWorkflow, ApprovalWorkflow.id == ApprovalWorkflowMapping.workflow_id)
+        .where(
+            ApprovalWorkflowMapping.action_code == canonical,
+            ApprovalWorkflowMapping.is_active.is_(True),
+            ApprovalWorkflow.is_active.is_(True),
+        )
+    )
+    if already is not None:
+        return False
+
+    entity_type = "work_order_approval"
+    name = "Seed: WO create → Ops Approver"
+
+    wf = db.scalar(
+        select(ApprovalWorkflow).where(
+            ApprovalWorkflow.entity_type == entity_type,
+            ApprovalWorkflow.name == name,
+        )
+    )
+    if wf is None:
+        wf = ApprovalWorkflow(
+            name=name,
+            entity_type=entity_type,
+            is_active=True,
+            created_by=creator_user_id,
+        )
+        db.add(wf)
+        db.flush()
+    else:
+        wf.is_active = True
+
+    step_count = db.scalar(
+        select(func.count()).select_from(ApprovalStep).where(ApprovalStep.workflow_id == wf.id)
+    )
+    if not step_count:
+        db.add(
+            ApprovalStep(
+                workflow_id=int(wf.id),
+                step_order=1,
+                approver_role_id=int(approver_role.id),
+                required_approvals=1,
+            )
+        )
+
+    db.add(
+        ApprovalWorkflowMapping(
+            action_code=canonical,
+            workflow_id=int(wf.id),
+            is_active=True,
+        )
+    )
+    db.commit()
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed additional roles/users/tasks for manual testing.")
     parser.add_argument("--password", default="TestPass123!", help="Password for seeded users (must satisfy policy).")
@@ -177,6 +256,48 @@ def main() -> int:
                 "description": "View-only across core modules.",
                 "perms": ["contractor.view", "task.view", "users.view"],
             },
+            "Operations Work Orders": {
+                "description": "Create/track work orders and submit for approval.",
+                "perms": [
+                    "work_orders.view",
+                    "work_orders.create",
+                    "work_orders.update",
+                    "work_orders.manage_completion",
+                    "work_orders.override_rate",
+                    "approval.view",
+                ],
+            },
+            "Finance Invoice Validator": {
+                "description": "Create/submit invoices, validate, and review exception approvals.",
+                "perms": [
+                    "invoices.view",
+                    "invoices.create",
+                    "invoices.update",
+                    "invoices.submit",
+                    "invoices.validate",
+                    "approval.view",
+                ],
+            },
+            "Ops Approver": {
+                "description": "Approves work orders and rate overrides.",
+                "perms": [
+                    "work_orders.view",
+                    "work_orders.approve",
+                    "work_orders.override_rate",
+                    "approval.view",
+                    "approval.act",
+                ],
+            },
+            "Finance Approver": {
+                "description": "Approves invoice exceptions.",
+                "perms": [
+                    "invoices.view",
+                    "invoices.validate",
+                    "invoices.approve_exceptions",
+                    "approval.view",
+                    "approval.act",
+                ],
+            },
         }
 
         created_roles: dict[str, Role] = {}
@@ -188,6 +309,12 @@ def main() -> int:
                 permission_codes=list(cfg["perms"]),
             )
 
+        seeded_wo_wf = _ensure_work_orders_create_workflow_if_unmapped(
+            db,
+            approver_role=created_roles["Ops Approver"],
+            creator_user_id=None,
+        )
+
         users = [
             # contractor module
             ("ctr_manager", "ctr.manager@example.test", "Contractor Manager", "+15550101001", "Contractor Manager"),
@@ -198,6 +325,11 @@ def main() -> int:
             ("task_manager", "task.manager@example.test", "Task Manager", "+15550101003", "Task Manager"),
             # viewer
             ("viewer", "viewer@example.test", "Read-only Viewer", "+15550101004", "Read-only Viewer"),
+            # work orders / invoices
+            ("ops_user", "ops.user@example.test", "Operations Work Orders", "+15550101006", "Operations Work Orders"),
+            ("ops_approver", "ops.approver@example.test", "Ops Approver", "+15550101007", "Ops Approver"),
+            ("fin_user", "fin.user@example.test", "Finance Invoice Validator", "+15550101008", "Finance Invoice Validator"),
+            ("fin_approver", "fin.approver@example.test", "Finance Approver", "+15550101009", "Finance Approver"),
         ]
 
         seeded_users: dict[str, User] = {}
@@ -232,7 +364,6 @@ def main() -> int:
                 title=f"Manual check #{i}: Contractor compliance",
                 description="Review contractor documents and mark compliance status.",
                 assigned_to_user_id=int(assignee.id),
-                priority="medium",
                 due_date=now + timedelta(days=i),
                 entity_type="contractor",
                 entity_id=None,
@@ -251,6 +382,14 @@ def main() -> int:
         print()
         print(f"Password for seeded users: {args.password!r}")
         print("Seeded 3 manual tasks assigned to task_operator.")
+        if seeded_wo_wf:
+            print(
+                "Seeded approval mapping: work_orders.create → single-step workflow (Ops Approver role)."
+            )
+        print(
+            "If approvers never see work order tasks, ensure Tasks admin has mapped work_orders.create "
+            "to an active workflow and step-1 role matches your approver user."
+        )
         return 0
     finally:
         db.close()

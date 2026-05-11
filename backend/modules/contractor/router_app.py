@@ -59,6 +59,52 @@ def get_timeline_service(db: Session = Depends(get_db)) -> ContractorTimelineSer
 
 # ---------- Contractors: list / create / read / update ----------
 
+@router.get(
+    "/lookup",
+    dependencies=[
+        Depends(
+            require_any_permission(
+                # Contractor module access
+                "contractor.view",
+                # Rate master / negotiated rates need contractor dropdowns
+                "rate_master.view",
+                "rate_master.create",
+                "rate_master.update",
+                "contractor_rates.view",
+                "contractor_rates.create",
+                "contractor_rates.update",
+                # Work orders & invoices will also need contractor dropdowns
+                "work_orders.view",
+                "work_orders.create",
+                "work_orders.update",
+                "invoices.view",
+                "invoices.create",
+                "invoices.update",
+            )
+        )
+    ],
+)
+def contractor_lookup(
+    svc: Annotated[ContractorService, Depends(get_contractor_service)],
+    limit: int = Query(200, ge=1, le=500),
+    status_filter: str | None = Query("active", alias="status"),
+    q: str | None = Query(None, alias="q"),
+) -> list[dict[str, object]]:
+    """
+    Lightweight contractor picker for cross-module dropdowns.
+
+    Returns only ``{id, name}`` to avoid leaking full contractor master data to roles that
+    can legitimately create rates/work orders/invoices but should not browse the contractor module.
+    """
+    parsed_status = status_filter.strip().lower() if status_filter else None
+    rows, _total = svc.list_contractors(
+        offset=0,
+        limit=int(limit),
+        search=q,
+        status=parsed_status if parsed_status not in ("all", "") else None,
+    )
+    return [{"id": int(r.id), "name": str(r.name)} for r in rows]
+
 
 @router.get(
     "",

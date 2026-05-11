@@ -17,7 +17,59 @@ from modules.tasks.schema import (
     TaskDetailPublic,
     TaskInboxItem,
 )
+from modules.approvals.model import ApprovalTask as ApprovalTaskModel
 from modules.tasks.service import TaskService, build_task_detail_public
+
+
+def _friendly_approval_inbox_title(task: ApprovalTaskModel) -> str | None:
+    """Human-readable inbox title using request payload when the task row has no explicit title."""
+    if str(task.task_type) != "approval" or task.request is None:
+        return None
+    req = task.request
+    pl = req.payload if isinstance(req.payload, dict) else {}
+    et = req.entity_type
+    if et == "work_order_approval":
+        wn = str(pl.get("work_order_number") or "").strip()
+        ttl = str(pl.get("title") or "").strip()
+        base = [x for x in (wn, ttl) if x]
+        if base:
+            return "Approve work order · " + " · ".join(base)
+        return f"Approve work order · #{req.entity_id}"
+    if et == "work_order_rate_override":
+        wn = str(pl.get("work_order_number") or "").strip()
+        jl = ""
+        ln = pl.get("line")
+        if isinstance(ln, dict) and ln.get("job_type"):
+            jl = str(ln.get("job_type")).strip()
+        ore = str(pl.get("override_rate") or "").strip()
+        bits = []
+        if wn:
+            bits.append(wn)
+        if jl:
+            bits.append(jl)
+        if ore:
+            bits.append(f"→ {ore}")
+        if bits:
+            return "Approve rate override · " + " · ".join(bits)
+        return "Approve governed rate override"
+    if et == "invoice_exception_approval":
+        invn = str(pl.get("invoice_number") or "").strip()
+        vst = str(pl.get("validation_status") or "").strip()
+        base = [x for x in (invn, vst) if x]
+        if base:
+            return "Approve invoice exception · " + " · ".join(base)
+        return f"Approve invoice exception · #{req.entity_id}"
+    if et == "contractor_rate_approval":
+        return "Approve negotiated rate"
+    if et in ("contractor_creation", "contractor_activation"):
+        return "Approve contractor onboarding"
+    if et == "contractor_update":
+        return "Approve contractor update"
+    if et == "user_creation":
+        nm = str(pl.get("full_name") or "").strip()
+        return f"Approve new user{f' · {nm}' if nm else ''}"
+    return None
+
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -35,7 +87,6 @@ def my_tasks(
         Depends(require_any_permission("task.view", "approval.view")),
     ],
     status_filter: str | None = Query(default=None, alias="status"),
-    priority: str | None = Query(default=None),
     task_type: str | None = Query(default=None),
     due_before: datetime | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=200),
@@ -48,7 +99,6 @@ def my_tasks(
     rows = svc.my_tasks(
         viewer_id=int(current.subject),
         status=status_filter,
-        priority=priority,
         task_type=task_type,
         due_before=due_before,
         limit=limit,
@@ -57,6 +107,9 @@ def my_tasks(
     out: list[TaskInboxItem] = []
     for t in rows:
         title = t.title
+        if not title:
+            nicer = _friendly_approval_inbox_title(t)
+            title = nicer
         if not title:
             if str(t.task_type) == "approval" and t.request is not None:
                 title = f"Approval: {t.request.entity_type} #{t.request.entity_id}"
@@ -74,7 +127,6 @@ def my_tasks(
                 id=int(t.id),
                 task_type=str(t.task_type),
                 title=title,
-                priority=t.priority,
                 status=t.status,
                 assigned_to_user_id=t.assigned_to_user_id,
                 due_date=t.due_date,
@@ -122,7 +174,6 @@ def create_task(
         title=payload.title,
         description=payload.description,
         assigned_to_user_id=payload.assigned_to,
-        priority=payload.priority,
         due_date=payload.due_date,
         entity_type=payload.entity_type,
         entity_id=payload.entity_id,

@@ -19,6 +19,12 @@ import { RateMasterPage } from "@/pages/rate-master"
 import { RateMasterDetailPage } from "@/pages/rate-master-detail"
 import { NegotiatedRatesPage } from "@/pages/negotiated-rates"
 import { NegotiatedRateDetailPage } from "@/pages/negotiated-rate-detail"
+import { WorkOrdersPage } from "@/pages/work-orders"
+import { WorkOrderDetailPage } from "@/pages/work-order-detail"
+import { WorkOrderCreatePage } from "@/pages/work-order-create"
+import { InvoicesPage } from "@/pages/invoices"
+import { InvoiceCreatePage } from "@/pages/invoice-create"
+import { InvoiceDetailPage } from "@/pages/invoice-detail"
 import { MyTasksPage } from "@/pages/my-tasks"
 import { WorkflowAssignmentPage } from "@/pages/workflow-assignment"
 import { EmailTemplatesPage } from "@/pages/email-templates"
@@ -161,6 +167,44 @@ function App() {
                 </RequirePermission>
               }
             />
+          </Route>
+          <Route
+            path="work-orders"
+            element={
+              <RequirePermission anyOf={["work_orders.view", "work_orders.create", "work_orders.update", "work_orders.approve"]}>
+                <Outlet />
+              </RequirePermission>
+            }
+          >
+            <Route index element={<WorkOrdersPage />} />
+            <Route
+              path="new"
+              element={
+                <RequirePermission code="work_orders.create">
+                  <WorkOrderCreatePage />
+                </RequirePermission>
+              }
+            />
+            <Route path=":id" element={<WorkOrderDetailPage />} />
+          </Route>
+          <Route
+            path="invoices"
+            element={
+              <RequirePermission anyOf={["invoices.view", "invoices.create", "invoices.update", "invoices.validate"]}>
+                <Outlet />
+              </RequirePermission>
+            }
+          >
+            <Route index element={<InvoicesPage />} />
+            <Route
+              path="new"
+              element={
+                <RequirePermission code="invoices.create">
+                  <InvoiceCreatePage />
+                </RequirePermission>
+              }
+            />
+            <Route path=":id" element={<InvoiceDetailPage />} />
           </Route>
         </Route>
         <Route path="/admin/login" element={<LoginRoute />} />

@@ -555,6 +555,89 @@ def main() -> int:
             actor_user_id=actor_id,
         )
 
+        # Bulk active rate masters per plant (for Work Order + Invoice dropdowns).
+        # Goal: 10+ active items per plant, stable & idempotent.
+        templates: list[tuple[str, str, str, str]] = [
+            ("Welder", "skilled", "hour", "120.00"),
+            ("Welder", "semi_skilled", "hour", "95.00"),
+            ("Electrician", "skilled", "day", "950.00"),
+            ("Electrician", "semi_skilled", "day", "850.00"),
+            ("General Helper", "unskilled", "hour", "60.00"),
+            ("Pipefitter", "skilled", "hour", "135.00"),
+            ("Fitter", "semi_skilled", "hour", "110.00"),
+            ("Painter", "semi_skilled", "day", "780.00"),
+            ("Rigger", "skilled", "day", "1050.00"),
+            ("Scaffolder", "skilled", "day", "990.00"),
+            ("Mason", "semi_skilled", "day", "720.00"),
+            ("Store Keeper", "semi_skilled", "day", "700.00"),
+            ("Flux Wire", "semi_skilled", "kg", "18.50"),
+            ("Welding Rod", "semi_skilled", "kg", "22.00"),
+            ("Consumables", "unskilled", "kg", "12.75"),
+            ("Pipeline Repair", "skilled", "job", "4500.00"),
+            ("Pump Overhaul", "skilled", "job", "12500.00"),
+        ]
+
+        def _rate_bump(base: str, *, plant_index: int) -> str:
+            try:
+                v = Decimal(base)
+            except Exception:
+                return base
+            # Plant A=0%, B=+3%, C=+6% (deterministic, keeps UI interesting)
+            bump = Decimal("1.00") + (Decimal("0.03") * Decimal(str(plant_index)))
+            return str((v * bump).quantize(Decimal("0.01")))
+
+        plant_c = plants[2] if len(plants) > 2 else plant_b
+        plant_c_id = int(plant_c.id)
+
+        all_plants = [plant_id, plant_b_id, plant_c_id]
+        for pi, pid in enumerate(all_plants):
+            for job_type, skill_type, unit, base_rate in templates:
+                _find_or_create_rate_master(
+                    db,
+                    rm_svc,
+                    job_type=job_type,
+                    skill_type=skill_type,
+                    unit=unit,
+                    base_rate=_rate_bump(base_rate, plant_index=pi),
+                    plant_id=int(pid),
+                    effective_from=today - timedelta(days=7),
+                    effective_to=None,
+                    is_active=True,
+                    notes=f"[seed] bulk active item ({job_type}/{skill_type}/{unit})",
+                    actor_user_id=actor_id,
+                )
+
+        # Ensure a few negotiated contractor rates for the new units (kg/job),
+        # so they appear in Contractor Rates + can resolve in Work Orders/Invoices.
+        # We anchor on Plant A because demo WOs typically target the first plant.
+        kg_job_rms = list(
+            db.scalars(
+                select(RateMaster)
+                .where(RateMaster.org_unit_id == int(plant_id))
+                .where(RateMaster.is_active.is_(True))
+                .where(RateMaster.unit.in_(("kg", "job")))
+                .order_by(RateMaster.id.asc())
+            ).all()
+        )
+        for rm in kg_job_rms[:6]:
+            # Keep it simple: create a draft rate slightly below base to show savings.
+            try:
+                base = Decimal(str(rm.base_rate))
+            except Exception:
+                base = Decimal("1.00")
+            negotiated = (base * Decimal("0.97")).quantize(Decimal("0.01"))
+            _seed_contractor_rate(
+                db,
+                rate_svc,
+                contractor_id=int(c_acme.id),
+                rate_master_id=int(rm.id),
+                negotiated_rate=str(negotiated),
+                initial_rate=str(base),
+                effective_from=today,
+                marker_remarks=f"[seed] kg/job unit demo for {rm.job_type}",
+                actor_user_id=actor_id,
+            )
+
         rate_master_count = int(
             db.scalar(select(func.count()).select_from(RateMaster)) or 0
         )

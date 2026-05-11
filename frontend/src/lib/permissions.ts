@@ -102,7 +102,14 @@ export function canListOrgUnitsForAssignments(): boolean {
       hasPermission("rate_master.update") ||
       hasPermission("contractor_rates.view") ||
       hasPermission("contractor_rates.create") ||
-      hasPermission("contractor_rates.update")
+      hasPermission("contractor_rates.update") ||
+      // Work orders UI needs plant labels for lists/detail screens.
+      hasPermission("work_orders.view") ||
+      hasPermission("work_orders.create") ||
+      hasPermission("work_orders.update") ||
+      hasPermission("work_orders.approve") ||
+      hasPermission("work_orders.manage_completion") ||
+      hasPermission("work_orders.track_completion")
     )
   } catch {
     return false

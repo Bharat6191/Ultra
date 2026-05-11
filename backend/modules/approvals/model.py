@@ -148,7 +148,6 @@ class ApprovalTask(Base):
     entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     form_schema: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     form_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    priority: Mapped[str] = mapped_column(String(16), nullable=False, server_default="medium")
     due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     # Generic assignment for unified inbox. Approval engine still uses assigned_user_id/assigned_role_id.

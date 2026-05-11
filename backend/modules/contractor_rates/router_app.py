@@ -32,7 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from core.auth import CurrentUser, get_current_user
-from core.permissions import require_permission
+from core.permissions import require_any_permission, require_permission
 from db.session import get_db
 from modules.contractor_rates.schema import (
     ContractorRateCreate,
@@ -126,7 +126,16 @@ def _versions_to_public(db: Session, versions: list) -> list[RateVersionEntry]:
 @router.get(
     "/rate-master",
     response_model=list[RateMasterPublic],
-    dependencies=[Depends(require_permission("rate_master.view"))],
+    dependencies=[
+        Depends(
+            require_any_permission(
+                "rate_master.view",
+                "work_orders.view",
+                "work_orders.create",
+                "work_orders.update",
+            )
+        )
+    ],
 )
 def list_rate_master(
     svc: Annotated[RateMasterService, Depends(_get_rate_master_service)],

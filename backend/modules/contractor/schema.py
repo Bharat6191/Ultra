@@ -90,6 +90,21 @@ class ContractorComplianceSummary(BaseModel):
     next_expiry: date | None = None
 
 
+class ContractorInvoiceAnalyticsPublic(BaseModel):
+    """Rolling invoice validation KPIs for contractor risk / performance dashboards."""
+
+    tolerance_pct_config: float = 5.0
+    invoices_total: int = 0
+    invoices_blocked: int = 0
+    pending_variance_approvals: int = 0
+    variance_issues_tracked: int = 0
+    average_variance_pct: float | None = None
+    overbilling_invoice_count: int = 0
+    invoice_accuracy_score: float | None = None
+    approval_dependency_rate: float | None = None
+    tolerance_usage_pressure_pct: float | None = None
+
+
 class ContractorPublic(BaseModel):
     id: int
     contractor_code: str | None
@@ -122,6 +137,8 @@ class ContractorPublic(BaseModel):
 
     plant_count: int = 0
     compliance: ContractorComplianceSummary | None = None
+    invoice_compliance_score: float | None = None
+    invoice_analytics: ContractorInvoiceAnalyticsPublic | None = None
 
     created_by: int | None
     updated_by: int | None

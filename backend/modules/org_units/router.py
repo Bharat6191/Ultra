@@ -45,6 +45,9 @@ def list_org_units(
                 "contractor_rates.view",
                 "contractor_rates.create",
                 "contractor_rates.update",
+                # Task / approval UIs need plant labels when reviewing work orders.
+                "work_orders.view",
+                "work_orders.approve",
             )
         ),
     ],

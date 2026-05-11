@@ -291,7 +291,6 @@ class ApprovalEngineService:
             task_type="approval",
             title=title,
             description=description,
-            priority="medium",
             status="pending",
             acted_at=None,
             entity_type=req.entity_type,
@@ -648,7 +647,6 @@ class ApprovalEngineService:
                     task_type="rework",
                     title="Rework required",
                     description=comment,
-                    priority="medium",
                     entity_type=req.entity_type,
                     entity_id=req.entity_id,
                     created_by=req.created_by,
@@ -782,6 +780,31 @@ class ApprovalEngineService:
                     approval_request_id=int(req.id),
                     comment=comment,
                 )
+            if req.entity_type == "work_order_approval":
+                from modules.work_orders.service import WorkOrderService
+
+                WorkOrderService(self._db).finalize_rejection(
+                    int(req.entity_id),
+                    rejector_user_id=rejector_user_id,
+                    approval_request_id=int(req.id),
+                    comment=comment,
+                )
+            if req.entity_type == "work_order_rate_override":
+                from modules.work_orders.service import WorkOrderService
+
+                WorkOrderService(self._db).finalize_override_rejection(
+                    int(req.entity_id),
+                    rejector_user_id=rejector_user_id,
+                    approval_request_id=int(req.id),
+                    comment=comment,
+                )
+            if req.entity_type == "invoice_exception_approval":
+                from modules.invoices.service import InvoiceService
+
+                invoice = InvoiceService(self._db).get(int(req.entity_id))
+                invoice.status = "rejected"
+                invoice.rejected_by = rejector_user_id
+                invoice.rejected_at = _now_utc()
         except Exception:
             # Rejection must not be blocked by an entity-specific failure;
             # the rework path still creates the rework task so the requester is notified.
@@ -911,5 +934,82 @@ class ApprovalEngineService:
                 approver_user_id=approver_user_id,
                 approval_request_id=int(req.id),
             )
+            return
+
+        if req.entity_type == "work_order_approval":
+            from modules.work_orders.service import WorkOrderService
+
+            approver_user_id: int | None = None
+            try:
+                last_action = self._db.scalar(
+                    select(ApprovalAction)
+                    .join(ApprovalTask, ApprovalTask.id == ApprovalAction.task_id)
+                    .where(
+                        ApprovalTask.request_id == int(req.id),
+                        ApprovalAction.action == "approve",
+                    )
+                    .order_by(ApprovalAction.created_at.desc())
+                )
+                if last_action is not None:
+                    approver_user_id = int(last_action.user_id)
+            except Exception:
+                approver_user_id = None
+            WorkOrderService(self._db).finalize_approval(
+                int(req.entity_id),
+                approver_user_id=approver_user_id,
+                approval_request_id=int(req.id),
+            )
+            return
+
+        if req.entity_type == "work_order_rate_override":
+            from modules.work_orders.service import WorkOrderService
+
+            approver_user_id: int | None = None
+            try:
+                last_action = self._db.scalar(
+                    select(ApprovalAction)
+                    .join(ApprovalTask, ApprovalTask.id == ApprovalAction.task_id)
+                    .where(
+                        ApprovalTask.request_id == int(req.id),
+                        ApprovalAction.action == "approve",
+                    )
+                    .order_by(ApprovalAction.created_at.desc())
+                )
+                if last_action is not None:
+                    approver_user_id = int(last_action.user_id)
+            except Exception:
+                approver_user_id = None
+            WorkOrderService(self._db).finalize_override_approval(
+                int(req.entity_id),
+                approver_user_id=approver_user_id,
+                approval_request_id=int(req.id),
+            )
+            return
+
+        if req.entity_type == "invoice_exception_approval":
+            # For now we only mark invoice as approved for exceptions.
+            from modules.invoices.service import InvoiceService
+
+            approver_user_id: int | None = None
+            try:
+                last_action = self._db.scalar(
+                    select(ApprovalAction)
+                    .join(ApprovalTask, ApprovalTask.id == ApprovalAction.task_id)
+                    .where(
+                        ApprovalTask.request_id == int(req.id),
+                        ApprovalAction.action == "approve",
+                    )
+                    .order_by(ApprovalAction.created_at.desc())
+                )
+                if last_action is not None:
+                    approver_user_id = int(last_action.user_id)
+            except Exception:
+                approver_user_id = None
+
+            # Minimal finalize: mark approved; payment lifecycle comes later.
+            invoice = InvoiceService(self._db).get(int(req.entity_id))
+            invoice.status = "approved"
+            invoice.approved_by = approver_user_id
+            invoice.approved_at = _now_utc()
             return
 

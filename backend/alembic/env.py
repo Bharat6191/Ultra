@@ -30,6 +30,21 @@ from modules.contractor_rates.models import (  # noqa: F401
     RateMasterVersion,
 )
 from modules.notifications.model import NotificationSetting, NotificationDedupKey  # noqa: F401
+from modules.work_orders.models import (  # noqa: F401
+    WorkOrder,
+    WorkOrderAuditLog,
+    WorkOrderContractor,
+    WorkOrderItem,
+    WorkOrderItemProgress,
+)
+from modules.invoices.models import (  # noqa: F401
+    ContractorInvoiceCompliance,
+    Invoice,
+    InvoiceAttachment,
+    InvoiceAuditLog,
+    InvoiceLine,
+    InvoiceValidationIssue,
+)
 
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 

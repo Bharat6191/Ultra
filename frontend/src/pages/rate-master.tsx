@@ -312,7 +312,7 @@ export function RateMasterPage() {
       }
       try {
         const c = await getJson<{ id: number; name: string }[]>(
-          "/contractors?limit=200&status=active",
+          "/contractors/lookup?limit=200&status=active",
         )
         setContractors(c.map((x) => ({ id: x.id, name: x.name })))
       } catch {

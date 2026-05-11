@@ -1,0 +1,894 @@
+from __future__ import annotations
+
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, selectinload
+
+from modules.approvals.assignment_service import get_workflow_for_action
+from modules.approvals.service import ApprovalEngineService
+from modules.contractor.models import Contractor
+from modules.contractor_rates.models import ContractorRate, RateMaster
+from modules.errors import ConflictError, NotFoundError
+from modules.org_units.model import OrgUnit
+from modules.users.model import User
+from modules.work_orders import audit as audit_helpers
+from modules.work_orders.models import (
+    WORK_ORDER_ITEM_PROGRESS_TYPES,
+    WORK_ORDER_STATUSES,
+    WorkOrder,
+    WorkOrderContractor,
+    WorkOrderItem,
+    WorkOrderItemProgress,
+)
+from modules.invoices.models import InvoiceLine
+from modules.work_orders.schema import (
+    WorkOrderCreate,
+    WorkOrderDraftUpdate,
+    WorkOrderContractorCreate,
+    WorkOrderItemProgressCreate,
+    WorkOrderRateOverrideRequest,
+)
+
+
+ACTION_CODE_CREATE = "work_orders.create"
+ACTION_CODE_APPROVE = "work_orders.approve"
+ACTION_CODE_OVERRIDE_RATE = "work_orders.override_rate"
+
+APPROVAL_ENTITY_TYPE = "work_order_approval"
+OVERRIDE_APPROVAL_ENTITY_TYPE = "work_order_rate_override"
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _q2(x: Decimal) -> Decimal:
+    return x.quantize(Decimal("0.01"))
+
+
+def _q3(x: Decimal) -> Decimal:
+    return x.quantize(Decimal("0.001"))
+
+
+def _dec(x: Any) -> Decimal:
+    return x if isinstance(x, Decimal) else Decimal(str(x))
+
+
+def _json_decimal(v: Decimal | None) -> str | None:
+    if v is None:
+        return None
+    return str(_q2(Decimal(str(v))))
+
+
+class WorkOrderService:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def _ensure_plant(self, org_unit_id: int) -> OrgUnit:
+        org = self._db.get(OrgUnit, int(org_unit_id))
+        if org is None:
+            raise NotFoundError("OrgUnit", org_unit_id)
+        if getattr(org, "type", None) and str(org.type).upper() != "PLANT":
+            raise ConflictError("work_order can only be created for plants (org_units.type=PLANT).")
+        return org
+
+    def _ensure_contractor(self, contractor_id: int) -> Contractor:
+        c = self._db.get(Contractor, int(contractor_id))
+        if c is None:
+            raise NotFoundError("Contractor", contractor_id)
+        return c
+
+    def _ensure_rate_master(self, rate_master_id: int) -> RateMaster:
+        rm = self._db.get(RateMaster, int(rate_master_id))
+        if rm is None:
+            raise NotFoundError("RateMaster", rate_master_id)
+        return rm
+
+    def _resolve_rate_for(
+        self,
+        *,
+        contractor_id: int,
+        rate_master_id: int,
+        work_date: date,
+    ) -> tuple[Decimal, str, int | None]:
+        """Return (rate, source, contractor_rate_id)."""
+        # Prefer an approved negotiated rate whose window covers work_date.
+        stmt = (
+            select(ContractorRate)
+            .where(
+                ContractorRate.contractor_id == int(contractor_id),
+                ContractorRate.rate_master_id == int(rate_master_id),
+                ContractorRate.status == "approved",
+                ContractorRate.effective_from <= work_date,
+                func.coalesce(ContractorRate.effective_to, date(9999, 12, 31)) >= work_date,
+            )
+            .order_by(ContractorRate.approved_at.desc().nullslast(), ContractorRate.id.desc())
+        )
+        cr = self._db.scalar(stmt)
+        if cr is not None:
+            return Decimal(cr.negotiated_rate), "negotiated", int(cr.id)
+
+        # Fallback to active rate master.
+        rm = self._ensure_rate_master(int(rate_master_id))
+        if not bool(rm.is_active):
+            # Even if inactive, allow creation but flag it via ConflictError? We enforce governance.
+            raise ConflictError("Selected base rate is not active.")
+        if rm.effective_from and rm.effective_from > work_date:
+            raise ConflictError("Selected base rate is not yet effective for the work date.")
+        if rm.effective_to is not None and rm.effective_to < work_date:
+            raise ConflictError("Selected base rate is expired for the work date.")
+        return Decimal(rm.base_rate), "master", None
+
+    def _next_number(self, *, org_unit_id: int) -> str:
+        # Deterministic, readable numbering. Not gapless (safe under concurrency).
+        # Format: WO-<plantId>-<YYYYMMDD>-<sequence>
+        day = date.today().strftime("%Y%m%d")
+        prefix = f"WO-{int(org_unit_id)}-{day}-"
+        last = self._db.scalar(
+            select(WorkOrder.work_order_number)
+            .where(WorkOrder.work_order_number.like(f"{prefix}%"))
+            .order_by(WorkOrder.id.desc())
+            .limit(1)
+        )
+        if last and str(last).startswith(prefix):
+            tail = str(last).replace(prefix, "")
+            try:
+                n = int(tail)
+            except Exception:
+                n = 0
+        else:
+            n = 0
+        return f"{prefix}{n + 1:04d}"
+
+    def get(self, work_order_id: int) -> WorkOrder:
+        # Session uses expire_on_commit=False; merged rows must overwrite identity-map instances
+        # (e.g. after draft line replacement) so callers always see current DB state.
+        stmt = (
+            select(WorkOrder)
+            .where(WorkOrder.id == int(work_order_id))
+            .options(
+                selectinload(WorkOrder.contractors)
+                .selectinload(WorkOrderContractor.items)
+                .selectinload(WorkOrderItem.progress)
+            )
+        )
+        wo = self._db.execute(stmt, execution_options={"populate_existing": True}).scalars().first()
+        if wo is None:
+            raise NotFoundError("WorkOrder", work_order_id)
+        return wo
+
+    def list(self, *, org_unit_id: int | None = None, status: str | None = None, limit: int = 100) -> list[WorkOrder]:
+        stmt = select(WorkOrder).options(selectinload(WorkOrder.contractors)).order_by(WorkOrder.id.desc())
+        # Default: hide archived/inactive work orders.
+        stmt = stmt.where(WorkOrder.is_active.is_(True))
+        if org_unit_id is not None:
+            stmt = stmt.where(WorkOrder.org_unit_id == int(org_unit_id))
+        if status:
+            stmt = stmt.where(WorkOrder.status == status.strip().lower())
+        stmt = stmt.limit(int(limit))
+        return list(self._db.scalars(stmt).unique().all())
+
+    def archive(self, work_order_id: int, *, actor_user_id: int) -> WorkOrder:
+        wo = self.get(work_order_id)
+        if not bool(wo.is_active):
+            return wo
+        # Block archiving if it has downstream invoices in the future (we can enforce later).
+        wo.is_active = False
+        if wo.status not in ("cancelled", "closed"):
+            wo.status = "cancelled"
+        audit_helpers.write_audit(
+            self._db,
+            work_order_id=int(wo.id),
+            action=audit_helpers.ACTION_CANCELLED,
+            actor_user_id=actor_user_id,
+            new_value={"is_active": False, "status": wo.status},
+        )
+        self._db.commit()
+        return wo
+
+    def hard_delete(self, work_order_id: int, *, actor_user_id: int) -> None:
+        """
+        Permanently remove a work order and its children from the database.
+
+        Safety: blocked if any invoices exist for items under this work order.
+        """
+        wo = self.get(work_order_id)
+
+        item_ids = (
+            self._db.execute(
+                select(WorkOrderItem.id)
+                .join(
+                    WorkOrderContractor,
+                    WorkOrderContractor.id == WorkOrderItem.work_order_contractor_id,
+                )
+                .where(WorkOrderContractor.work_order_id == int(wo.id))
+            )
+            .scalars()
+            .all()
+        )
+        if item_ids:
+            inv_cnt = int(
+                self._db.scalar(
+                    select(func.count())
+                    .select_from(InvoiceLine)
+                    .where(InvoiceLine.work_order_item_id.in_([int(x) for x in item_ids]))
+                )
+                or 0
+            )
+            if inv_cnt > 0:
+                raise ConflictError(
+                    "Cannot delete this work order because invoices exist against its items."
+                )
+
+        # Audit record (best-effort; will be deleted by cascade when the WO is deleted, but useful in logs if replicated).
+        audit_helpers.write_audit(
+            self._db,
+            work_order_id=int(wo.id),
+            action="HARD_DELETED",
+            actor_user_id=actor_user_id,
+            old_value=audit_helpers.snapshot_work_order(wo),
+        )
+        self._db.flush()
+        self._db.delete(wo)
+        self._db.commit()
+
+    def _attach_contractors_from_payload(
+        self,
+        wo: WorkOrder,
+        contractors: list[WorkOrderContractorCreate],
+        *,
+        work_date: date,
+    ) -> None:
+        if not contractors:
+            raise ConflictError("At least one contractor is required.")
+        for c in contractors:
+            self._ensure_contractor(int(c.contractor_id))
+            woc = WorkOrderContractor(
+                work_order_id=int(wo.id),
+                contractor_id=int(c.contractor_id),
+                scope_notes=c.scope_notes or None,
+            )
+            self._db.add(woc)
+            self._db.flush()
+            if not c.items:
+                raise ConflictError("Each contractor must have at least one assigned item.")
+            for it in c.items:
+                rm = self._ensure_rate_master(int(it.rate_master_id))
+                rate, src, contractor_rate_id = self._resolve_rate_for(
+                    contractor_id=int(c.contractor_id),
+                    rate_master_id=int(rm.id),
+                    work_date=work_date,
+                )
+                pt = it.progress_type.strip().lower()
+                if pt not in WORK_ORDER_ITEM_PROGRESS_TYPES:
+                    raise ConflictError(f"Invalid progress_type '{pt}'.")
+                row = WorkOrderItem(
+                    work_order_contractor_id=int(woc.id),
+                    rate_master_id=int(rm.id),
+                    job_type=str(rm.job_type),
+                    skill_type=str(rm.skill_type),
+                    unit=str(rm.unit),
+                    progress_type=pt,
+                    planned_quantity=it.planned_quantity,
+                    planned_percentage=it.planned_percentage,
+                    resolved_rate=_q2(Decimal(rate)),
+                    rate_source=src,
+                    contractor_rate_id=contractor_rate_id,
+                    notes=it.notes or None,
+                )
+                self._db.add(row)
+
+    def _work_order_item_ids(self, work_order_id: int) -> list[int]:
+        return [
+            int(x)
+            for x in self._db.scalars(
+                select(WorkOrderItem.id).join(
+                    WorkOrderContractor,
+                    WorkOrderContractor.id == WorkOrderItem.work_order_contractor_id,
+                ).where(WorkOrderContractor.work_order_id == int(work_order_id))
+            ).all()
+        ]
+
+    def create(self, payload: WorkOrderCreate, *, actor_user_id: int) -> WorkOrder:
+        self._ensure_plant(int(payload.org_unit_id))
+
+        number = self._next_number(org_unit_id=int(payload.org_unit_id))
+        wo = WorkOrder(
+            work_order_number=number,
+            org_unit_id=int(payload.org_unit_id),
+            title=payload.title.strip(),
+            description=(payload.description or None),
+            work_date=payload.work_date,
+            status="draft",
+            created_by=actor_user_id,
+        )
+        self._db.add(wo)
+        self._db.flush()
+
+        self._attach_contractors_from_payload(wo, payload.contractors, work_date=payload.work_date)
+
+        audit_helpers.write_audit(
+            self._db,
+            work_order_id=int(wo.id),
+            action=audit_helpers.ACTION_CREATED,
+            actor_user_id=actor_user_id,
+            new_value=audit_helpers.snapshot_work_order(wo),
+        )
+        self._db.commit()
+        return self.get(int(wo.id))
+
+    def _approval_payload_snapshot(self, wo: WorkOrder) -> dict[str, Any]:
+        """Structured snapshot for approvals / inbox (JSON-serializable)."""
+        org = self._db.get(OrgUnit, int(wo.org_unit_id))
+        org_unit_name = getattr(org, "name", None) if org is not None else None
+        lines_out: list[dict[str, Any]] = []
+        for woc in list(wo.contractors or []):
+            ctr = self._db.get(Contractor, int(woc.contractor_id))
+            contractor_name = getattr(ctr, "name", None) if ctr is not None else None
+            for it in list(woc.items or []):
+                inv_est: str | None = None
+                try:
+                    if str(it.progress_type) == "quantity" and it.planned_quantity is not None:
+                        inv_est = str(_q2(Decimal(str(it.planned_quantity)) * Decimal(str(it.resolved_rate))))
+                    else:
+                        inv_est = None
+                except Exception:
+                    inv_est = None
+                rm_row = self._db.get(RateMaster, int(it.rate_master_id))
+                master_rate_s = str(rm_row.base_rate) if rm_row is not None else None
+                lines_out.append(
+                    {
+                        "contractor_id": int(woc.contractor_id),
+                        "contractor_name": contractor_name,
+                        "rate_master_id": int(it.rate_master_id),
+                        "job_type": str(it.job_type),
+                        "skill_type": str(it.skill_type),
+                        "unit": str(it.unit),
+                        "progress_type": str(it.progress_type),
+                        "planned_quantity": _json_decimal(it.planned_quantity),
+                        "planned_percentage": _json_decimal(it.planned_percentage),
+                        "resolved_rate": str(it.resolved_rate),
+                        "master_rate": master_rate_s,
+                        "rate_source": str(it.rate_source),
+                        "notes": it.notes,
+                        "invoice_value_est": inv_est,
+                    }
+                )
+
+        return {
+            "action_code": ACTION_CODE_CREATE,
+            "work_order_id": int(wo.id),
+            "work_order_number": wo.work_order_number,
+            "org_unit_id": int(wo.org_unit_id),
+            "org_unit_name": org_unit_name,
+            "title": wo.title,
+            "description": wo.description,
+            "work_date": wo.work_date.isoformat(),
+            "execution_lines": lines_out,
+            "execution_line_count": len(lines_out),
+        }
+
+    def update_draft(self, work_order_id: int, payload: WorkOrderDraftUpdate, *, actor_user_id: int) -> WorkOrder:
+        wo = self.get(work_order_id)
+        if wo.status not in ("draft", "rejected"):
+            raise ConflictError("Only draft or rejected work orders can be edited.")
+        incoming = payload.model_dump(exclude_unset=True)
+        if not incoming:
+            return wo
+
+        before_snap = audit_helpers.snapshot_work_order(wo)
+
+        if "title" in incoming:
+            t = (payload.title or "").strip()
+            if not t:
+                raise ConflictError("Title cannot be empty.")
+            wo.title = t
+
+        if "description" in incoming:
+            wo.description = (
+                payload.description.strip()
+                if payload.description and str(payload.description).strip()
+                else None
+            )
+
+        if "work_date" in incoming and payload.work_date is not None:
+            wo.work_date = payload.work_date
+
+        if "org_unit_id" in incoming and payload.org_unit_id is not None:
+            ou = self._ensure_plant(int(payload.org_unit_id))
+            if int(ou.id) != int(wo.org_unit_id):
+                wo.org_unit_id = int(ou.id)
+                wo.work_order_number = self._next_number(org_unit_id=int(wo.org_unit_id))
+
+        if "contractors" in incoming:
+            if payload.contractors is None:
+                raise ConflictError("Provide a contractors list when updating assignments.")
+            existing_item_ids = self._work_order_item_ids(int(wo.id))
+            if existing_item_ids:
+                inv_cnt = int(
+                    self._db.scalar(
+                        select(func.count())
+                        .select_from(InvoiceLine)
+                        .where(InvoiceLine.work_order_item_id.in_(existing_item_ids))
+                    )
+                    or 0
+                )
+                if inv_cnt > 0:
+                    raise ConflictError("Cannot edit lines while invoices exist against this work order.")
+            for woc in list(wo.contractors):
+                self._db.delete(woc)
+            self._db.flush()
+
+            contractors_list = list(payload.contractors)
+            if not contractors_list:
+                raise ConflictError("At least one contractor is required when replacing lines.")
+
+            self._attach_contractors_from_payload(wo, contractors_list, work_date=wo.work_date)
+
+        audit_helpers.write_audit(
+            self._db,
+            work_order_id=int(wo.id),
+            action=audit_helpers.ACTION_UPDATED,
+            actor_user_id=actor_user_id,
+            old_value=before_snap,
+            new_value=audit_helpers.snapshot_work_order(wo),
+            metadata={"fields": sorted(incoming.keys())},
+        )
+        self._db.commit()
+        return self.get(int(wo.id))
+
+    def submit_for_approval(self, work_order_id: int, *, actor_user_id: int) -> WorkOrder:
+        wo = self.get(work_order_id)
+        if wo.status not in ("draft", "rejected"):
+            raise ConflictError("Only draft/rejected work orders can be submitted for approval.")
+
+        wf = get_workflow_for_action(self._db, ACTION_CODE_CREATE)
+        if wf is None:
+            # No workflow configured: auto-approve and activate.
+            wo.status = "approved"
+            wo.approved_by = actor_user_id
+            wo.approved_at = _now_utc()
+            audit_helpers.write_audit(
+                self._db,
+                work_order_id=int(wo.id),
+                action=audit_helpers.ACTION_APPROVED,
+                actor_user_id=actor_user_id,
+                new_value={"status": "approved", "via": "auto"},
+            )
+            wo.status = "active"
+            audit_helpers.write_audit(
+                self._db,
+                work_order_id=int(wo.id),
+                action=audit_helpers.ACTION_ACTIVATED,
+                actor_user_id=actor_user_id,
+                new_value={"status": "active"},
+            )
+            self._db.commit()
+            return self.get(int(wo.id))
+
+        wo.status = "pending_approval"
+        req = ApprovalEngineService(self._db).create_request_for_entity(
+            workflow=wf,
+            entity_type=APPROVAL_ENTITY_TYPE,
+            entity_id=int(wo.id),
+            payload=self._approval_payload_snapshot(wo),
+            created_by=actor_user_id,
+        )
+        wo.approval_request_id = int(req.id)
+        audit_helpers.write_audit(
+            self._db,
+            work_order_id=int(wo.id),
+            action=audit_helpers.ACTION_SENT_FOR_APPROVAL,
+            actor_user_id=actor_user_id,
+            new_value={"status": "pending_approval"},
+            metadata={"approval_request_id": int(req.id)},
+        )
+        self._db.commit()
+        return self.get(int(wo.id))
+
+    # ---- approval finalize hooks ----
+
+    def finalize_approval(self, work_order_id: int, *, approver_user_id: int | None, approval_request_id: int | None) -> WorkOrder:
+        wo = self.get(work_order_id)
+        if wo.status != "pending_approval":
+            return wo
+        wo.status = "approved"
+        wo.approved_by = approver_user_id
+        wo.approved_at = _now_utc()
+        wo.approval_request_id = approval_request_id or wo.approval_request_id
+        audit_helpers.write_audit(
+            self._db,
+            work_order_id=int(wo.id),
+            action=audit_helpers.ACTION_APPROVED,
+            actor_user_id=approver_user_id,
+            old_value={"status": "pending_approval"},
+            new_value={"status": "approved"},
+            metadata={"approval_request_id": wo.approval_request_id, "via": "approval_finalized"},
+        )
+        # Only approved work orders are operationally active.
+        wo.status = "active"
+        audit_helpers.write_audit(
+            self._db,
+            work_order_id=int(wo.id),
+            action=audit_helpers.ACTION_ACTIVATED,
+            actor_user_id=approver_user_id,
+            new_value={"status": "active"},
+        )
+        self._db.commit()
+        return self.get(int(wo.id))
+
+    def finalize_rejection(self, work_order_id: int, *, rejector_user_id: int | None, approval_request_id: int | None, comment: str | None) -> WorkOrder:
+        wo = self.get(work_order_id)
+        if wo.status != "pending_approval":
+            return wo
+        wo.status = "rejected"
+        wo.rejected_by = rejector_user_id
+        wo.rejected_at = _now_utc()
+        audit_helpers.write_audit(
+            self._db,
+            work_order_id=int(wo.id),
+            action=audit_helpers.ACTION_REJECTED,
+            actor_user_id=rejector_user_id,
+            old_value={"status": "pending_approval"},
+            new_value={"status": "rejected"},
+            metadata={"approval_request_id": approval_request_id, "comment": comment, "via": "approval_rejected"},
+        )
+        self._db.commit()
+        return self.get(int(wo.id))
+
+    # ---- completion tracking ----
+
+    def _latest_item_progress(self, work_order_item_id: int) -> WorkOrderItemProgress | None:
+        return self._db.scalar(
+            select(WorkOrderItemProgress)
+            .where(WorkOrderItemProgress.work_order_item_id == int(work_order_item_id))
+            .order_by(WorkOrderItemProgress.created_at.desc(), WorkOrderItemProgress.id.desc())
+            .limit(1)
+        )
+
+    def _user_display_name(self, user_id: int | None) -> str | None:
+        if user_id is None:
+            return None
+        u = self._db.get(User, int(user_id))
+        if u is None:
+            return None
+        return str(u.full_name or u.username or f"User #{user_id}")
+
+    @staticmethod
+    def _resolve_completion_pair(item: WorkOrderItem, payload: WorkOrderItemProgressCreate) -> tuple[Decimal | None, Decimal]:
+        """
+        Returns (completed_quantity, completed_percentage) snapshot for this update.
+        Quantity-mode lines always get both; percentage-only lines may leave quantity None.
+        """
+        pq_in = item.planned_quantity
+        has_pq = pq_in is not None and _dec(pq_in) > 0
+        base_qty = _dec(pq_in) if has_pq else None
+
+        cq_in = payload.completed_quantity
+        cp_in = payload.completed_percentage
+        pct_tol = Decimal("0.05")
+
+        def _pct_from_qty(cq_val: Decimal) -> Decimal:
+            assert base_qty is not None
+            return _q2((cq_val / base_qty) * Decimal("100"))
+
+        def _qty_from_pct(cp_val: Decimal) -> Decimal:
+            assert base_qty is not None
+            return _q3((cp_val / Decimal("100")) * base_qty)
+
+        if item.progress_type == "quantity":
+            if not has_pq or base_qty is None:
+                raise ConflictError("Approved quantity is required on the line item before entering completion.")
+
+            if cq_in is not None and cp_in is not None:
+                cq = _q3(Decimal(str(cq_in)))
+                cp = _q2(Decimal(str(cp_in)))
+                if cq < 0:
+                    raise ConflictError("Completion quantity cannot be negative.")
+                if cq > base_qty:
+                    raise ConflictError("Completion cannot exceed approved quantity.")
+                expected = _pct_from_qty(cq)
+                if abs(cp - expected) > pct_tol:
+                    raise ConflictError("Completed quantity and completion % must match approved quantity baseline.")
+                if cp > Decimal("100.01"):
+                    raise ConflictError("Completion % cannot exceed 100%.")
+                return cq, cp
+
+            if cq_in is not None:
+                cq = _q3(Decimal(str(cq_in)))
+                if cq < 0:
+                    raise ConflictError("Completion quantity cannot be negative.")
+                if cq > base_qty:
+                    raise ConflictError("Completion cannot exceed approved quantity.")
+                return cq, _pct_from_qty(cq)
+
+            if cp_in is not None:
+                cp = _q2(Decimal(str(cp_in)))
+                if cp < 0:
+                    raise ConflictError("Completion percentage cannot be negative.")
+                if cp > Decimal("100"):
+                    raise ConflictError("Completion % cannot exceed 100%.")
+                return _qty_from_pct(cp), cp
+
+            raise ConflictError("Provide completed quantity and/or completed percentage.")
+
+        # progress_type percentage
+        if has_pq and base_qty is not None:
+            if cq_in is not None and cp_in is not None:
+                cq = _q3(Decimal(str(cq_in)))
+                cp = _q2(Decimal(str(cp_in)))
+                if cq < 0 or cq > base_qty:
+                    raise ConflictError("Completion quantity must be between 0 and approved quantity.")
+                expected = _pct_from_qty(cq)
+                if abs(cp - expected) > pct_tol:
+                    raise ConflictError("Completed quantity and completion % must match.")
+                return cq, cp
+            if cq_in is not None:
+                cq = _q3(Decimal(str(cq_in)))
+                if cq < 0 or cq > base_qty:
+                    raise ConflictError("Completion quantity must be between 0 and approved quantity.")
+                return cq, _pct_from_qty(cq)
+            if cp_in is not None:
+                cp = _q2(Decimal(str(cp_in)))
+                if cp < 0 or cp > Decimal("100"):
+                    raise ConflictError("Completion % must be between 0 and 100.")
+                return _qty_from_pct(cp), cp
+            raise ConflictError("Provide completed quantity and/or completion %.")
+
+        if cp_in is None:
+            raise ConflictError("completed_percentage is required for lines without approved quantity denominator.")
+        if cq_in is not None:
+            raise ConflictError("completed_quantity is only supported when the line has planned quantity.")
+
+        cp = _q2(Decimal(str(cp_in)))
+        if cp < 0 or cp > Decimal("100"):
+            raise ConflictError("Completion % must be between 0 and 100.")
+        return None, cp
+
+    def item_completion_projection(self, item: WorkOrderItem) -> dict[str, Any]:
+        approved_qty = float(item.planned_quantity) if item.planned_quantity is not None else None
+        planned_pct_raw = float(item.planned_percentage) if item.planned_percentage is not None else None
+        latest = self._latest_item_progress(int(item.id))
+        cq = float(latest.completed_quantity) if latest and latest.completed_quantity is not None else None
+        cp = float(latest.completed_percentage) if latest and latest.completed_percentage is not None else None
+
+        remaining: float | None = None
+        if approved_qty is not None and cq is not None:
+            remaining = max(approved_qty - cq, 0.0)
+
+        return {
+            "progress_type": str(item.progress_type),
+            "unit": item.unit,
+            "approved_quantity": approved_qty,
+            "approved_percentage": planned_pct_raw,
+            "completed_quantity": cq,
+            "completed_percentage": cp,
+            "remaining_quantity": remaining,
+            "last_updated_at": latest.created_at.isoformat() if latest and latest.created_at else None,
+            "last_updated_by": int(latest.created_by) if latest and latest.created_by is not None else None,
+            "last_updated_by_name": self._user_display_name(int(latest.created_by)) if latest and latest.created_by else None,
+        }
+
+    def list_item_progress_history(self, work_order_item_id: int) -> list[dict[str, Any]]:
+        item = self._db.get(WorkOrderItem, int(work_order_item_id))
+        if item is None:
+            raise NotFoundError("WorkOrderItem", work_order_item_id)
+
+        stmt = (
+            select(WorkOrderItemProgress)
+            .where(WorkOrderItemProgress.work_order_item_id == int(work_order_item_id))
+            .order_by(WorkOrderItemProgress.created_at.asc(), WorkOrderItemProgress.id.asc())
+        )
+        rows = list(self._db.scalars(stmt).all())
+        out: list[dict[str, Any]] = []
+        prev_cq: Decimal | None = None
+        prev_cp: Decimal | None = None
+        for r in rows:
+            cq_cur = Decimal(str(r.completed_quantity)) if r.completed_quantity is not None else None
+            cp_cur = Decimal(str(r.completed_percentage)) if r.completed_percentage is not None else None
+            out.append(
+                {
+                    "id": int(r.id),
+                    "completed_quantity": float(cq_cur) if cq_cur is not None else None,
+                    "completed_percentage": float(cp_cur) if cp_cur is not None else None,
+                    "remarks": r.remarks,
+                    "updated_by": int(r.created_by) if r.created_by is not None else None,
+                    "updated_by_name": self._user_display_name(int(r.created_by)) if r.created_by else None,
+                    "updated_at": r.created_at.isoformat() if r.created_at else None,
+                    "previous_completed_quantity": float(prev_cq) if prev_cq is not None else None,
+                    "previous_completed_percentage": float(prev_cp) if prev_cp is not None else None,
+                }
+            )
+            prev_cq, prev_cp = cq_cur, cp_cur
+        return out
+
+    def add_progress(self, work_order_item_id: int, payload: WorkOrderItemProgressCreate, *, actor_user_id: int) -> WorkOrderItemProgress:
+        item = self._db.get(WorkOrderItem, int(work_order_item_id))
+        if item is None:
+            raise NotFoundError("WorkOrderItem", work_order_item_id)
+        woc = self._db.get(WorkOrderContractor, int(item.work_order_contractor_id))
+        wo = self._db.get(WorkOrder, int(woc.work_order_id)) if woc is not None else None
+        if wo is None:
+            raise ConflictError("Work order not found for this line item.")
+        if str(wo.status) != "active":
+            raise ConflictError('Completion updates are only allowed while the work order is "Active".')
+
+        prev = self._latest_item_progress(int(item.id))
+        old_snapshot = {
+            "work_order_item_id": int(item.id),
+            "completed_quantity": str(_q3(Decimal(str(prev.completed_quantity)))) if prev and prev.completed_quantity is not None else None,
+            "completed_percentage": _json_decimal(Decimal(str(prev.completed_percentage))) if prev and prev.completed_percentage is not None else None,
+        }
+
+        cq, cp = WorkOrderService._resolve_completion_pair(item, payload)
+
+        row = WorkOrderItemProgress(
+            work_order_item_id=int(item.id),
+            completed_quantity=cq,
+            completed_percentage=cp,
+            remarks=payload.remarks or None,
+            created_by=actor_user_id,
+        )
+        self._db.add(row)
+        self._db.flush()
+
+        wo_id = int(wo.id)
+        audit_helpers.write_audit(
+            self._db,
+            work_order_id=wo_id,
+            action=audit_helpers.ACTION_COMPLETION_UPDATED,
+            actor_user_id=actor_user_id,
+            old_value=old_snapshot,
+            new_value={
+                "work_order_item_id": int(item.id),
+                "completed_quantity": str(_q3(cq)) if cq is not None else None,
+                "completed_percentage": _json_decimal(cp),
+                "remarks": payload.remarks,
+            },
+        )
+        self._db.commit()
+        self._db.refresh(row)
+        return row
+
+    # ---- rate override governance ----
+
+    def request_rate_override(self, work_order_item_id: int, payload: WorkOrderRateOverrideRequest, *, actor_user_id: int) -> WorkOrderItem:
+        item = self._db.get(WorkOrderItem, int(work_order_item_id))
+        if item is None:
+            raise NotFoundError("WorkOrderItem", work_order_item_id)
+        if payload.override_rate <= Decimal("0"):
+            raise ConflictError("override_rate must be positive.")
+        if not payload.override_reason.strip():
+            raise ConflictError("override_reason is required.")
+
+        # Create (or reuse) approval workflow mapping.
+        wf = get_workflow_for_action(self._db, ACTION_CODE_OVERRIDE_RATE)
+        item.override_rate = _q2(Decimal(payload.override_rate))
+        item.override_reason = payload.override_reason.strip()
+        item.override_status = "pending" if wf is not None else "approved"
+
+        woc = self._db.get(WorkOrderContractor, int(item.work_order_contractor_id))
+        wo = self._db.get(WorkOrder, int(woc.work_order_id)) if woc is not None else None
+        wo_id = int(wo.id) if wo is not None else None
+
+        if wf is not None:
+            org = self._db.get(OrgUnit, int(wo.org_unit_id)) if wo is not None else None
+            org_unit_name = getattr(org, "name", None) if org is not None else None
+            ctr_body = None
+            if woc is not None:
+                ctr_body = self._db.get(Contractor, int(woc.contractor_id))
+            contractor_name = getattr(ctr_body, "name", None) if ctr_body is not None else None
+
+            ov_payload = {
+                "action_code": ACTION_CODE_OVERRIDE_RATE,
+                "work_order_item_id": int(item.id),
+                "work_order_id": wo_id,
+                "work_order_number": wo.work_order_number if wo is not None else None,
+                "work_order_title": wo.title if wo is not None else None,
+                "org_unit_id": int(wo.org_unit_id) if wo is not None else None,
+                "org_unit_name": org_unit_name,
+                "work_date": wo.work_date.isoformat() if wo is not None else None,
+                "contractor_id": int(woc.contractor_id) if woc is not None else None,
+                "contractor_name": contractor_name,
+                "line": {
+                    "job_type": str(item.job_type),
+                    "skill_type": str(item.skill_type),
+                    "unit": str(item.unit),
+                    "progress_type": str(item.progress_type),
+                    "planned_quantity": _json_decimal(item.planned_quantity),
+                    "planned_percentage": _json_decimal(item.planned_percentage),
+                    "governed_resolved_rate": str(item.resolved_rate),
+                    "rate_source": str(item.rate_source),
+                },
+                "override_rate": str(item.override_rate),
+                "override_reason": item.override_reason,
+            }
+            req = ApprovalEngineService(self._db).create_request_for_entity(
+                workflow=wf,
+                entity_type=OVERRIDE_APPROVAL_ENTITY_TYPE,
+                entity_id=int(item.id),
+                payload=ov_payload,
+                created_by=actor_user_id,
+            )
+            item.override_approval_request_id = int(req.id)
+        else:
+            # Auto-approve override when no workflow exists, but still auditable.
+            item.rate_source = "override"
+            item.resolved_rate = _q2(Decimal(item.override_rate or item.resolved_rate))
+
+        if wo_id is not None:
+            audit_helpers.write_audit(
+                self._db,
+                work_order_id=wo_id,
+                action=audit_helpers.ACTION_RATE_OVERRIDE_REQUESTED,
+                actor_user_id=actor_user_id,
+                new_value={
+                    "work_order_item_id": int(item.id),
+                    "override_rate": str(item.override_rate),
+                    "override_reason": item.override_reason,
+                    "override_status": item.override_status,
+                    "override_approval_request_id": item.override_approval_request_id,
+                },
+            )
+        self._db.commit()
+        self._db.refresh(item)
+        return item
+
+    def finalize_override_approval(self, work_order_item_id: int, *, approver_user_id: int | None, approval_request_id: int | None) -> WorkOrderItem:
+        item = self._db.get(WorkOrderItem, int(work_order_item_id))
+        if item is None:
+            raise NotFoundError("WorkOrderItem", work_order_item_id)
+        if item.override_status != "pending":
+            return item
+        item.override_status = "approved"
+        item.override_approval_request_id = approval_request_id or item.override_approval_request_id
+        if item.override_rate is not None:
+            item.rate_source = "override"
+            item.resolved_rate = _q2(Decimal(item.override_rate))
+        woc = self._db.get(WorkOrderContractor, int(item.work_order_contractor_id))
+        wo_id = int(woc.work_order_id) if woc is not None else None
+        if wo_id is not None:
+            audit_helpers.write_audit(
+                self._db,
+                work_order_id=wo_id,
+                action=audit_helpers.ACTION_RATE_OVERRIDE_APPROVED,
+                actor_user_id=approver_user_id,
+                new_value={
+                    "work_order_item_id": int(item.id),
+                    "override_rate": str(item.override_rate) if item.override_rate is not None else None,
+                    "approval_request_id": item.override_approval_request_id,
+                },
+            )
+        self._db.commit()
+        self._db.refresh(item)
+        return item
+
+    def finalize_override_rejection(self, work_order_item_id: int, *, rejector_user_id: int | None, approval_request_id: int | None, comment: str | None) -> WorkOrderItem:
+        item = self._db.get(WorkOrderItem, int(work_order_item_id))
+        if item is None:
+            raise NotFoundError("WorkOrderItem", work_order_item_id)
+        if item.override_status != "pending":
+            return item
+        item.override_status = "rejected"
+        item.override_approval_request_id = approval_request_id or item.override_approval_request_id
+        woc = self._db.get(WorkOrderContractor, int(item.work_order_contractor_id))
+        wo_id = int(woc.work_order_id) if woc is not None else None
+        if wo_id is not None:
+            audit_helpers.write_audit(
+                self._db,
+                work_order_id=wo_id,
+                action=audit_helpers.ACTION_RATE_OVERRIDE_REJECTED,
+                actor_user_id=rejector_user_id,
+                new_value={
+                    "work_order_item_id": int(item.id),
+                    "approval_request_id": item.override_approval_request_id,
+                    "comment": comment,
+                },
+            )
+        self._db.commit()
+        self._db.refresh(item)
+        return item
+
