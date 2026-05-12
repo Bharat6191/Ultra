@@ -55,6 +55,7 @@ from modules.contractor.schema import (
     ContractorUpdate,
 )
 from modules.errors import ConflictError, NotFoundError
+from modules.org_units.hierarchy import collect_plant_ids_under_scope
 from modules.org_units.model import OrgUnit
 
 
@@ -126,11 +127,14 @@ class ContractorService:
                 )
             )
         if plant_id is not None:
+            plant_ids = collect_plant_ids_under_scope(self._db, int(plant_id))
+            if not plant_ids:
+                return [], 0
             stmt = stmt.join(ContractorPlant, ContractorPlant.contractor_id == Contractor.id)
             count_stmt = count_stmt.join(
                 ContractorPlant, ContractorPlant.contractor_id == Contractor.id
             )
-            conditions.append(ContractorPlant.org_unit_id == int(plant_id))
+            conditions.append(ContractorPlant.org_unit_id.in_(plant_ids))
 
         for cond in conditions:
             stmt = stmt.where(cond)
@@ -713,10 +717,13 @@ class ContractorService:
     def list_contractors_for_plant(
         self, org_unit_id: int, *, only_active: bool = False
     ) -> list[Contractor]:
+        plant_ids = collect_plant_ids_under_scope(self._db, int(org_unit_id))
+        if not plant_ids:
+            return []
         stmt = (
             select(Contractor)
             .join(ContractorPlant, ContractorPlant.contractor_id == Contractor.id)
-            .where(ContractorPlant.org_unit_id == int(org_unit_id))
+            .where(ContractorPlant.org_unit_id.in_(plant_ids))
         )
         if only_active:
             stmt = stmt.where(Contractor.status == "active")

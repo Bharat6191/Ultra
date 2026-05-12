@@ -91,8 +91,8 @@ ROLES: dict[str, dict] = {
     "Rate Master Admin": {
         "description": "Maintains base rates per plant/job/skill.",
         "perms": [
-            "rate_master.view", "rate_master.create", "rate_master.update",
-            "rate_master.delete",
+            "part_master.view", "part_master.create", "part_master.update",
+            "part_master.delete",
             "org_units.view",
         ],
     },
@@ -100,7 +100,7 @@ ROLES: dict[str, dict] = {
         "description": "Creates and negotiates contractor rate proposals; submits work orders for approval.",
         "perms": [
             "contractor.view",
-            "rate_master.view",
+            "part_master.view",
             "contractor_rates.view", "contractor_rates.create", "contractor_rates.update",
             "work_orders.view",
             "work_orders.create",
@@ -151,7 +151,7 @@ ROLES: dict[str, dict] = {
             "users.view",
             "org_units.view",
             "contractor.view",
-            "rate_master.view",
+            "part_master.view",
             "contractor_rates.view",
             "approval.view",
             "task.view",
@@ -395,10 +395,12 @@ def main() -> int:
     try:
         sync_all_modules_to_db(db)
 
-        org = db.scalars(select(OrgUnit).order_by(OrgUnit.id.asc())).first()
+        org = db.scalars(
+            select(OrgUnit).where(OrgUnit.type == "PLANT").order_by(OrgUnit.id.asc())
+        ).first()
         if org is None:
             print(
-                "error: no OrgUnit rows found. Run migrations + scripts/sync_modules.py first.",
+                "error: no PLANT org unit found. Seed plants (e.g. scripts/seed_manual_test_contractors.py) first.",
                 file=sys.stderr,
             )
             return 3

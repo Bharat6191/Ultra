@@ -13,18 +13,20 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { formatMoney } from "@/components/contractors/rateStatus"
 
-export type RateMasterPick = {
+export type PartMasterPick = {
   id: number
-  job_type: string
-  skill_type: string
-  unit: string
+  part_code: string
+  part_name: string
+  unit_type: string
+  pricing_method: string
+  rate_unit_type: string
   base_rate: number | string
   org_unit_id: number
   org_unit_name: string | null
 }
 
 export type NewRateForm = {
-  rate_master_id: number | null
+  part_master_id: number | null
   /** Contractor's opening ask. Drives the savings calculation (initial − final).
    *  Optional in the form: when blank we send only ``negotiated_rate`` and the
    *  backend treats that as the opening ask. */
@@ -38,7 +40,7 @@ export type NewRateForm = {
 const todayIso = (): string => new Date().toISOString().slice(0, 10)
 
 export const EMPTY_RATE_FORM: NewRateForm = {
-  rate_master_id: null,
+  part_master_id: null,
   initial_rate: "",
   negotiated_rate: "",
   effective_from: todayIso(),
@@ -49,7 +51,7 @@ export const EMPTY_RATE_FORM: NewRateForm = {
 export function NewNegotiationDialog({
   open,
   onOpenChange,
-  rateMasters,
+  partMasters,
   saving,
   error,
   onSave,
@@ -58,7 +60,7 @@ export function NewNegotiationDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  rateMasters: RateMasterPick[]
+  partMasters: PartMasterPick[]
   saving: boolean
   error: string | null
   onSave: (form: NewRateForm, ctx: { contractorId: number }) => Promise<void>
@@ -84,22 +86,29 @@ export function NewNegotiationDialog({
   const needContractorPick = Boolean(contractorChoices?.length && fixedContractorId == null)
 
   const selected = React.useMemo(
-    () => rateMasters.find((rm) => rm.id === form.rate_master_id) ?? null,
-    [rateMasters, form.rate_master_id],
+    () => partMasters.find((pm) => pm.id === form.part_master_id) ?? null,
+    [partMasters, form.part_master_id],
   )
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return rateMasters.slice(0, 8)
-    return rateMasters
-      .filter((rm) =>
-        [rm.job_type, rm.skill_type, rm.unit, rm.org_unit_name ?? ""]
+    if (!q) return partMasters.slice(0, 8)
+    return partMasters
+      .filter((pm) =>
+        [
+          pm.part_code,
+          pm.part_name,
+          pm.unit_type,
+          pm.pricing_method,
+          pm.rate_unit_type,
+          pm.org_unit_name ?? "",
+        ]
           .join(" ")
           .toLowerCase()
           .includes(q),
       )
       .slice(0, 8)
-  }, [rateMasters, search])
+  }, [partMasters, search])
 
   const baseRate = selected ? Number(selected.base_rate) : NaN
   const negRate = Number(form.negotiated_rate)
@@ -132,7 +141,7 @@ export function NewNegotiationDialog({
 
   const canSave =
     effectiveContractorId !== null &&
-    form.rate_master_id !== null &&
+    form.part_master_id !== null &&
     !!form.negotiated_rate.trim() &&
     Number.isFinite(negRate) &&
     !!form.effective_from
@@ -146,9 +155,9 @@ export function NewNegotiationDialog({
         <DialogHeader>
           <DialogTitle>Start a new negotiation</DialogTitle>
           <DialogDescription>
-            Pick the contractor (if needed), then choose the base rate (job + skill + plant), enter the
-            proposed negotiated rate, and add any remarks. The contractor&apos;s previous approved rate is
-            fetched automatically when calculating savings.
+            Pick the contractor (if needed), then choose the Part Master baseline (part code, pricing method,
+            plant), enter the proposed negotiated rate, and add any remarks. The contractor&apos;s previous
+            approved rate is fetched automatically when calculating savings.
           </DialogDescription>
         </DialogHeader>
 
@@ -178,17 +187,17 @@ export function NewNegotiationDialog({
           ) : null}
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">Base rate</label>
+            <label className="mb-1 block text-sm font-medium text-foreground">Part baseline</label>
             {selected ? (
               <div className="flex items-start justify-between gap-3 rounded-lg border bg-gray-50 p-3 text-sm">
                 <div className="space-y-0.5">
                   <div className="font-medium text-gray-900">
-                    {selected.job_type}{" "}
-                    <span className="text-muted-foreground">·</span>{" "}
-                    <span className="capitalize">{selected.skill_type.replace(/_/g, " ")}</span>
+                    <span className="font-mono">{selected.part_code}</span>{" "}
+                    <span className="text-muted-foreground">·</span> {selected.part_name}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {selected.org_unit_name ?? "—"} · per {selected.unit}
+                    {selected.org_unit_name ?? "—"} · {selected.pricing_method.replace(/_/g, " ")} ·{" "}
+                    {selected.rate_unit_type.replace(/_/g, " ")} · unit {selected.unit_type}
                   </div>
                 </div>
                 <div className="text-right">
@@ -198,7 +207,7 @@ export function NewNegotiationDialog({
                   <button
                     type="button"
                     className="text-xs text-primary underline-offset-2 hover:underline"
-                    onClick={() => setForm((s) => ({ ...s, rate_master_id: null }))}
+                    onClick={() => setForm((s) => ({ ...s, part_master_id: null }))}
                   >
                     Change
                   </button>
@@ -207,7 +216,7 @@ export function NewNegotiationDialog({
             ) : (
               <div className="space-y-2">
                 <Input
-                  placeholder="Search by job, skill, or plant…"
+                  placeholder="Search by part code, name, plant…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -217,26 +226,24 @@ export function NewNegotiationDialog({
                       No matching base rates.
                     </div>
                   ) : (
-                    filtered.map((rm) => (
+                    filtered.map((pm) => (
                       <button
-                        key={rm.id}
+                        key={pm.id}
                         type="button"
                         className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50"
-                        onClick={() => setForm((s) => ({ ...s, rate_master_id: rm.id }))}
+                        onClick={() => setForm((s) => ({ ...s, part_master_id: pm.id }))}
                       >
                         <div>
                           <div className="text-sm font-medium text-gray-900">
-                            {rm.job_type}{" "}
-                            <span className="text-muted-foreground">·</span>{" "}
-                            <span className="capitalize">
-                              {rm.skill_type.replace(/_/g, " ")}
-                            </span>
+                            <span className="font-mono">{pm.part_code}</span>{" "}
+                            <span className="text-muted-foreground">·</span> {pm.part_name}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {rm.org_unit_name ?? "—"} · per {rm.unit}
+                            {pm.org_unit_name ?? "—"} · {pm.pricing_method.replace(/_/g, " ")} ·{" "}
+                            {pm.unit_type}
                           </div>
                         </div>
-                        <div className="text-sm font-semibold">{formatMoney(rm.base_rate)}</div>
+                        <div className="text-sm font-semibold">{formatMoney(pm.base_rate)}</div>
                       </button>
                     ))
                   )}

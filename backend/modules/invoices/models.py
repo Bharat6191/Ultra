@@ -144,7 +144,7 @@ class InvoiceLine(Base):
     # Validation context snapshots for traceability
     rate_source: Mapped[str | None] = mapped_column(String(16), nullable=True)  # negotiated|master|override
     resolved_contractor_rate_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    resolved_rate_master_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    resolved_part_master_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 

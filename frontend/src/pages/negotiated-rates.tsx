@@ -7,15 +7,13 @@ import {
   Plus,
   Search,
 } from "lucide-react"
-import { toast } from "sonner"
-
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ApiError, getJson, postJson } from "@/lib/api"
+import { getJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission, isSuperuser } from "@/lib/permissions"
 import {
   CONTRACTOR_RATE_STATUS_OPTIONS,
@@ -24,20 +22,15 @@ import {
   rateStatusLabel,
   rateStatusVariant,
 } from "@/components/contractors/rateStatus"
-import {
-  NewNegotiationDialog,
-  type RateMasterPick,
-  type NewRateForm,
-} from "@/components/contractors/ContractorRateDialog"
-
 type ContractorRatePublic = {
   id: number
   contractor_id: number
   contractor_name: string | null
-  rate_master_id: number
-  job_type: string | null
-  skill_type: string | null
-  unit: string | null
+  part_master_id: number
+  part_code: string | null
+  part_name: string | null
+  unit_type: string | null
+  pricing_method: string | null
   org_unit_id: number | null
   org_unit_name: string | null
   base_rate: number | string | null
@@ -73,7 +66,28 @@ type Summary = {
   by_status?: Record<string, number>
 }
 
-type OrgUnitLite = { id: number; name: string }
+type OrgUnitLite = { id: number; name: string; type: string; parent_id: number | null }
+
+/** Client-side mirror of cluster → plant expansion for table filters. */
+function plantIdsUnderScope(rows: OrgUnitLite[], scopeId: number): number[] {
+  const root = rows.find((r) => r.id === scopeId)
+  if (!root) return []
+  const t = String(root.type).toUpperCase()
+  if (t === "PLANT") return [scopeId]
+  if (t !== "CLUSTER") return []
+  const out = new Set<number>()
+  const queue = [scopeId]
+  while (queue.length) {
+    const cur = queue.shift()!
+    for (const row of rows) {
+      if (row.parent_id !== cur) continue
+      const rt = String(row.type).toUpperCase()
+      if (rt === "PLANT") out.add(row.id)
+      else if (rt === "CLUSTER") queue.push(row.id)
+    }
+  }
+  return [...out]
+}
 
 const SELECT_CLASS =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
@@ -81,20 +95,12 @@ const SELECT_CLASS =
 export function NegotiatedRatesPage() {
   const [rows, setRows] = React.useState<ContractorRatePublic[] | null>(null)
   const [summary, setSummary] = React.useState<Summary | null>(null)
-  const [plants, setPlants] = React.useState<OrgUnitLite[]>([])
+  const [orgScopes, setOrgScopes] = React.useState<OrgUnitLite[]>([])
   const [error, setError] = React.useState<string | null>(null)
 
   const [search, setSearch] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<string>("all")
   const [plantFilter, setPlantFilter] = React.useState<string>("all")
-
-  const [newOpen, setNewOpen] = React.useState(false)
-  const [newSaving, setNewSaving] = React.useState(false)
-  const [newError, setNewError] = React.useState<string | null>(null)
-  const [pickerContractors, setPickerContractors] = React.useState<{ id: number; name: string }[]>(
-    [],
-  )
-  const [pickerRateMasters, setPickerRateMasters] = React.useState<RateMasterPick[]>([])
 
   const canView = hasPermission("contractor_rates.view") || isSuperuser()
   const canCreate = hasPermission("contractor_rates.create") || isSuperuser()
@@ -102,7 +108,7 @@ export function NegotiatedRatesPage() {
   React.useEffect(() => {
     if (!canView) return
     void load()
-    if (canListOrgUnitsForAssignments()) void loadPlants()
+    if (canListOrgUnitsForAssignments()) void loadOrgScopes()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -121,12 +127,15 @@ export function NegotiatedRatesPage() {
     }
   }
 
-  async function loadPlants() {
+  async function loadOrgScopes() {
     try {
-      const list = await getJson<OrgUnitLite[]>("/admin/org-units?type=PLANT")
-      setPlants(list)
+      const [clusters, plants] = await Promise.all([
+        getJson<OrgUnitLite[]>("/admin/org-units?type=CLUSTER").catch(() => []),
+        getJson<OrgUnitLite[]>("/admin/org-units?type=PLANT").catch(() => []),
+      ])
+      setOrgScopes([...(Array.isArray(clusters) ? clusters : []), ...(Array.isArray(plants) ? plants : [])])
     } catch {
-      setPlants([])
+      setOrgScopes([])
     }
   }
 
@@ -135,12 +144,16 @@ export function NegotiatedRatesPage() {
     const q = search.trim().toLowerCase()
     return rows.filter((r) => {
       if (statusFilter !== "all" && r.status !== statusFilter) return false
-      if (plantFilter !== "all" && String(r.org_unit_id ?? "") !== plantFilter) return false
+      if (plantFilter !== "all") {
+        const sid = Number(plantFilter)
+        const allowed = new Set(plantIdsUnderScope(orgScopes, sid))
+        if (!allowed.has(Number(r.org_unit_id ?? 0))) return false
+      }
       if (q) {
         const hay = [
           r.contractor_name ?? "",
-          r.job_type ?? "",
-          r.skill_type ?? "",
+          r.part_code ?? "",
+          r.part_name ?? "",
           r.org_unit_name ?? "",
           r.created_by_name ?? "",
         ]
@@ -150,70 +163,7 @@ export function NegotiatedRatesPage() {
       }
       return true
     })
-  }, [rows, search, statusFilter, plantFilter])
-
-  React.useEffect(() => {
-    if (!newOpen || !canCreate) return
-    void (async () => {
-      setNewError(null)
-      try {
-        const [clist, raws] = await Promise.all([
-          getJson<{ id: number; name: string }[]>("/contractors/lookup?limit=200&status=active"),
-          getJson<
-            {
-              id: number
-              job_type: string
-              skill_type: string
-              unit: string
-              base_rate: number | string
-              org_unit_id: number
-              org_unit_name: string | null
-            }[]
-          >("/rate-master?active=true").catch(() => []),
-        ])
-        setPickerContractors(clist)
-        setPickerRateMasters(
-          raws.map((rm) => ({
-            id: rm.id,
-            job_type: rm.job_type,
-            skill_type: rm.skill_type,
-            unit: rm.unit,
-            base_rate: rm.base_rate,
-            org_unit_id: rm.org_unit_id,
-            org_unit_name: rm.org_unit_name,
-          })),
-        )
-      } catch (e) {
-        setNewError(e instanceof Error ? e.message : "Failed to load picker data")
-      }
-    })()
-  }, [newOpen, canCreate])
-
-  async function createNegotiationFromHub(form: NewRateForm, ctx: { contractorId: number }) {
-    if (form.rate_master_id === null) return
-    setNewSaving(true)
-    setNewError(null)
-    try {
-      await postJson<ContractorRatePublic>("/contractor-rates", {
-        contractor_id: ctx.contractorId,
-        rate_master_id: form.rate_master_id,
-        negotiated_rate: form.negotiated_rate,
-        initial_rate: form.initial_rate.trim() ? form.initial_rate : null,
-        effective_from: form.effective_from,
-        effective_to: form.effective_to || null,
-        remarks: form.remarks || null,
-      })
-      toast.success("Draft negotiation created")
-      setNewOpen(false)
-      await load()
-    } catch (e) {
-      const msg =
-        e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to create draft"
-      setNewError(msg)
-    } finally {
-      setNewSaving(false)
-    }
-  }
+  }, [rows, search, statusFilter, plantFilter, orgScopes])
 
   if (!canView) {
     return (
@@ -237,8 +187,10 @@ export function NegotiatedRatesPage() {
           </p>
         </div>
         {canCreate ? (
-          <Button type="button" onClick={() => setNewOpen(true)}>
-            <Plus className="size-4" /> New negotiation
+          <Button asChild type="button">
+            <Link to="/dashboard/negotiated-rates/new">
+              <Plus className="size-4" /> New negotiation
+            </Link>
           </Button>
         ) : null}
       </div>
@@ -247,15 +199,15 @@ export function NegotiatedRatesPage() {
         <AlertTitle>How rates fit together</AlertTitle>
         <AlertDescription className="space-y-2 text-sm">
           <p>
-            <strong>Base rates</strong> live under{" "}
-            <Link to="/dashboard/rate-master" className="font-medium underline underline-offset-2">
-              Rate master
+            <strong>Commercial baselines</strong> live under{" "}
+            <Link to="/dashboard/part-master" className="font-medium underline underline-offset-2">
+              Part master
             </Link>
-            — one row per job, skill, unit and plant. You need{" "}
-            <span className="font-mono text-xs">rate_master.create</span> to add them.
+            — one row per part code, pricing method, and plant. You need{" "}
+            <span className="font-mono text-xs">part_master.create</span> to add them.
           </p>
           <p>
-            <strong>Negotiations</strong> attach a contractor to a base rate. Use{" "}
+            <strong>Negotiations</strong> attach a contractor to a Part Master baseline. Use{" "}
             <strong>New negotiation</strong> here, or open any contractor →{" "}
             <strong>Rates</strong> tab. You need{" "}
             <span className="font-mono text-xs">contractor_rates.create</span>.
@@ -315,7 +267,7 @@ export function NegotiatedRatesPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search contractor, job, plant…"
+              placeholder="Search contractor, part, plant…"
               className="pl-8"
             />
           </div>
@@ -336,12 +288,27 @@ export function NegotiatedRatesPage() {
             value={plantFilter}
             onChange={(e) => setPlantFilter(e.target.value)}
           >
-            <option value="all">All plants</option>
-            {plants.map((p) => (
-              <option key={p.id} value={String(p.id)}>
-                {p.name}
-              </option>
-            ))}
+            <option value="all">All plants & clusters</option>
+            <optgroup label="Clusters">
+              {orgScopes
+                .filter((o) => String(o.type).toUpperCase() === "CLUSTER")
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </option>
+                ))}
+            </optgroup>
+            <optgroup label="Plants">
+              {orgScopes
+                .filter((o) => String(o.type).toUpperCase() === "PLANT")
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </option>
+                ))}
+            </optgroup>
           </select>
         </CardContent>
       </Card>
@@ -353,7 +320,7 @@ export function NegotiatedRatesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Contractor</TableHead>
-                <TableHead>Job · Skill</TableHead>
+                <TableHead>Part</TableHead>
                 <TableHead>Plant</TableHead>
                 <TableHead className="text-right">Negotiated</TableHead>
                 <TableHead className="text-right">Savings</TableHead>
@@ -388,9 +355,10 @@ export function NegotiatedRatesPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium text-foreground">{r.job_type ?? "—"}</div>
-                      <div className="text-xs capitalize text-muted-foreground">
-                        {(r.skill_type ?? "").replace(/_/g, " ") || "—"}
+                      <div className="font-mono text-xs font-medium text-foreground">{r.part_code ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground">{r.part_name ?? "—"}</div>
+                      <div className="text-[11px] capitalize text-muted-foreground">
+                        {(r.pricing_method ?? "").replace(/_/g, " ") || "—"} · {r.unit_type ?? "—"}
                       </div>
                     </TableCell>
                     <TableCell>{r.org_unit_name ?? "—"}</TableCell>
@@ -435,15 +403,6 @@ export function NegotiatedRatesPage() {
         </CardContent>
       </Card>
 
-      <NewNegotiationDialog
-        open={newOpen}
-        onOpenChange={setNewOpen}
-        contractorChoices={pickerContractors}
-        rateMasters={pickerRateMasters}
-        saving={newSaving}
-        error={newError}
-        onSave={createNegotiationFromHub}
-      />
     </div>
   )
 }

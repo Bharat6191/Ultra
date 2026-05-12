@@ -29,8 +29,8 @@ export type RateVersionEntry = {
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** "rate-master" or "contractor-rates" — segment used for the API path. */
-  resource: "rate-master" | "contractor-rates"
+  /** API path segment before ``/{id}/versions``. */
+  resource: "part-master" | "contractor-rates"
   parentId: number
   /** Visible header above the version list (e.g. job/skill, contractor name). */
   title: string
@@ -73,12 +73,15 @@ const FIELD_LABELS: Record<string, string> = {
   is_active: "Active",
   notes: "Notes",
   status: "Status",
-  job_type: "Job",
-  skill_type: "Skill",
-  unit: "Unit",
+  part_code: "Part code",
+  part_name: "Part name",
+  unit_type: "Unit type",
+  pricing_method: "Pricing method",
+  rate_unit_type: "Rate unit type",
+  weight_per_piece: "Weight / piece",
   org_unit_id: "Plant ID",
   contractor_id: "Contractor ID",
-  rate_master_id: "Base rate ID",
+  part_master_id: "Part master ID",
   remarks: "Remarks",
   approval_request_id: "Approval request",
   current_round: "Round",
@@ -93,21 +96,26 @@ const HIDDEN_SNAPSHOT_KEYS = new Set([
   "approval_request_id",
 ])
 
-const RATE_MASTER_FIELD_ORDER = [
-  "job_type",
-  "skill_type",
-  "unit",
+const PART_MASTER_FIELD_ORDER = [
+  "part_code",
+  "part_name",
+  "description",
+  "unit_type",
+  "pricing_method",
+  "weight_per_piece",
   "base_rate",
+  "rate_unit_type",
   "org_unit_id",
   "effective_from",
   "effective_to",
   "is_active",
+  "status",
   "notes",
 ]
 
 const CONTRACTOR_RATE_FIELD_ORDER = [
   "contractor_id",
-  "rate_master_id",
+  "part_master_id",
   "negotiated_rate",
   "initial_rate",
   "previous_rate",
@@ -124,7 +132,7 @@ function fieldLabel(field: string): string {
 }
 
 function humanizeToken(key: string, text: string): string {
-  if (key === "skill_type" || key === "status" || key === "unit") {
+  if (key === "skill_type" || key === "status" || key === "unit" || key === "pricing_method" || key === "rate_unit_type") {
     return text.replace(/_/g, " ")
   }
   return text
@@ -167,10 +175,9 @@ function formatSnapshotValue(key: string, value: unknown): string {
 
 function orderedSnapshotEntries(
   snapshot: Record<string, unknown>,
-  resource: "rate-master" | "contractor-rates",
+  resource: "part-master" | "contractor-rates",
 ): Array<[string, unknown]> {
-  const preferred =
-    resource === "rate-master" ? RATE_MASTER_FIELD_ORDER : CONTRACTOR_RATE_FIELD_ORDER
+  const preferred = resource === "part-master" ? PART_MASTER_FIELD_ORDER : CONTRACTOR_RATE_FIELD_ORDER
   const keys = Object.keys(snapshot).filter((k) => !HIDDEN_SNAPSHOT_KEYS.has(k))
   const seen = new Set<string>()
   const out: Array<[string, unknown]> = []
@@ -191,7 +198,7 @@ function SnapshotDetailsPanel({
   resource,
 }: {
   snapshot: Record<string, unknown>
-  resource: "rate-master" | "contractor-rates"
+  resource: "part-master" | "contractor-rates"
 }) {
   const rows = orderedSnapshotEntries(snapshot, resource)
   if (rows.length === 0) {
@@ -374,10 +381,10 @@ export function RateVersionHistoryDrawer({
         )}
         {!loading && !error && versions && versions.length > 0 ? (
           <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border pt-3">
-            {resource === "rate-master" ? (
+            {resource === "part-master" ? (
               <Button asChild>
-                <Link to={`/dashboard/rate-master/${parentId}`} onClick={() => onOpenChange(false)}>
-                  Open base rate page
+                <Link to={`/dashboard/part-master/${parentId}`} onClick={() => onOpenChange(false)}>
+                  Open part master
                 </Link>
               </Button>
             ) : (

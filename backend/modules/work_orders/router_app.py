@@ -52,10 +52,13 @@ def _to_public(db: Session, row: WorkOrder) -> dict:
                 "items": [
                     {
                         "id": int(i.id),
-                        "rate_master_id": int(i.rate_master_id),
-                        "job_type": i.job_type,
-                        "skill_type": i.skill_type,
-                        "unit": i.unit,
+                        "part_master_id": int(i.part_master_id),
+                        "part_code": (i.pricing_snapshot or {}).get("part_code"),
+                        "part_name": (i.pricing_snapshot or {}).get("part_name"),
+                        "unit_type": (i.pricing_snapshot or {}).get("unit_type"),
+                        "pricing_method": (i.pricing_snapshot or {}).get("pricing_method"),
+                        "rate_unit_type": (i.pricing_snapshot or {}).get("rate_unit_type"),
+                        "pricing_snapshot": i.pricing_snapshot,
                         "progress_type": i.progress_type,
                         "planned_quantity": i.planned_quantity,
                         "planned_percentage": i.planned_percentage,

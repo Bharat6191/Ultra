@@ -5,6 +5,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import case, func, select
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from core.auth import CurrentUser, get_current_user
@@ -20,7 +21,8 @@ from modules.contractor.models import (
     ContractorPlant,
 )
 from modules.contractor.compliance import evaluate_contractor_compliance
-from modules.contractor_rates.models import ContractorRate, RateMaster
+from modules.contractor_rates.models import ContractorRate
+from modules.part_master.models import PartMaster
 from modules.org_units.model import OrgUnit
 from modules.work_orders.models import WorkOrder
 from modules.invoices.models import Invoice, ContractorInvoiceCompliance
@@ -298,11 +300,16 @@ def get_dashboard_summary(
         approved_at_base = 0
         total_premium_above_base = 0.0
         total_below_base_savings = 0.0
-        for negotiated, base in db.execute(
-            select(ContractorRate.negotiated_rate, RateMaster.base_rate)
-            .join(RateMaster, RateMaster.id == ContractorRate.rate_master_id)
-            .where(ContractorRate.status == "approved")
-        ).all():
+        try:
+            rows = db.execute(
+                select(ContractorRate.negotiated_rate, PartMaster.base_rate)
+                .join(PartMaster, PartMaster.id == ContractorRate.part_master_id)
+                .where(ContractorRate.status == "approved")
+            ).all()
+        except ProgrammingError:
+            # e.g. Alembic not upgraded — ``part_master`` missing while ``contractor_rates`` exists.
+            rows = []
+        for negotiated, base in rows:
             if negotiated is None or base is None:
                 continue
             diff = float(negotiated) - float(base)

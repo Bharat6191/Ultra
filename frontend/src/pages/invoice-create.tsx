@@ -19,8 +19,13 @@ type BillableLine = {
   work_order_id: number
   work_order_number: string
   work_order_item_id: number
-  job_type: string
-  unit: string
+  part_code?: string | null
+  part_name?: string | null
+  unit_type?: string | null
+  pricing_method?: string | null
+  /** @deprecated legacy API */
+  job_type?: string
+  unit?: string
   progress_type: string
   approved_quantity: number | null
   completed_quantity: number | null
@@ -161,7 +166,11 @@ export function InvoiceCreatePage() {
       const ln = billableByItemId.get(id)
       if (ln) lines.push(ln)
     }
-    lines.sort((a, b) => (a.work_order_number + a.job_type).localeCompare(b.work_order_number + b.job_type))
+    lines.sort((a, b) => {
+      const ak = `${a.work_order_number}${a.part_code ?? a.job_type ?? ""}`
+      const bk = `${b.work_order_number}${b.part_code ?? b.job_type ?? ""}`
+      return ak.localeCompare(bk)
+    })
     return lines
   }, [billableByItemId, preflight, selectedLineIds])
 
@@ -232,7 +241,7 @@ export function InvoiceCreatePage() {
       const unitPrice = ln.approved_rate
       const total = qty * unitPrice
       out.push({
-        description: `${ln.work_order_number} · ${ln.job_type} (${ln.unit})`,
+        description: `${ln.work_order_number} · ${ln.part_code ?? ln.job_type ?? "—"} (${ln.unit_type ?? ln.unit ?? "—"})`,
         unitPrice,
         qty,
         total,
@@ -452,7 +461,7 @@ export function InvoiceCreatePage() {
                       .filter((l) => !selectedLineIds.has(l.work_order_item_id))
                       .map((l) => (
                         <option key={l.work_order_item_id} value={String(l.work_order_item_id)}>
-                          {l.job_type} · {l.unit}
+                          {l.part_code ?? l.job_type ?? "—"} · {l.unit_type ?? l.unit ?? "—"}
                         </option>
                       ))}
                   </select>
@@ -520,9 +529,9 @@ export function InvoiceCreatePage() {
                               <TableRow key={ln.work_order_item_id} className={qtyOver || valueOver ? "bg-red-500/5" : undefined}>
                                 <TableCell className="text-xs font-mono">{ln.work_order_number}</TableCell>
                                 <TableCell className="text-xs">
-                                  <div className="font-medium">{ln.job_type}</div>
+                                  <div className="font-medium">{ln.part_code ?? ln.job_type ?? "—"}</div>
                                   <div className="text-[11px] text-muted-foreground">
-                                    {ln.unit} ·{" "}
+                                    {ln.part_name ?? "—"} · {ln.unit_type ?? ln.unit ?? "—"} ·{" "}
                                     <span className="uppercase tracking-wide">{ln.progress_type}</span>
                                     {ln.near_tolerance_warning ? (
                                       <Badge variant="warning" className="ml-2 text-[10px] font-normal px-1.5">

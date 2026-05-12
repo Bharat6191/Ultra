@@ -131,12 +131,10 @@ class WorkOrderItem(Base):
         ForeignKey("work_order_contractors.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    rate_master_id: Mapped[int] = mapped_column(
-        ForeignKey("rate_master.id", ondelete="RESTRICT"), nullable=False, index=True
+    part_master_id: Mapped[int] = mapped_column(
+        ForeignKey("part_master.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    job_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    skill_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    unit: Mapped[str] = mapped_column(String(16), nullable=False)
+    pricing_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
     progress_type: Mapped[str] = mapped_column(String(16), nullable=False, server_default="quantity")
     planned_quantity: Mapped[Decimal | None] = mapped_column(Numeric(14, 3), nullable=True)

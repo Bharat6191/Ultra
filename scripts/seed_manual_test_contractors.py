@@ -11,7 +11,8 @@ Creates contractors with a mix of:
 - contractor↔plant mappings (``contractor_plants``) for the Plants tab / picker demos
 - ``contractor_audit_logs`` rows so the **Timeline** tab shows realistic vendor history
 
-Ensures a few ``org_units`` with type PLANT exist, then maps selected contractors to them.
+Ensures two demo ``CLUSTER`` org units (West / East) and three ``PLANT`` rows under them,
+then maps selected contractors to those plants.
 
 Also writes tiny placeholder files under backend/uploads so the "View" action works.
 """
@@ -66,17 +67,46 @@ def _upsert_contractor(db: Session, *, code: str, name: str, **kwargs) -> Contra
     return c
 
 
+CLUSTER_WEST = "TiM Demo Cluster — West"
+CLUSTER_EAST = "TiM Demo Cluster — East"
+
+
+def _ensure_two_demo_clusters(db: Session) -> tuple[OrgUnit, OrgUnit]:
+    """Idempotently ensure two root CLUSTER org units exist (West / East)."""
+    west = db.scalar(select(OrgUnit).where(OrgUnit.name == CLUSTER_WEST, OrgUnit.type == "CLUSTER"))
+    if west is None:
+        west = OrgUnit(name=CLUSTER_WEST, type="CLUSTER")
+        db.add(west)
+    east = db.scalar(select(OrgUnit).where(OrgUnit.name == CLUSTER_EAST, OrgUnit.type == "CLUSTER"))
+    if east is None:
+        east = OrgUnit(name=CLUSTER_EAST, type="CLUSTER")
+        db.add(east)
+    db.flush()
+    west = db.scalar(select(OrgUnit).where(OrgUnit.name == CLUSTER_WEST, OrgUnit.type == "CLUSTER"))
+    east = db.scalar(select(OrgUnit).where(OrgUnit.name == CLUSTER_EAST, OrgUnit.type == "CLUSTER"))
+    assert west is not None and east is not None
+    return west, east
+
+
 def _ensure_plant_org_units(db: Session) -> list[OrgUnit]:
-    """Idempotently ensure named PLANT org units exist; return all PLANT rows (oldest id first)."""
-    seed_names = [
-        "TiM Demo Plant — North",
-        "TiM Demo Plant — South",
-        "TiM Demo Plant — Bengaluru Hub",
+    """Idempotently ensure two demo clusters and named PLANT org units under them.
+
+    North + South sit under **West**; Bengaluru Hub under **East**. Existing flat demo
+    plants (``parent_id`` NULL) are linked to these clusters on re-run.
+    """
+    west, east = _ensure_two_demo_clusters(db)
+    wid, eid = int(west.id), int(east.id)
+    plant_specs: list[tuple[str, int]] = [
+        ("TiM Demo Plant — North", wid),
+        ("TiM Demo Plant — South", wid),
+        ("TiM Demo Plant — Bengaluru Hub", eid),
     ]
-    for name in seed_names:
-        existing = db.scalar(select(OrgUnit).where(OrgUnit.name == name, OrgUnit.type == "PLANT"))
-        if existing is None:
-            db.add(OrgUnit(name=name, type="PLANT"))
+    for name, parent_id in plant_specs:
+        row = db.scalar(select(OrgUnit).where(OrgUnit.name == name, OrgUnit.type == "PLANT"))
+        if row is None:
+            db.add(OrgUnit(name=name, type="PLANT", parent_id=parent_id))
+        elif row.parent_id is None:
+            row.parent_id = parent_id
     db.flush()
     return list(db.scalars(select(OrgUnit).where(OrgUnit.type == "PLANT").order_by(OrgUnit.id.asc())).all())
 
@@ -606,7 +636,10 @@ def main() -> int:
         for c in created_contractors:
             print(f"- id={c.id}  code={c.contractor_code}  name={c.name}  active={bool(c.is_active)}")
         print()
-        print(f"PLANT org units available: {len(plants)} (names like 'TiM Demo Plant — …' are created if missing).")
+        print(
+            f"Ensured demo clusters {CLUSTER_WEST!r} and {CLUSTER_EAST!r}; "
+            f"{len(plants)} PLANT org unit(s) (North/South under West, Bengaluru Hub under East)."
+        )
         n_maps = db.scalar(select(func.count()).select_from(ContractorPlant))
         print(f"Total contractor_plants rows in DB after seed: {int(n_maps or 0)}")
         print()

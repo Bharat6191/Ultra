@@ -5,7 +5,7 @@ Prerequisites (typical TiM demo DB):
 
 - ``scripts/seed_demo_users.py`` — negotiator permissions + WO approval mapping
 - ``scripts/seed_manual_test_contractors.py`` — contractors mapped to plants
-- ``scripts/seed_manual_test_rates.py`` — rate masters per plant
+- ``scripts/seed_manual_test_rates.py`` — part masters per plant
 
 Run from project root:
 
@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 import db.models  # noqa: F401
 from db.session import SessionLocal
 from modules.contractor.models import Contractor
-from modules.contractor_rates.models import RateMaster
+from modules.part_master.models import PartMaster
 from modules.org_units.model import OrgUnit
 from modules.rbac_sync import sync_all_modules_to_db
 from modules.roles.model import Role
@@ -70,23 +70,31 @@ def _contractors(db: Session, *, limit: int = 3) -> list[Contractor]:
     )
 
 
-def _rates_for_plant(db: Session, org_unit_id: int, *, limit: int = 12) -> list[RateMaster]:
+def _parts_for_plant(db: Session, org_unit_id: int, *, limit: int = 12) -> list[PartMaster]:
     return list(
         db.scalars(
-            select(RateMaster)
-            .where(RateMaster.org_unit_id == int(org_unit_id))
-            .where(RateMaster.is_active.is_(True))
-            .order_by(RateMaster.id.asc())
+            select(PartMaster)
+            .where(PartMaster.org_unit_id == int(org_unit_id))
+            .where(PartMaster.is_active.is_(True))
+            .order_by(PartMaster.id.asc())
             .limit(int(limit))
         ).all()
     )
 
 
-def _pick_rate_by_unit(rms: list[RateMaster], unit: str) -> RateMaster | None:
-    u = unit.strip().lower()
-    for r in rms:
-        if str(getattr(r, "unit", "")).strip().lower() == u:
-            return r
+def _pick_part_by_unit_type(pms: list[PartMaster], unit_type: str) -> PartMaster | None:
+    u = unit_type.strip().lower()
+    for p in pms:
+        if str(getattr(p, "unit_type", "")).strip().lower() == u:
+            return p
+    return None
+
+
+def _pick_lumpsum_job_part(pms: list[PartMaster]) -> PartMaster | None:
+    """Parts seeded from legacy ``job`` unit use a ``-JOB`` part code suffix."""
+    for p in pms:
+        if str(p.part_code).upper().endswith("-JOB"):
+            return p
     return None
 
 
@@ -125,16 +133,16 @@ def main() -> int:
         if len(contractors) < 3:
             print("error: no contractor found. Run scripts/seed_manual_test_contractors.py.", file=sys.stderr)
             return 7
-        rms = _rates_for_plant(db, int(plant.id), limit=20)
-        if len(rms) < 10:
+        pms = _parts_for_plant(db, int(plant.id), limit=20)
+        if len(pms) < 10:
             print(
-                "error: not enough active rate masters for that plant. Run scripts/seed_manual_test_rates.py.",
+                "error: not enough active part masters for that plant. Run scripts/seed_manual_test_rates.py.",
                 file=sys.stderr,
             )
             return 8
 
-        rm_kg = _pick_rate_by_unit(rms, "kg")
-        rm_job = _pick_rate_by_unit(rms, "job")
+        pm_kg = _pick_part_by_unit_type(pms, "kg")
+        pm_job = _pick_lumpsum_job_part(pms)
 
         svc = WorkOrderService(db)
         created = 0
@@ -147,17 +155,17 @@ def main() -> int:
                 continue
             # 3 contractors, 2 items each (mix rate masters).
             cids = contractors[:3]
-            # Rotate rms so each contractor gets distinct items
-            rm_pairs = [
-                (rms[(i * 2) % len(rms)], rms[(i * 2 + 1) % len(rms)]),
-                (rms[(i * 2 + 2) % len(rms)], rms[(i * 2 + 3) % len(rms)]),
-                (rms[(i * 2 + 4) % len(rms)], rms[(i * 2 + 5) % len(rms)]),
+            # Rotate parts so each contractor gets distinct items
+            pm_pairs = [
+                (pms[(i * 2) % len(pms)], pms[(i * 2 + 1) % len(pms)]),
+                (pms[(i * 2 + 2) % len(pms)], pms[(i * 2 + 3) % len(pms)]),
+                (pms[(i * 2 + 4) % len(pms)], pms[(i * 2 + 5) % len(pms)]),
             ]
             # Inject one kg + one job line (if available) to ensure those units show in WO UI.
-            if rm_kg is not None:
-                rm_pairs[0] = (rm_kg, rm_pairs[0][1])
-            if rm_job is not None:
-                rm_pairs[1] = (rm_job, rm_pairs[1][1])
+            if pm_kg is not None:
+                pm_pairs[0] = (pm_kg, pm_pairs[0][1])
+            if pm_job is not None:
+                pm_pairs[1] = (pm_job, pm_pairs[1][1])
             wo = svc.create(
                 WorkOrderCreate(
                     org_unit_id=int(plant.id),
@@ -170,14 +178,14 @@ def main() -> int:
                             scope_notes="Seed: multi-vendor WO (contractor A).",
                             items=[
                                 WorkOrderItemCreate(
-                                    rate_master_id=int(rm_pairs[0][0].id),
+                                    part_master_id=int(pm_pairs[0][0].id),
                                     progress_type="quantity",
-                                    planned_quantity=(Decimal("250") + Decimal(i)) if str(rm_pairs[0][0].unit).lower() == "kg" else (Decimal("10") + Decimal(i)),
+                                    planned_quantity=(Decimal("250") + Decimal(i)) if str(pm_pairs[0][0].unit_type).lower() == "kg" else (Decimal("10") + Decimal(i)),
                                     planned_percentage=None,
                                     notes="Seed line A1",
                                 ),
                                 WorkOrderItemCreate(
-                                    rate_master_id=int(rm_pairs[0][1].id),
+                                    part_master_id=int(pm_pairs[0][1].id),
                                     progress_type="quantity",
                                     planned_quantity=Decimal("6") + Decimal(i),
                                     planned_percentage=None,
@@ -190,14 +198,14 @@ def main() -> int:
                             scope_notes="Seed: multi-vendor WO (contractor B).",
                             items=[
                                 WorkOrderItemCreate(
-                                    rate_master_id=int(rm_pairs[1][0].id),
+                                    part_master_id=int(pm_pairs[1][0].id),
                                     progress_type="quantity",
-                                    planned_quantity=(Decimal("1") + Decimal(i)) if str(rm_pairs[1][0].unit).lower() == "job" else (Decimal("8") + Decimal(i)),
+                                    planned_quantity=(Decimal("1") + Decimal(i)) if str(pm_pairs[1][0].part_code).upper().endswith("-JOB") else (Decimal("8") + Decimal(i)),
                                     planned_percentage=None,
                                     notes="Seed line B1",
                                 ),
                                 WorkOrderItemCreate(
-                                    rate_master_id=int(rm_pairs[1][1].id),
+                                    part_master_id=int(pm_pairs[1][1].id),
                                     progress_type="quantity",
                                     planned_quantity=Decimal("12") + Decimal(i),
                                     planned_percentage=None,
@@ -210,14 +218,14 @@ def main() -> int:
                             scope_notes="Seed: multi-vendor WO (contractor C).",
                             items=[
                                 WorkOrderItemCreate(
-                                    rate_master_id=int(rm_pairs[2][0].id),
+                                    part_master_id=int(pm_pairs[2][0].id),
                                     progress_type="quantity",
                                     planned_quantity=Decimal("5") + Decimal(i),
                                     planned_percentage=None,
                                     notes="Seed line C1",
                                 ),
                                 WorkOrderItemCreate(
-                                    rate_master_id=int(rm_pairs[2][1].id),
+                                    part_master_id=int(pm_pairs[2][1].id),
                                     progress_type="quantity",
                                     planned_quantity=Decimal("9") + Decimal(i),
                                     planned_percentage=None,
@@ -243,10 +251,10 @@ def main() -> int:
                 print(f"skip (exists): {title}")
                 continue
             cids = contractors[:3]
-            rm_pairs = [
-                (rms[(i * 2) % len(rms)], rms[(i * 2 + 1) % len(rms)]),
-                (rms[(i * 2 + 2) % len(rms)], rms[(i * 2 + 3) % len(rms)]),
-                (rms[(i * 2 + 4) % len(rms)], rms[(i * 2 + 5) % len(rms)]),
+            pm_pairs = [
+                (pms[(i * 2) % len(pms)], pms[(i * 2 + 1) % len(pms)]),
+                (pms[(i * 2 + 2) % len(pms)], pms[(i * 2 + 3) % len(pms)]),
+                (pms[(i * 2 + 4) % len(pms)], pms[(i * 2 + 5) % len(pms)]),
             ]
             wo = svc.create(
                 WorkOrderCreate(
@@ -259,24 +267,24 @@ def main() -> int:
                             contractor_id=int(cids[0].id),
                             scope_notes="Seed: contractor A scope.",
                             items=[
-                                WorkOrderItemCreate(rate_master_id=int(rm_pairs[0][0].id), progress_type="quantity", planned_quantity=Decimal("10"), planned_percentage=None, notes="A1"),
-                                WorkOrderItemCreate(rate_master_id=int(rm_pairs[0][1].id), progress_type="quantity", planned_quantity=Decimal("7"), planned_percentage=None, notes="A2"),
+                                WorkOrderItemCreate(part_master_id=int(pm_pairs[0][0].id), progress_type="quantity", planned_quantity=Decimal("10"), planned_percentage=None, notes="A1"),
+                                WorkOrderItemCreate(part_master_id=int(pm_pairs[0][1].id), progress_type="quantity", planned_quantity=Decimal("7"), planned_percentage=None, notes="A2"),
                             ],
                         ),
                         WorkOrderContractorCreate(
                             contractor_id=int(cids[1].id),
                             scope_notes="Seed: contractor B scope.",
                             items=[
-                                WorkOrderItemCreate(rate_master_id=int(rm_pairs[1][0].id), progress_type="quantity", planned_quantity=Decimal("11"), planned_percentage=None, notes="B1"),
-                                WorkOrderItemCreate(rate_master_id=int(rm_pairs[1][1].id), progress_type="quantity", planned_quantity=Decimal("9"), planned_percentage=None, notes="B2"),
+                                WorkOrderItemCreate(part_master_id=int(pm_pairs[1][0].id), progress_type="quantity", planned_quantity=Decimal("11"), planned_percentage=None, notes="B1"),
+                                WorkOrderItemCreate(part_master_id=int(pm_pairs[1][1].id), progress_type="quantity", planned_quantity=Decimal("9"), planned_percentage=None, notes="B2"),
                             ],
                         ),
                         WorkOrderContractorCreate(
                             contractor_id=int(cids[2].id),
                             scope_notes="Seed: contractor C scope.",
                             items=[
-                                WorkOrderItemCreate(rate_master_id=int(rm_pairs[2][0].id), progress_type="quantity", planned_quantity=Decimal("6"), planned_percentage=None, notes="C1"),
-                                WorkOrderItemCreate(rate_master_id=int(rm_pairs[2][1].id), progress_type="quantity", planned_quantity=Decimal("12"), planned_percentage=None, notes="C2"),
+                                WorkOrderItemCreate(part_master_id=int(pm_pairs[2][0].id), progress_type="quantity", planned_quantity=Decimal("6"), planned_percentage=None, notes="C1"),
+                                WorkOrderItemCreate(part_master_id=int(pm_pairs[2][1].id), progress_type="quantity", planned_quantity=Decimal("12"), planned_percentage=None, notes="C2"),
                             ],
                         ),
                     ],
@@ -295,8 +303,8 @@ def main() -> int:
             if exists is not None:
                 print(f"skip (exists): {title}")
                 continue
-            if rm_kg is None or rm_job is None:
-                print("skip: kg/job rate masters not found for this plant (run seed_manual_test_rates.py).")
+            if pm_kg is None or pm_job is None:
+                print("skip: kg/job part masters not found for this plant (run seed_manual_test_rates.py).")
                 break
             cids = contractors[:3]
             wo = svc.create(
@@ -310,22 +318,22 @@ def main() -> int:
                             contractor_id=int(cids[0].id),
                             scope_notes="Seed: kg material billing.",
                             items=[
-                                WorkOrderItemCreate(rate_master_id=int(rm_kg.id), progress_type="quantity", planned_quantity=Decimal("500"), planned_percentage=None, notes="kg line"),
+                                WorkOrderItemCreate(part_master_id=int(pm_kg.id), progress_type="quantity", planned_quantity=Decimal("500"), planned_percentage=None, notes="kg line"),
                             ],
                         ),
                         WorkOrderContractorCreate(
                             contractor_id=int(cids[1].id),
                             scope_notes="Seed: lumpsum job billing.",
                             items=[
-                                WorkOrderItemCreate(rate_master_id=int(rm_job.id), progress_type="quantity", planned_quantity=Decimal("2"), planned_percentage=None, notes="job line"),
+                                WorkOrderItemCreate(part_master_id=int(pm_job.id), progress_type="quantity", planned_quantity=Decimal("2"), planned_percentage=None, notes="job line"),
                             ],
                         ),
                         WorkOrderContractorCreate(
                             contractor_id=int(cids[2].id),
                             scope_notes="Seed: mixed lines.",
                             items=[
-                                WorkOrderItemCreate(rate_master_id=int(rm_kg.id), progress_type="quantity", planned_quantity=Decimal("250"), planned_percentage=None, notes="kg line 2"),
-                                WorkOrderItemCreate(rate_master_id=int(rm_job.id), progress_type="quantity", planned_quantity=Decimal("1"), planned_percentage=None, notes="job line 2"),
+                                WorkOrderItemCreate(part_master_id=int(pm_kg.id), progress_type="quantity", planned_quantity=Decimal("250"), planned_percentage=None, notes="kg line 2"),
+                                WorkOrderItemCreate(part_master_id=int(pm_job.id), progress_type="quantity", planned_quantity=Decimal("1"), planned_percentage=None, notes="job line 2"),
                             ],
                         ),
                     ],

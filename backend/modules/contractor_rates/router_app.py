@@ -1,24 +1,21 @@
 """Public/app router for the negotiation workflow.
 
 RBAC permissions:
-  * ``rate_master.view``  /  ``.create`` / ``.update`` / ``.delete``
+  * ``part_master.view``  /  ``.create`` / ``.update`` / ``.delete``
   * ``contractor_rates.view`` / ``.create`` / ``.update`` / ``.delete`` / ``.approve``
 
 Endpoints exposed:
 
-  Rate Master (``/rate-master/*``):
-    * GET    /rate-master                -- list (filters)
-    * POST   /rate-master                -- create
-    * GET    /rate-master/{id}           -- get one
-    * PATCH  /rate-master/{id}           -- update
-
+  Part Master lives under ``/part-master/*`` (separate router).
   Contractor Rates (``/contractor-rates/*``):
     * GET    /contractor-rates           -- list (filters)
-    * POST   /contractor-rates           -- create draft
-    * GET    /contractor-rates/{id}      -- get one (with rounds + savings)
+  * POST   /contractor-rates           -- create draft
+  * POST   /contractor-rates/{id}/opening-evidence  -- multipart: seed round 1 + files (new draft)
+  * GET    /contractor-rates/{id}      -- get one (with rounds + savings)
     * PATCH  /contractor-rates/{id}      -- update draft (negotiated_rate / dates / remarks)
-    * POST   /contractor-rates/{id}/negotiate  -- add a round
-    * POST   /contractor-rates/{id}/submit     -- submit for approval (or auto-approve)
+  * POST   /contractor-rates/{id}/negotiate  -- add a round
+  * POST   /contractor-rates/{id}/negotiation-logs/{log_id}/attachments  -- upload round file
+  * POST   /contractor-rates/{id}/submit     -- submit for approval (or auto-approve)
     * POST   /contractor-rates/{id}/cancel     -- cancel draft / pending / rejected
     * GET    /contractor-rates/{id}/timeline   -- merged audit + rounds + approvals
     * GET    /contractor-rates/summary         -- KPI counters
@@ -28,7 +25,8 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile, status
+from starlette.datastructures import UploadFile as StarletteUploadFile
 from sqlalchemy.orm import Session
 
 from core.auth import CurrentUser, get_current_user
@@ -39,20 +37,15 @@ from modules.contractor_rates.schema import (
     ContractorRatePublic,
     ContractorRateTimelineEvent,
     ContractorRateUpdate,
+    NegotiationAttachmentPublic,
     NegotiationRoundCreate,
     NegotiationRoundPublic,
+    OpeningEvidenceUploadResult,
     RateCardBenchmark,
     RateCardRowPublic,
-    RateMasterAuditEntry,
-    RateMasterCreate,
-    RateMasterPublic,
-    RateMasterUpdate,
     RateVersionEntry,
 )
-from modules.contractor_rates.service import (
-    ContractorRateService,
-    RateMasterService,
-)
+from modules.contractor_rates.service import ContractorRateService
 from modules.contractor_rates.audit import standard_diff
 from modules.contractor_rates.rate_card import RateCardService
 from modules.contractor_rates.timeline import ContractorRateTimelineService
@@ -62,9 +55,6 @@ from modules.users.model import User
 
 router = APIRouter(tags=["app", "contractor_rates"])
 
-
-def _get_rate_master_service(db: Annotated[Session, Depends(get_db)]) -> RateMasterService:
-    return RateMasterService(db)
 
 
 def _get_rate_service(db: Annotated[Session, Depends(get_db)]) -> ContractorRateService:
@@ -99,8 +89,8 @@ def _versions_to_public(db: Session, versions: list) -> list[RateVersionEntry]:
         diff = standard_diff(prev_snapshot, snap) if prev_snapshot is not None else None
         # ``parent_id`` is whichever FK the row stores.
         parent_id = (
-            getattr(v, "rate_master_id", None)
-            if hasattr(v, "rate_master_id")
+            getattr(v, "part_master_id", None)
+            if hasattr(v, "part_master_id")
             else getattr(v, "contractor_rate_id", None)
         )
         entries.append(
@@ -118,132 +108,6 @@ def _versions_to_public(db: Session, versions: list) -> list[RateVersionEntry]:
         )
         prev_snapshot = snap
     return entries
-
-
-# ---------- Rate master ----------
-
-
-@router.get(
-    "/rate-master",
-    response_model=list[RateMasterPublic],
-    dependencies=[
-        Depends(
-            require_any_permission(
-                "rate_master.view",
-                "work_orders.view",
-                "work_orders.create",
-                "work_orders.update",
-            )
-        )
-    ],
-)
-def list_rate_master(
-    svc: Annotated[RateMasterService, Depends(_get_rate_master_service)],
-    org_unit_id: int | None = Query(None),
-    job_type: str | None = Query(None),
-    skill_type: str | None = Query(None),
-    unit: str | None = Query(None),
-    active_only: bool = Query(False, alias="active"),
-) -> list[RateMasterPublic]:
-    rows = svc.list_rate_masters(
-        org_unit_id=org_unit_id,
-        job_type=job_type,
-        skill_type=skill_type,
-        unit=unit,
-        active_only=active_only,
-    )
-    return [RateMasterPublic.model_validate(svc._public_dict(r)) for r in rows]
-
-
-@router.post(
-    "/rate-master",
-    response_model=RateMasterPublic,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permission("rate_master.create"))],
-)
-def create_rate_master(
-    payload: RateMasterCreate,
-    svc: Annotated[RateMasterService, Depends(_get_rate_master_service)],
-    current: Annotated[CurrentUser, Depends(get_current_user)],
-) -> RateMasterPublic:
-    try:
-        row = svc.create_rate_master(payload, actor_user_id=int(current.subject))
-    except ConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except NotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return RateMasterPublic.model_validate(svc._public_dict(row))
-
-
-@router.get(
-    "/rate-master/{rate_master_id:int}",
-    response_model=RateMasterPublic,
-    dependencies=[Depends(require_permission("rate_master.view"))],
-)
-def get_rate_master(
-    rate_master_id: int,
-    svc: Annotated[RateMasterService, Depends(_get_rate_master_service)],
-) -> RateMasterPublic:
-    try:
-        row = svc.get_rate_master(rate_master_id)
-    except NotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return RateMasterPublic.model_validate(svc._public_dict(row))
-
-
-@router.patch(
-    "/rate-master/{rate_master_id:int}",
-    response_model=RateMasterPublic,
-    dependencies=[Depends(require_permission("rate_master.update"))],
-)
-def update_rate_master(
-    rate_master_id: int,
-    payload: RateMasterUpdate,
-    svc: Annotated[RateMasterService, Depends(_get_rate_master_service)],
-    current: Annotated[CurrentUser, Depends(get_current_user)],
-) -> RateMasterPublic:
-    try:
-        row = svc.update_rate_master(rate_master_id, payload, actor_user_id=int(current.subject))
-    except NotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except ConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return RateMasterPublic.model_validate(svc._public_dict(row))
-
-
-@router.get(
-    "/rate-master/{rate_master_id:int}/audit-logs",
-    response_model=list[RateMasterAuditEntry],
-    dependencies=[Depends(require_permission("rate_master.view"))],
-)
-def list_rate_master_audit_logs(
-    rate_master_id: int,
-    svc: Annotated[RateMasterService, Depends(_get_rate_master_service)],
-) -> list[RateMasterAuditEntry]:
-    """Return the chronological audit trail for one base rate."""
-    try:
-        rows = svc.list_audit_logs(rate_master_id)
-    except NotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return [RateMasterAuditEntry.model_validate(r) for r in rows]
-
-
-@router.get(
-    "/rate-master/{rate_master_id:int}/versions",
-    response_model=list[RateVersionEntry],
-    dependencies=[Depends(require_permission("rate_master.view"))],
-)
-def list_rate_master_versions(
-    rate_master_id: int,
-    svc: Annotated[RateMasterService, Depends(_get_rate_master_service)],
-    db: Annotated[Session, Depends(get_db)],
-) -> list[RateVersionEntry]:
-    """Time-travel snapshots for a base rate (oldest → newest, with diffs)."""
-    try:
-        versions = svc.list_versions(rate_master_id)
-    except NotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return _versions_to_public(db, versions)
 
 
 # ---------- Contractor rates: list / create / get / patch ----------
@@ -269,17 +133,17 @@ def list_contractor_rates(
     svc: Annotated[ContractorRateService, Depends(_get_rate_service)],
     response: Response,
     contractor_id: int | None = Query(None),
-    rate_master_id: int | None = Query(None),
+    part_master_id: int | None = Query(None),
     org_unit_id: int | None = Query(None),
-    job_type: str | None = Query(None),
+    part_code: str | None = Query(None),
     status_filter: str | None = Query(None, alias="status"),
 ) -> list[ContractorRatePublic]:
     rows = svc.list_rates(
         contractor_id=contractor_id,
         status=status_filter,
-        rate_master_id=rate_master_id,
+        part_master_id=part_master_id,
         org_unit_id=org_unit_id,
-        job_type=job_type,
+        part_code=part_code,
     )
     response.headers["X-Total-Count"] = str(len(rows))
     return [ContractorRatePublic.model_validate(svc.to_public_dict(r)) for r in rows]
@@ -303,6 +167,52 @@ def create_contractor_rate(
     except ConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return ContractorRatePublic.model_validate(svc.to_public_dict(row))
+
+
+@router.post(
+    "/contractor-rates/{rate_id:int}/opening-evidence",
+    response_model=OpeningEvidenceUploadResult,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(require_any_permission("contractor_rates.create", "contractor_rates.update"))
+    ],
+)
+async def upload_opening_evidence(
+    rate_id: int,
+    request: Request,
+    svc: Annotated[ContractorRateService, Depends(_get_rate_service)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+) -> OpeningEvidenceUploadResult:
+    """For a brand-new draft (no negotiation rounds yet), create round 1 and attach files."""
+    content_type_hdr = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if content_type_hdr != "multipart/form-data":
+        raise HTTPException(status_code=422, detail="multipart/form-data required")
+    form = await request.form()
+    uploads = form.getlist("file")
+    if not uploads:
+        raise HTTPException(status_code=422, detail="at least one file is required (field name: file)")
+    parsed: list[tuple[str, bytes, str | None]] = []
+    for u in uploads:
+        if not isinstance(u, (UploadFile, StarletteUploadFile)):
+            continue
+        raw = await u.read()
+        parsed.append((u.filename or "attachment", raw, getattr(u, "content_type", None)))
+    if not parsed:
+        raise HTTPException(status_code=422, detail="at least one valid file upload is required")
+    try:
+        log, saved = svc.upload_opening_evidence(
+            rate_id,
+            parsed,
+            actor_user_id=int(current.subject),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return OpeningEvidenceUploadResult(
+        negotiation_log_id=int(log.id),
+        attachments=[NegotiationAttachmentPublic.model_validate(a, from_attributes=True) for a in saved],
+    )
 
 
 @router.get(
@@ -363,6 +273,43 @@ def add_negotiation_round(
     except ConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return NegotiationRoundPublic.model_validate(row, from_attributes=True)
+
+
+@router.post(
+    "/contractor-rates/{rate_id:int}/negotiation-logs/{log_id:int}/attachments",
+    response_model=NegotiationAttachmentPublic,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("contractor_rates.update"))],
+)
+async def upload_negotiation_attachment(
+    rate_id: int,
+    log_id: int,
+    request: Request,
+    svc: Annotated[ContractorRateService, Depends(_get_rate_service)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+) -> NegotiationAttachmentPublic:
+    content_type_hdr = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if content_type_hdr != "multipart/form-data":
+        raise HTTPException(status_code=422, detail="multipart/form-data required")
+    form = await request.form()
+    upload = form.get("file") or form.get("upload") or form.get("attachment")
+    if upload is None:
+        raise HTTPException(status_code=422, detail="file is required (multipart field name: file)")
+    if not isinstance(upload, (UploadFile, StarletteUploadFile)):
+        raise HTTPException(status_code=422, detail="file must be an uploaded file")
+    raw = await upload.read()
+    try:
+        row = svc.add_negotiation_attachment(
+            rate_id,
+            log_id,
+            filename=upload.filename or "attachment",
+            content=raw,
+            content_type=getattr(upload, "content_type", None),
+            actor_user_id=int(current.subject),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return NegotiationAttachmentPublic.model_validate(row, from_attributes=True)
 
 
 @router.post(
@@ -446,27 +393,23 @@ def list_contractor_rate_versions(
 @router.get(
     "/rate-card",
     response_model=list[RateCardRowPublic],
-    dependencies=[Depends(require_permission("rate_master.view"))],
+    dependencies=[Depends(require_permission("part_master.view"))],
 )
 def get_rate_card(
     svc: Annotated[RateCardService, Depends(_get_rate_card_service)],
     plant_id: int | None = Query(None, alias="plant_id"),
     contractor_id: int | None = Query(None),
-    rate_master_id: int | None = Query(None),
-    job_type: str | None = Query(None),
-    skill_type: str | None = Query(None),
-    unit: str | None = Query(None),
+    part_master_id: int | None = Query(None),
+    part_code: str | None = Query(None),
     active_base_only: bool = Query(True),
 ) -> list[RateCardRowPublic]:
-    """Centralised Rate Card view: Plant + Contractor + Job + Skill + Unit."""
+    """Commercial comparison grid: plant, contractor, and Part Master."""
     try:
         rows = svc.get_rate_card(
             plant_id=plant_id,
             contractor_id=contractor_id,
-            rate_master_id=rate_master_id,
-            job_type=job_type,
-            skill_type=skill_type,
-            unit=unit,
+            part_master_id=part_master_id,
+            part_code=part_code,
             active_base_only=active_base_only,
         )
     except NotFoundError as exc:
@@ -477,16 +420,14 @@ def get_rate_card(
 @router.get(
     "/rate-card/benchmark",
     response_model=RateCardBenchmark,
-    dependencies=[Depends(require_permission("rate_master.view"))],
+    dependencies=[Depends(require_permission("part_master.view"))],
 )
 def get_rate_card_benchmark(
     svc: Annotated[RateCardService, Depends(_get_rate_card_service)],
     plant_id: int | None = Query(None),
     contractor_id: int | None = Query(None),
-    rate_master_id: int | None = Query(None),
-    job_type: str | None = Query(None),
-    skill_type: str | None = Query(None),
-    unit: str | None = Query(None),
+    part_master_id: int | None = Query(None),
+    part_code: str | None = Query(None),
     active_base_only: bool = Query(True),
 ) -> RateCardBenchmark:
     """Benchmark KPIs across the rate card filter."""
@@ -494,10 +435,8 @@ def get_rate_card_benchmark(
         kpis = svc.benchmark(
             plant_id=plant_id,
             contractor_id=contractor_id,
-            rate_master_id=rate_master_id,
-            job_type=job_type,
-            skill_type=skill_type,
-            unit=unit,
+            part_master_id=part_master_id,
+            part_code=part_code,
             active_base_only=active_base_only,
         )
     except NotFoundError as exc:

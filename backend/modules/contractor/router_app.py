@@ -67,9 +67,9 @@ def get_timeline_service(db: Session = Depends(get_db)) -> ContractorTimelineSer
                 # Contractor module access
                 "contractor.view",
                 # Rate master / negotiated rates need contractor dropdowns
-                "rate_master.view",
-                "rate_master.create",
-                "rate_master.update",
+                "part_master.view",
+                "part_master.create",
+                "part_master.update",
                 "contractor_rates.view",
                 "contractor_rates.create",
                 "contractor_rates.update",

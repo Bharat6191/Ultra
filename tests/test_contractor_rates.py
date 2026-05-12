@@ -1,7 +1,7 @@
 """Negotiation workflow (3.3) tests.
 
 Covers:
-  * rate_master CRUD + activation rules
+  * part_master CRUD + activation rules
   * contractor_rate creation with savings calc (vs base / vs previous)
   * multi-round negotiations (round_number + audit + applied negotiated_rate)
   * approval flow:
@@ -53,21 +53,19 @@ from modules.contractor_rates.models import (
     ContractorRate,
     ContractorRateAuditLog,
     NegotiationLog,
-    RateMaster,
-    RateMasterAuditLog,
 )
 from modules.contractor_rates.schema import (
     ContractorRateCreate,
     ContractorRateUpdate,
     NegotiationRoundCreate,
-    RateMasterCreate,
-    RateMasterUpdate,
 )
 from modules.contractor_rates.service import (
     ACTION_CODE_CREATE,
     ContractorRateService,
-    RateMasterService,
 )
+from modules.part_master.models import PartMaster, PartMasterAuditLog
+from modules.part_master.schema import PartMasterCreate, PartMasterUpdate
+from modules.part_master.service import PartMasterService
 from modules.errors import ConflictError
 from modules.features.model import Feature  # noqa: F401
 from modules.org_units.model import OrgUnit
@@ -121,7 +119,20 @@ def contractor(db: Session, actor: User) -> Contractor:
     )
 
 
-def _make_rate_master(
+def _map_unit_commercial(unit: str) -> tuple[str, str, str]:
+    u = unit.strip().lower()
+    if u == "kg":
+        return "kg", "weight_based", "per_kg"
+    if u == "job":
+        return "pcs", "piece_based", "per_piece"
+    if u in ("hour", "hr"):
+        return "hr", "piece_based", "per_piece"
+    if u == "day":
+        return "day", "piece_based", "per_piece"
+    return u, "piece_based", "per_piece"
+
+
+def _make_part(
     db: Session,
     *,
     plant_id: int,
@@ -131,13 +142,23 @@ def _make_rate_master(
     skill_type: str = "skilled",
     unit: str = "hour",
     effective_from: date | None = None,
-) -> RateMaster:
-    return RateMasterService(db).create_rate_master(
-        RateMasterCreate(
-            job_type=job_type,
-            skill_type=skill_type,
-            unit=unit,
+) -> PartMaster:
+    j = job_type.strip().upper().replace(" ", "-")
+    sk = skill_type.strip().upper().replace(" ", "-")
+    u = unit.strip().upper()
+    part_code = f"{j}-{sk}-{u}"[:64]
+    unit_type, pricing_method, rate_unit_type = _map_unit_commercial(unit)
+    part_name = f"{job_type.strip()} ({skill_type.replace('_', ' ').strip()})"
+    return PartMasterService(db).create_part_master(
+        PartMasterCreate(
+            part_code=part_code,
+            part_name=part_name,
+            description=None,
+            unit_type=unit_type,
+            pricing_method=pricing_method,
+            weight_per_piece=None,
             base_rate=Decimal(base_rate),
+            rate_unit_type=rate_unit_type,
             org_unit_id=plant_id,
             effective_from=effective_from or date.today(),
             is_active=True,
@@ -146,15 +167,15 @@ def _make_rate_master(
     )
 
 
-# ---------- Rate master ----------
+# ---------- Part master ----------
 
 
 def test_rate_master_create_lists_with_org_name(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     assert rm.is_active is True
-    rows = RateMasterService(db).list_rate_masters(active_only=True)
+    rows = PartMasterService(db).list_part_masters(active_only=True)
     assert len(rows) == 1
     assert rows[0].id == rm.id
 
@@ -163,18 +184,13 @@ def test_rate_master_activation_supersedes_previous_active(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
     """Activating a second rate for the same combo deactivates the first."""
-    first = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
-    second = RateMasterService(db).create_rate_master(
-        RateMasterCreate(
-            job_type="Welder",
-            skill_type="skilled",
-            unit="hour",
-            base_rate=Decimal("110"),
-            org_unit_id=int(plant.id),
-            effective_from=date.today() + timedelta(days=1),
-            is_active=True,
-        ),
-        actor_user_id=int(actor.id),
+    first = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    second = _make_part(
+        db,
+        plant_id=int(plant.id),
+        actor_id=int(actor.id),
+        base_rate="110",
+        effective_from=date.today() + timedelta(days=1),
     )
     db.refresh(first)
     assert first.is_active is False
@@ -185,15 +201,20 @@ def test_rate_master_inverted_dates_rejected(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
     with pytest.raises(ConflictError):
-        RateMasterService(db).create_rate_master(
-            RateMasterCreate(
-                job_type="Welder",
-                skill_type="skilled",
-                unit="hour",
+        PartMasterService(db).create_part_master(
+            PartMasterCreate(
+                part_code="WELDER-SKILLED-HOUR",
+                part_name="Welder (skilled)",
+                description=None,
+                unit_type="hr",
+                pricing_method="piece_based",
+                weight_per_piece=None,
                 base_rate=Decimal("100"),
+                rate_unit_type="per_piece",
                 org_unit_id=int(plant.id),
                 effective_from=date.today() + timedelta(days=10),
                 effective_to=date.today(),
+                is_active=True,
             ),
             actor_user_id=int(actor.id),
         )
@@ -207,14 +228,14 @@ def test_create_rate_initial_rate_defaults_to_negotiated_and_savings_is_zero(
 ) -> None:
     """A bare ``create_rate`` records the negotiated_rate as the opening ask;
     savings is therefore 0 (no rounds yet to negotiate the rate down from)."""
-    rm = _make_rate_master(
+    rm = _make_part(
         db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
     )
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("110"),  # contractor's typical "above base" ask
             effective_from=date.today(),
         ),
@@ -226,19 +247,79 @@ def test_create_rate_initial_rate_defaults_to_negotiated_and_savings_is_zero(
     assert rate.savings_percentage == Decimal("0.00")
 
 
-def test_create_rate_with_explicit_initial_rate_computes_savings(
+def test_upload_opening_evidence_seeds_round_and_stores_files(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
-    """When procurement records the contractor's opening ask separately, savings
-    equals (initial_rate − negotiated_rate)."""
-    rm = _make_rate_master(
+    rm = _make_part(
         db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
     )
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
+            negotiated_rate=Decimal("100"),
+            effective_from=date.today(),
+        ),
+        actor_user_id=int(actor.id),
+    )
+    assert int(rate.current_round) == 0
+    assert not list(rate.negotiation_logs or [])
+    log, attachments = svc.upload_opening_evidence(
+        int(rate.id),
+        [("one.txt", b"a", "text/plain"), ("two.txt", b"b", "text/plain")],
+        actor_user_id=int(actor.id),
+    )
+    assert int(log.round_number) == 1
+    assert len(attachments) == 2
+    refreshed = svc.get_rate(int(rate.id))
+    assert int(refreshed.current_round) == 1
+    assert len(refreshed.negotiation_logs) == 1
+    assert len(refreshed.negotiation_logs[0].attachments or []) == 2
+
+
+def test_upload_opening_evidence_conflict_when_rounds_already_exist(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    rm = _make_part(
+        db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
+    )
+    svc = ContractorRateService(db)
+    rate = svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            part_master_id=int(rm.id),
+            negotiated_rate=Decimal("100"),
+            effective_from=date.today(),
+        ),
+        actor_user_id=int(actor.id),
+    )
+    svc.upload_opening_evidence(
+        int(rate.id),
+        [("a.txt", b"x", "text/plain")],
+        actor_user_id=int(actor.id),
+    )
+    with pytest.raises(ConflictError):
+        svc.upload_opening_evidence(
+            int(rate.id),
+            [("b.txt", b"y", "text/plain")],
+            actor_user_id=int(actor.id),
+        )
+
+
+def test_create_rate_with_explicit_initial_rate_computes_savings(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    """When procurement records the contractor's opening ask separately, savings
+    equals (initial_rate − negotiated_rate)."""
+    rm = _make_part(
+        db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
+    )
+    svc = ContractorRateService(db)
+    rate = svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("105"),
             initial_rate=Decimal("120"),
             effective_from=date.today(),
@@ -255,14 +336,14 @@ def test_savings_clamped_at_zero_when_negotiated_above_initial(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
     """A re-negotiation upward must never produce a negative savings figure."""
-    rm = _make_rate_master(
+    rm = _make_part(
         db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
     )
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("130"),
             initial_rate=Decimal("110"),  # somehow ended up ABOVE the opening
             effective_from=date.today(),
@@ -279,14 +360,14 @@ def test_round1_proposal_above_initial_lifts_initial_rate(
     """If round 1 records a contractor proposal that is HIGHER than what was
     captured at create time, the panel auto-promotes the round-1 proposal to
     the new ``initial_rate`` so savings reflects the real opening ask."""
-    rm = _make_rate_master(
+    rm = _make_part(
         db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
     )
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("105"),  # internal target
             effective_from=date.today(),
         ),
@@ -315,12 +396,12 @@ def test_round1_proposal_above_initial_lifts_initial_rate(
 def test_multiple_rounds_increment_round_number_and_audit(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today(),
         ),
@@ -368,12 +449,12 @@ def test_multiple_rounds_increment_round_number_and_audit(
 def test_round_requires_at_least_one_value(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today(),
         ),
@@ -393,12 +474,12 @@ def test_round_requires_at_least_one_value(
 def test_submit_with_no_workflow_auto_approves_and_writes_activation_audit(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today(),
         ),
@@ -467,12 +548,12 @@ def test_submit_with_workflow_holds_pending_then_approves(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
     _setup_workflow_for(db, action_code=ACTION_CODE_CREATE, actor_id=int(actor.id))
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today(),
         ),
@@ -528,13 +609,13 @@ def test_approval_deactivates_previous_active_rate(
     """Approving a new rate for the same (contractor, rate_master) marks the previous
     active rate as expired and writes RATE_DEACTIVATED + EXPIRED audit rows on it.
     """
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     svc = ContractorRateService(db)
     # First approved rate (no workflow -> auto-approve).
     first = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today() - timedelta(days=60),
             effective_to=date.today() - timedelta(days=31),
@@ -546,7 +627,7 @@ def test_approval_deactivates_previous_active_rate(
     second = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("80"),
             effective_from=date.today() - timedelta(days=30),
         ),
@@ -572,12 +653,12 @@ def test_rejection_marks_rate_rejected_and_audits(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
     _setup_workflow_for(db, action_code=ACTION_CODE_CREATE, actor_id=int(actor.id))
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today(),
         ),
@@ -617,13 +698,13 @@ def test_rejection_marks_rate_rejected_and_audits(
 def test_overlapping_date_range_rejected_at_submission(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     svc = ContractorRateService(db)
     # First approved rate (no workflow -> auto-approves).
     first = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today(),
             effective_to=date.today() + timedelta(days=60),
@@ -636,7 +717,7 @@ def test_overlapping_date_range_rejected_at_submission(
     second = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("80"),
             effective_from=date.today() + timedelta(days=30),
             effective_to=date.today() + timedelta(days=90),
@@ -653,14 +734,14 @@ def test_overlapping_date_range_rejected_at_submission(
 def test_aggregate_summary_counts_negotiation_savings_and_vs_base(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
-    rm = _make_rate_master(
+    rm = _make_part(
         db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
     )
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("110"),  # approved 10 ABOVE base
             initial_rate=Decimal("130"),  # vendor opened at 130 -> saved 20
             effective_from=date.today(),
@@ -683,14 +764,14 @@ def test_aggregate_summary_counts_negotiation_savings_and_vs_base(
 def test_aggregate_summary_counts_below_base_correctly(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
-    rm = _make_rate_master(
+    rm = _make_part(
         db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
     )
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("85"),
             initial_rate=Decimal("100"),
             effective_from=date.today(),
@@ -714,12 +795,12 @@ def test_aggregate_summary_counts_below_base_correctly(
 def test_rate_master_create_writes_audit_row(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     rows = list(
         db.scalars(
-            select(RateMasterAuditLog)
-            .where(RateMasterAuditLog.rate_master_id == int(rm.id))
-            .order_by(RateMasterAuditLog.id.asc())
+            select(PartMasterAuditLog)
+            .where(PartMasterAuditLog.part_master_id == int(rm.id))
+            .order_by(PartMasterAuditLog.id.asc())
         ).all()
     )
     # 3.4 adds a VERSION_CREATED audit alongside CREATED. Filter to assert
@@ -729,25 +810,25 @@ def test_rate_master_create_writes_audit_row(
     assert lifecycle[0].action == "CREATED"
     assert lifecycle[0].changed_by == int(actor.id)
     new_value = lifecycle[0].new_value or {}
-    assert new_value["job_type"] == "Welder"
-    assert new_value["skill_type"] == "skilled"
+    assert new_value["part_code"] == "WELDER-SKILLED-HOUR"
+    assert new_value["part_name"] == "Welder (skilled)"
     assert new_value["is_active"] is True
 
 
 def test_rate_master_update_diff_audit(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
-    RateMasterService(db).update_rate_master(
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    PartMasterService(db).update_part_master(
         int(rm.id),
-        RateMasterUpdate(base_rate=Decimal("120.00"), notes="Q2 revision"),
+        PartMasterUpdate(base_rate=Decimal("120.00"), notes="Q2 revision"),
         actor_user_id=int(actor.id),
     )
     rows = list(
         db.scalars(
-            select(RateMasterAuditLog)
-            .where(RateMasterAuditLog.rate_master_id == int(rm.id))
-            .order_by(RateMasterAuditLog.id.asc())
+            select(PartMasterAuditLog)
+            .where(PartMasterAuditLog.part_master_id == int(rm.id))
+            .order_by(PartMasterAuditLog.id.asc())
         ).all()
     )
     # 3.4: filter out the auto-generated VERSION_CREATED rows to keep the
@@ -763,20 +844,20 @@ def test_rate_master_update_diff_audit(
     assert "base_rate" in new_value
     assert new_value["notes"] == "Q2 revision"
     assert old_value.get("notes") in (None, "")
-    # The diff is field-scoped — unchanged fields like job_type are not stored.
-    assert "job_type" not in new_value
+    # The diff is field-scoped — unchanged fields like part_code are not stored.
+    assert "part_code" not in new_value
 
 
 def test_rate_master_supersession_writes_supersede_audit(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
-    rm_old = _make_rate_master(
+    rm_old = _make_part(
         db,
         plant_id=int(plant.id),
         actor_id=int(actor.id),
         effective_from=date.today() - timedelta(days=10),
     )
-    rm_new = _make_rate_master(
+    rm_new = _make_part(
         db,
         plant_id=int(plant.id),
         actor_id=int(actor.id),
@@ -790,18 +871,18 @@ def test_rate_master_supersession_writes_supersede_audit(
     old_actions = [
         r.action
         for r in db.scalars(
-            select(RateMasterAuditLog)
-            .where(RateMasterAuditLog.rate_master_id == int(rm_old.id))
-            .order_by(RateMasterAuditLog.id.asc())
+            select(PartMasterAuditLog)
+            .where(PartMasterAuditLog.part_master_id == int(rm_old.id))
+            .order_by(PartMasterAuditLog.id.asc())
         ).all()
     ]
     assert "SUPERSEDED" in old_actions
     new_actions = [
         r.action
         for r in db.scalars(
-            select(RateMasterAuditLog)
-            .where(RateMasterAuditLog.rate_master_id == int(rm_new.id))
-            .order_by(RateMasterAuditLog.id.asc())
+            select(PartMasterAuditLog)
+            .where(PartMasterAuditLog.part_master_id == int(rm_new.id))
+            .order_by(PartMasterAuditLog.id.asc())
         ).all()
     ]
     # 3.4: CREATED of a row that supersedes another now also writes
@@ -811,10 +892,10 @@ def test_rate_master_supersession_writes_supersede_audit(
     assert "RATE_REPLACED" in new_actions
     # The CREATED audit on the new row should reference the superseded row.
     new_create = db.scalar(
-        select(RateMasterAuditLog)
+        select(PartMasterAuditLog)
         .where(
-            RateMasterAuditLog.rate_master_id == int(rm_new.id),
-            RateMasterAuditLog.action == "CREATED",
+            PartMasterAuditLog.part_master_id == int(rm_new.id),
+            PartMasterAuditLog.action == "CREATED",
         )
     )
     assert new_create is not None
@@ -825,18 +906,18 @@ def test_rate_master_supersession_writes_supersede_audit(
 def test_rate_master_deactivate_writes_deactivated_audit(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
-    RateMasterService(db).update_rate_master(
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    PartMasterService(db).update_part_master(
         int(rm.id),
-        RateMasterUpdate(is_active=False),
+        PartMasterUpdate(is_active=False),
         actor_user_id=int(actor.id),
     )
     actions = [
         r.action
         for r in db.scalars(
-            select(RateMasterAuditLog)
-            .where(RateMasterAuditLog.rate_master_id == int(rm.id))
-            .order_by(RateMasterAuditLog.id.asc())
+            select(PartMasterAuditLog)
+            .where(PartMasterAuditLog.part_master_id == int(rm.id))
+            .order_by(PartMasterAuditLog.id.asc())
         ).all()
     ]
     # 3.4: filter out VERSION_CREATED so the lifecycle sequence stays explicit.
@@ -847,10 +928,10 @@ def test_rate_master_deactivate_writes_deactivated_audit(
 def test_list_audit_logs_returns_actor_name(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
-    rows = RateMasterService(db).list_audit_logs(int(rm.id))
-    # 3.4: CREATED + VERSION_CREATED.
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rows = PartMasterService(db).list_audit_logs(int(rm.id))
+    # Newest first: VERSION_CREATED after CREATED in time.
     actions = [r["action"] for r in rows]
-    assert actions == ["CREATED", "VERSION_CREATED"]
+    assert actions == ["VERSION_CREATED", "CREATED"]
     assert rows[0]["changed_by"] == int(actor.id)
     assert rows[0]["changed_by_name"] == "Op Admin"

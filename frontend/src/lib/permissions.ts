@@ -86,6 +86,8 @@ export function canListOrgUnitsForAssignments(): boolean {
     if (localStorage.getItem(LS_IS_SUPERUSER) === "1") return true
     return (
       hasPermission("org_units.view") ||
+      hasPermission("org_units.update") ||
+      hasPermission("org_units.delete") ||
       hasPermission("users.create") ||
       hasPermission("users.update") ||
       hasPermission("roles.create") ||
@@ -96,10 +98,10 @@ export function canListOrgUnitsForAssignments(): boolean {
       hasPermission("contractor.view") ||
       hasPermission("contractor.update") ||
       hasPermission("contractor.manage_plants") ||
-      // Rate master + negotiated rates UIs use the same plant picker.
-      hasPermission("rate_master.view") ||
-      hasPermission("rate_master.create") ||
-      hasPermission("rate_master.update") ||
+      // Part master + negotiated rates UIs use the same plant picker.
+      hasPermission("part_master.view") ||
+      hasPermission("part_master.create") ||
+      hasPermission("part_master.update") ||
       hasPermission("contractor_rates.view") ||
       hasPermission("contractor_rates.create") ||
       hasPermission("contractor_rates.update") ||

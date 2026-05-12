@@ -1,12 +1,12 @@
-"""3.4 Rate Master & Benchmark Control tests.
+"""3.4 Part Master & benchmark control tests.
 
 Covers the gaps closed in this slice:
 
-  * versioning: every update writes a new ``rate_master_versions`` /
+  * versioning: every update writes a new ``part_master_versions`` /
     ``contractor_rate_versions`` snapshot
-  * strict overlap rejection on rate_master + contractor_rates
+  * strict overlap rejection on part_master + contractor_rates
   * benchmark calculation (vs base + vs previous)
-  * auto-expiry job (rate_master + contractor_rates)
+  * auto-expiry job (part_master + contractor_rates)
   * unified rate card aggregation
 """
 
@@ -38,19 +38,17 @@ from modules.contractor_rates.audit import standard_diff
 from modules.contractor_rates.models import (
     ContractorRate,
     ContractorRateVersion,
-    RateMaster,
-    RateMasterVersion,
 )
 from modules.contractor_rates.rate_card import RateCardService
 from modules.contractor_rates.schema import (
     ContractorRateCreate,
-    RateMasterCreate,
-    RateMasterUpdate,
 )
 from modules.contractor_rates.service import (
     ContractorRateService,
-    RateMasterService,
 )
+from modules.part_master.models import PartMaster, PartMasterVersion
+from modules.part_master.schema import PartMasterCreate, PartMasterUpdate
+from modules.part_master.service import PartMasterService
 from modules.errors import ConflictError
 from modules.features.model import Feature  # noqa: F401
 from modules.org_units.model import OrgUnit
@@ -104,7 +102,20 @@ def contractor(db: Session, actor: User) -> Contractor:
     )
 
 
-def _make_rate_master(
+def _map_unit_commercial(unit: str) -> tuple[str, str, str]:
+    u = unit.strip().lower()
+    if u == "kg":
+        return "kg", "weight_based", "per_kg"
+    if u == "job":
+        return "pcs", "piece_based", "per_piece"
+    if u in ("hour", "hr"):
+        return "hr", "piece_based", "per_piece"
+    if u == "day":
+        return "day", "piece_based", "per_piece"
+    return u, "piece_based", "per_piece"
+
+
+def _make_part(
     db: Session,
     *,
     plant_id: int,
@@ -116,13 +127,23 @@ def _make_rate_master(
     effective_from: date | None = None,
     effective_to: date | None = None,
     is_active: bool = True,
-) -> RateMaster:
-    return RateMasterService(db).create_rate_master(
-        RateMasterCreate(
-            job_type=job_type,
-            skill_type=skill_type,
-            unit=unit,
+) -> PartMaster:
+    j = job_type.strip().upper().replace(" ", "-")
+    sk = skill_type.strip().upper().replace(" ", "-")
+    u = unit.strip().upper()
+    part_code = f"{j}-{sk}-{u}"[:64]
+    unit_type, pricing_method, rate_unit_type = _map_unit_commercial(unit)
+    part_name = f"{job_type.strip()} ({skill_type.replace('_', ' ').strip()})"
+    return PartMasterService(db).create_part_master(
+        PartMasterCreate(
+            part_code=part_code,
+            part_name=part_name,
+            description=None,
+            unit_type=unit_type,
+            pricing_method=pricing_method,
+            weight_per_piece=None,
             base_rate=Decimal(base_rate),
+            rate_unit_type=rate_unit_type,
             org_unit_id=plant_id,
             effective_from=effective_from or date.today(),
             effective_to=effective_to,
@@ -138,32 +159,32 @@ def _make_rate_master(
 def test_rate_master_create_writes_v1_snapshot(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     versions = list(
         db.scalars(
-            select(RateMasterVersion).where(RateMasterVersion.rate_master_id == int(rm.id))
+            select(PartMasterVersion).where(PartMasterVersion.part_master_id == int(rm.id))
         ).all()
     )
     assert [v.version_number for v in versions] == [1]
     snap = versions[0].snapshot_json
-    assert snap["job_type"] == "Welder"
+    assert snap["part_code"] == "WELDER-SKILLED-HOUR"
     assert str(snap["base_rate"]) == "100.00"
 
 
 def test_rate_master_update_appends_immutable_version(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
-    RateMasterService(db).update_rate_master(
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    PartMasterService(db).update_part_master(
         int(rm.id),
-        RateMasterUpdate(base_rate=Decimal("120")),
+        PartMasterUpdate(base_rate=Decimal("120")),
         actor_user_id=int(actor.id),
     )
     versions = list(
         db.scalars(
-            select(RateMasterVersion)
-            .where(RateMasterVersion.rate_master_id == int(rm.id))
-            .order_by(RateMasterVersion.version_number.asc())
+            select(PartMasterVersion)
+            .where(PartMasterVersion.part_master_id == int(rm.id))
+            .order_by(PartMasterVersion.version_number.asc())
         ).all()
     )
     assert [v.version_number for v in versions] == [1, 2]
@@ -181,12 +202,12 @@ def test_rate_master_update_appends_immutable_version(
 def test_contractor_rate_create_and_update_writes_versions(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today(),
         ),
@@ -217,10 +238,10 @@ def test_contractor_rate_create_and_update_writes_versions(
 def test_rate_master_overlap_rejected(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
-    """Two active rate_master rows with overlapping windows for the same combo
+    """Two active part_master rows with overlapping windows for the same combo
     must be rejected (3.4 strict validity)."""
     today = date.today()
-    _make_rate_master(
+    _make_part(
         db,
         plant_id=int(plant.id),
         actor_id=int(actor.id),
@@ -229,18 +250,13 @@ def test_rate_master_overlap_rejected(
     )
     # Candidate window [today, today+60] overlaps with the future row.
     with pytest.raises(ConflictError):
-        RateMasterService(db).create_rate_master(
-            RateMasterCreate(
-                job_type="Welder",
-                skill_type="skilled",
-                unit="hour",
-                base_rate=Decimal("110"),
-                org_unit_id=int(plant.id),
-                effective_from=today,
-                effective_to=today + timedelta(days=60),
-                is_active=True,
-            ),
-            actor_user_id=int(actor.id),
+        _make_part(
+            db,
+            plant_id=int(plant.id),
+            actor_id=int(actor.id),
+            base_rate="110.00",
+            effective_from=today,
+            effective_to=today + timedelta(days=60),
         )
 
 
@@ -251,13 +267,13 @@ def test_rate_master_supersession_still_allowed(
     activating a *successor* row for a combo whose previous row was open-ended.
     """
     today = date.today()
-    rm_old = _make_rate_master(
+    rm_old = _make_part(
         db,
         plant_id=int(plant.id),
         actor_id=int(actor.id),
         effective_from=today - timedelta(days=30),
     )
-    rm_new = _make_rate_master(
+    rm_new = _make_part(
         db,
         plant_id=int(plant.id),
         actor_id=int(actor.id),
@@ -276,7 +292,7 @@ def test_rate_master_auto_expiry_job(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
     today = date.today()
-    rm_expired = _make_rate_master(
+    rm_expired = _make_part(
         db,
         plant_id=int(plant.id),
         actor_id=int(actor.id),
@@ -285,24 +301,24 @@ def test_rate_master_auto_expiry_job(
     )
     # Note: a future row with the same combo is allowed because rm_expired's
     # window doesn't overlap it. The job below should flip rm_expired only.
-    n = RateMasterService(db).mark_expired(today=today, actor_user_id=int(actor.id))
+    n = PartMasterService(db).mark_expired(today=today, actor_user_id=int(actor.id))
     assert n == 1
     db.refresh(rm_expired)
     assert rm_expired.is_active is False
     # Status engine label.
-    assert RateMasterService.derive_status(rm_expired, today=today) == "inactive"
+    assert PartMasterService.derive_status(rm_expired, today=today) == "inactive"
 
 
 def test_contractor_rate_auto_expiry_job(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
     today = date.today()
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     svc = ContractorRateService(db)
     rate = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=today - timedelta(days=60),
             effective_to=today - timedelta(days=1),
@@ -321,16 +337,16 @@ def test_derive_status_upcoming_and_active(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
     today = date.today()
-    rm_active = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
-    rm_future = _make_rate_master(
+    rm_active = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm_future = _make_part(
         db,
         plant_id=int(plant.id),
         actor_id=int(actor.id),
         job_type="Painter",
         effective_from=today + timedelta(days=10),
     )
-    assert RateMasterService.derive_status(rm_active, today=today) == "active"
-    assert RateMasterService.derive_status(rm_future, today=today) == "upcoming"
+    assert PartMasterService.derive_status(rm_active, today=today) == "active"
+    assert PartMasterService.derive_status(rm_future, today=today) == "upcoming"
 
 
 # ---------- Rate Card + Benchmark ----------
@@ -340,7 +356,7 @@ def test_rate_card_aggregates_base_current_previous(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
     today = date.today()
-    rm = _make_rate_master(
+    rm = _make_part(
         db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
     )
     svc = ContractorRateService(db)
@@ -349,7 +365,7 @@ def test_rate_card_aggregates_base_current_previous(
     first = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("95"),
             effective_from=today - timedelta(days=180),
             effective_to=today - timedelta(days=91),
@@ -362,7 +378,7 @@ def test_rate_card_aggregates_base_current_previous(
     second = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=today - timedelta(days=90),
         ),
@@ -390,7 +406,7 @@ def test_rate_card_aggregates_base_current_previous(
 def test_rate_card_without_contractor_rate_returns_blank_negotiated(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
-    _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     rows = RateCardService(db).get_rate_card(
         plant_id=int(plant.id), contractor_id=int(contractor.id)
     )
@@ -401,10 +417,10 @@ def test_rate_card_without_contractor_rate_returns_blank_negotiated(
 
 
 def test_rate_card_filter_by_rate_master_id(db: Session, actor: User, plant: OrgUnit) -> None:
-    rm = _make_rate_master(db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00")
-    rows = RateCardService(db).get_rate_card(rate_master_id=int(rm.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00")
+    rows = RateCardService(db).get_rate_card(part_master_id=int(rm.id))
     assert len(rows) == 1
-    assert rows[0].rate_master_id == int(rm.id)
+    assert rows[0].part_master_id == int(rm.id)
     assert rows[0].base_rate == Decimal("100.00")
 
 
@@ -412,7 +428,7 @@ def test_rate_card_without_contractor_filter_lists_negotiations_per_vendor(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
     today = date.today()
-    rm = _make_rate_master(
+    rm = _make_part(
         db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
     )
     beta = ContractorService(db).create_contractor(
@@ -423,7 +439,7 @@ def test_rate_card_without_contractor_filter_lists_negotiations_per_vendor(
     svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=today,
         ),
@@ -432,7 +448,7 @@ def test_rate_card_without_contractor_filter_lists_negotiations_per_vendor(
     svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(beta.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("95"),
             effective_from=today,
         ),
@@ -453,7 +469,7 @@ def test_benchmark_without_contractor_counts_all_negotiations(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
     today = date.today()
-    rm = _make_rate_master(
+    rm = _make_part(
         db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
     )
     beta = ContractorService(db).create_contractor(
@@ -464,7 +480,7 @@ def test_benchmark_without_contractor_counts_all_negotiations(
     svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=today,
         ),
@@ -473,7 +489,7 @@ def test_benchmark_without_contractor_counts_all_negotiations(
     svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(beta.id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal("110"),
             effective_from=today,
         ),
@@ -491,10 +507,10 @@ def test_rate_card_benchmark_kpis(
 ) -> None:
     today = date.today()
     # Two distinct base rates so we have two rate-card rows.
-    rm1 = _make_rate_master(
+    rm1 = _make_part(
         db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
     )
-    rm2 = _make_rate_master(
+    rm2 = _make_part(
         db,
         plant_id=int(plant.id),
         actor_id=int(actor.id),
@@ -507,7 +523,7 @@ def test_rate_card_benchmark_kpis(
     cr1 = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm1.id),
+            part_master_id=int(rm1.id),
             negotiated_rate=Decimal("90"),
             effective_from=today,
         ),
@@ -519,7 +535,7 @@ def test_rate_card_benchmark_kpis(
     cr2 = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
-            rate_master_id=int(rm2.id),
+            part_master_id=int(rm2.id),
             negotiated_rate=Decimal("220"),
             effective_from=today,
         ),

@@ -10,7 +10,7 @@ from sqlalchemy import select
 import db.models  # noqa: F401
 from db.session import SessionLocal
 from modules.contractor.models import Contractor
-from modules.contractor_rates.models import RateMaster
+from modules.part_master.models import PartMaster
 from modules.org_units.model import OrgUnit
 from modules.users.model import User
 from modules.work_orders.schema import (
@@ -55,18 +55,18 @@ def _first_contractor(db) -> Contractor:
     return c
 
 
-def _first_rate_master_for_org(db, org_unit_id: int) -> RateMaster:
-    rm = db.scalars(select(RateMaster).where(RateMaster.org_unit_id == int(org_unit_id)).order_by(RateMaster.id.asc())).first()
-    if rm is None:
-        pytest.skip("No rate master seeded in DB for this org unit")
-    return rm
+def _first_part_master_for_org(db, org_unit_id: int) -> PartMaster:
+    pm = db.scalars(select(PartMaster).where(PartMaster.org_unit_id == int(org_unit_id)).order_by(PartMaster.id.asc())).first()
+    if pm is None:
+        pytest.skip("No part master seeded in DB for this org unit")
+    return pm
 
 
 def test_work_order_create_and_invoice_validate(db):
     actor = _first_user(db)
     org = _first_plant(db)
     contractor = _first_contractor(db)
-    rm = _first_rate_master_for_org(db, int(org.id))
+    pm = _first_part_master_for_org(db, int(org.id))
 
     wo = WorkOrderService(db).create(
         WorkOrderCreate(
@@ -80,7 +80,7 @@ def test_work_order_create_and_invoice_validate(db):
                     scope_notes=None,
                     items=[
                         WorkOrderItemCreate(
-                            rate_master_id=int(rm.id),
+                            part_master_id=int(pm.id),
                             progress_type="quantity",
                             planned_quantity=Decimal("10"),
                             planned_percentage=None,
@@ -130,7 +130,7 @@ def test_work_order_draft_update_replaces_lines(db):
     actor = _first_user(db)
     org = _first_plant(db)
     contractor = _first_contractor(db)
-    rm = _first_rate_master_for_org(db, int(org.id))
+    pm = _first_part_master_for_org(db, int(org.id))
 
     svc = WorkOrderService(db)
     wo = svc.create(
@@ -145,7 +145,7 @@ def test_work_order_draft_update_replaces_lines(db):
                     scope_notes=None,
                     items=[
                         WorkOrderItemCreate(
-                            rate_master_id=int(rm.id),
+                            part_master_id=int(pm.id),
                             progress_type="quantity",
                             planned_quantity=Decimal("1"),
                             planned_percentage=None,
@@ -170,14 +170,14 @@ def test_work_order_draft_update_replaces_lines(db):
                     scope_notes=None,
                     items=[
                         WorkOrderItemCreate(
-                            rate_master_id=int(rm.id),
+                            part_master_id=int(pm.id),
                             progress_type="quantity",
                             planned_quantity=Decimal("3"),
                             planned_percentage=None,
                             notes="note a",
                         ),
                         WorkOrderItemCreate(
-                            rate_master_id=int(rm.id),
+                            part_master_id=int(pm.id),
                             progress_type="quantity",
                             planned_quantity=Decimal("5"),
                             planned_percentage=None,

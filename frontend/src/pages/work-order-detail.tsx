@@ -7,7 +7,7 @@ import type {
   ExecutionDetailRow,
   ExecutionDraftLine,
   OrgUnitLite,
-  RateMasterLite,
+  PartMasterLite,
 } from "@/components/work-orders/work-order-execution-ui"
 import {
   draftLinesToContractors,
@@ -29,7 +29,7 @@ import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
 type LineCompletionPayload = {
   progress_type: string
-  unit: string
+  unit_type: string
   approved_quantity: number | null
   approved_percentage: number | null
   completed_quantity: number | null
@@ -53,10 +53,11 @@ type WorkOrder = {
     contractor_id: number
     items?: {
       id: number
-      rate_master_id: number
-      job_type: string
-      skill_type: string
-      unit: string
+      part_master_id: number
+      part_code?: string | null
+      part_name?: string | null
+      unit_type?: string | null
+      pricing_method?: string | null
       progress_type: string
       planned_quantity: string | number | null
       planned_percentage: string | number | null
@@ -98,7 +99,7 @@ function fallbackLineCompletion(
   const apPct = parseNum(it.planned_percentage)
   return {
     progress_type: it.progress_type,
-    unit: it.unit,
+    unit_type: it.unit_type ?? "",
     approved_quantity: Number.isFinite(aq) ? aq : null,
     approved_percentage: Number.isFinite(apPct) ? apPct : null,
     completed_quantity: null,
@@ -125,8 +126,8 @@ export function WorkOrderDetailPage() {
   const [submitBusy, setSubmitBusy] = React.useState(false)
   const [saveDraftBusy, setSaveDraftBusy] = React.useState(false)
 
-  const [rateMasters, setRateMasters] = React.useState<RateMasterLite[]>([])
-  const [rmsLoading, setRmsLoading] = React.useState(false)
+  const [partMasters, setPartMasters] = React.useState<PartMasterLite[]>([])
+  const [pmsLoading, setPmsLoading] = React.useState(false)
   const [editTitle, setEditTitle] = React.useState("")
   const [editReference, setEditReference] = React.useState("")
   const [editOrgUnit, setEditOrgUnit] = React.useState("")
@@ -171,15 +172,15 @@ export function WorkOrderDetailPage() {
 
   React.useEffect(() => {
     if (!editableDraft || !row) return
-    setRmsLoading(true)
+    setPmsLoading(true)
     void (async () => {
       try {
-        const rms = await getJson<RateMasterLite[]>("/rate-master?active=true")
-        setRateMasters(Array.isArray(rms) ? rms : [])
+        const rms = await getJson<PartMasterLite[]>("/part-master?active=true")
+        setPartMasters(Array.isArray(rms) ? rms : [])
       } catch {
-        setRateMasters([])
+        setPartMasters([])
       } finally {
-        setRmsLoading(false)
+        setPmsLoading(false)
       }
     })()
   }, [editableDraft, row?.id])
@@ -266,21 +267,26 @@ export function WorkOrderDetailPage() {
 
         const completionItem: LineWithCompletion = {
           id: it.id,
-          job_type: it.job_type,
-          skill_type: it.skill_type,
-          unit: it.unit,
+          part_code: it.part_code ?? null,
+          part_name: it.part_name ?? null,
+          unit_type: it.completion?.unit_type ?? it.unit_type ?? "",
           progress_type: it.progress_type,
           planned_quantity: it.planned_quantity,
           planned_percentage: it.planned_percentage,
           completion: it.completion ?? fallbackLineCompletion(it),
         }
 
+        const lineLabel =
+          it.part_code || it.part_name
+            ? `${it.part_code ?? "—"} · ${it.part_name ?? "—"}`
+            : "—"
+
         out.push({
           sr,
           contractor_label: contractorName(c.contractor_id),
-          job_label: `${it.job_type} · ${String(it.skill_type).replace(/_/g, " ")}`,
+          job_label: lineLabel,
           qty_display: qtyDisplay,
-          unit_display: it.unit ?? "—",
+          unit_display: it.unit_type ?? "—",
           rate_display: rateDisplay,
           invoice_display: invoiceDisplay,
           remarks_display: it.notes?.trim() ? it.notes : "—",
@@ -311,7 +317,7 @@ export function WorkOrderDetailPage() {
     if (!editTitle.trim()) return toast.error("Title is required.")
     const contractorsPayload = draftLinesToContractors(draftLines)
     const itemCount = contractorsPayload.reduce((n, c) => n + c.items.length, 0)
-    if (itemCount === 0) return toast.error("Add at least one line with contractor and item/job.")
+    if (itemCount === 0) return toast.error("Add at least one line with contractor and part.")
 
     setSaveDraftBusy(true)
     try {
@@ -369,7 +375,7 @@ export function WorkOrderDetailPage() {
       </div>
 
       <WorkOrderExecutionHeader
-        loading={editableDraft && rmsLoading}
+        loading={editableDraft && pmsLoading}
         editable={editableDraft}
         title={editableDraft ? editTitle : row.title}
         reference={editableDraft ? editReference : row.description ?? ""}
@@ -383,10 +389,10 @@ export function WorkOrderDetailPage() {
 
       <WorkOrderExecutionTable
         mode={editableDraft ? "edit" : "view"}
-        loading={editableDraft && rmsLoading}
+        loading={editableDraft && pmsLoading}
         org_unit_id={editableDraft ? editOrgUnit : String(row.org_unit_id)}
         contractors={contractors}
-        rateMasters={editableDraft ? rateMasters : []}
+        partMasters={editableDraft ? partMasters : []}
         lines={editableDraft ? draftLines : []}
         onLinesChange={editableDraft ? setDraftLines : () => {}}
         detailRows={editableDraft ? undefined : detailRows}
@@ -398,7 +404,7 @@ export function WorkOrderDetailPage() {
         showSubmit={showSubmitButton}
         tip={
           editableDraft
-            ? "Tip: pick contractor + item/job first — unit and governed rate will auto-load."
+            ? "Tip: pick contractor + part first — unit type and governed rate will auto-load."
             : showCompletionEngine
               ? "Active work order: update completion per line — invoice lines cannot exceed the latest saved completion."
               : "Rates shown are governed (negotiated where applicable)."

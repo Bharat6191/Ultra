@@ -24,10 +24,14 @@ from modules.contractor_rates.models import (  # noqa: F401
     ContractorRate,
     ContractorRateAuditLog,
     ContractorRateVersion,
+    NegotiationAttachment,
     NegotiationLog,
-    RateMaster,
-    RateMasterAuditLog,
-    RateMasterVersion,
+)
+from modules.part_master.models import (  # noqa: F401
+    PartMaster,
+    PartMasterAttachment,
+    PartMasterAuditLog,
+    PartMasterVersion,
 )
 from modules.notifications.model import NotificationSetting, NotificationDedupKey  # noqa: F401
 from modules.work_orders.models import (  # noqa: F401

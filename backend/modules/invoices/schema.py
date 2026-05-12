@@ -55,7 +55,7 @@ class InvoiceLinePublic(BaseModel):
     job_description: str | None = None
     rate_source: str | None
     resolved_contractor_rate_id: int | None
-    resolved_rate_master_id: int | None
+    resolved_part_master_id: int | None
     notes: str | None
     validation_line_status: str | None = None  # pending|blocked|warn|ok heuristic for UI tinting
 
@@ -99,9 +99,10 @@ class BillableWOLinePublic(BaseModel):
     work_order_number: str
     work_order_item_id: int
     contractor_id: int
-    job_type: str
-    skill_type: str
-    unit: str
+    part_code: str | None = None
+    part_name: str | None = None
+    unit_type: str | None = None
+    pricing_method: str | None = None
     progress_type: str
     approved_quantity: float | None = None
     approved_percentage: float | None = None

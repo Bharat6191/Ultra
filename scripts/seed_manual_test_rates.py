@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed rate-master + negotiation dummy data for manual UI testing.
+"""Seed Part Master + negotiation dummy data for manual UI testing.
 
 Run from project root:
 
@@ -7,8 +7,8 @@ Run from project root:
 
 What this gives you (idempotent — safe to run repeatedly):
 
-* **Rate masters**: a mix of active / superseded (history) / future-effective /
-  expired rows across 3 plants and several job types.
+* **Part masters**: a mix of active / superseded (history) / future-effective /
+  expired rows across 3 plants and several commercial templates.
 * **Approval workflow** for ``contractor_rates.create`` mapped to a single-step
   workflow whose approver is the seeded ``Procurement Approver`` role
   (created by ``scripts/seed_admin_test_data.py``).
@@ -16,13 +16,14 @@ What this gives you (idempotent — safe to run repeatedly):
   ``draft``, ``pending_approval``, ``approved``, ``rejected``,
   plus a rate that has gone through 3 negotiation rounds.
 * Full audit trail: each create / update / round / approval / activation
-  generates rows in ``rate_master_audit_logs`` and
+  generates rows in ``part_master_audit_logs`` and
   ``contractor_rate_audit_logs`` so the timeline UI is non-empty.
 * Aggregates so the workspace KPIs on
   ``/dashboard/negotiated-rates`` are non-zero.
 
 The script reuses existing rows where possible:
-  * org units of type ``PLANT`` (creates one if none exist)
+  * org units of type ``PLANT`` (if none exist: two demo ``CLUSTER`` rows West/East
+    plus one plant under West)
   * the contractors seeded by ``seed_manual_test_contractors.py``
   * the ``Procurement Approver`` role from ``seed_admin_test_data.py``
 
@@ -42,7 +43,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[1] / "backend"
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 import db.models  # noqa: F401 — register all models on Base.metadata
@@ -60,20 +61,18 @@ from modules.contractor_rates.models import (
     ContractorRate,
     ContractorRateAuditLog,
     NegotiationLog,
-    RateMaster,
-    RateMasterAuditLog,
 )
 from modules.contractor_rates.schema import (
     ContractorRateCreate,
     NegotiationRoundCreate,
-    RateMasterCreate,
-    RateMasterUpdate,
 )
 from modules.contractor_rates.service import (
     ACTION_CODE_CREATE,
     ContractorRateService,
-    RateMasterService,
 )
+from modules.part_master.models import PartMaster, PartMasterAuditLog
+from modules.part_master.schema import PartMasterCreate, PartMasterUpdate
+from modules.part_master.service import PartMasterService
 from modules.org_units.model import OrgUnit
 from modules.permissions.model import Permission
 from modules.rbac_sync import sync_all_modules_to_db
@@ -142,7 +141,7 @@ def _ensure_user_has_role(db: Session, user: User, role: Role) -> None:
 
 
 def _ensure_plants(db: Session) -> list[OrgUnit]:
-    """Return at least one PLANT org unit (creating one if none exist)."""
+    """Return at least one PLANT org unit (creating two demo clusters + a plant if none exist)."""
     plants = list(
         db.scalars(
             select(OrgUnit).where(OrgUnit.type == "PLANT").order_by(OrgUnit.id.asc())
@@ -150,7 +149,11 @@ def _ensure_plants(db: Session) -> list[OrgUnit]:
     )
     if plants:
         return plants
-    p = OrgUnit(name="TiM Demo Plant — North", type="PLANT")
+    west = OrgUnit(name="TiM Demo Cluster — West", type="CLUSTER")
+    east = OrgUnit(name="TiM Demo Cluster — East", type="CLUSTER")
+    db.add_all([west, east])
+    db.flush()
+    p = OrgUnit(name="TiM Demo Plant — North", type="PLANT", parent_id=int(west.id))
     db.add(p)
     db.commit()
     db.refresh(p)
@@ -228,9 +231,23 @@ def _ensure_workflow_for_action(
     return wf
 
 
-def _find_or_create_rate_master(
+def _map_unit_commercial(unit: str) -> tuple[str, str, str, Decimal | None]:
+    """Map legacy seed ``unit`` strings to Part Master commercial fields."""
+    u = unit.strip().lower()
+    if u == "kg":
+        return "kg", "weight_based", "per_kg", None
+    if u == "job":
+        return "pcs", "piece_based", "per_piece", None
+    if u in ("hour", "hr"):
+        return "hr", "piece_based", "per_piece", None
+    if u == "day":
+        return "day", "piece_based", "per_piece", None
+    return u, "piece_based", "per_piece", None
+
+
+def _find_or_create_part(
     db: Session,
-    svc: RateMasterService,
+    svc: PartMasterService,
     *,
     job_type: str,
     skill_type: str,
@@ -242,24 +259,32 @@ def _find_or_create_rate_master(
     is_active: bool = True,
     notes: str | None = None,
     actor_user_id: int | None = None,
-) -> RateMaster:
+) -> PartMaster:
+    j = job_type.strip().upper().replace(" ", "-")
+    sk = skill_type.strip().upper().replace(" ", "-")
+    u = unit.strip().upper()
+    part_code = f"{j}-{sk}-{u}"[:64]
+    unit_type, pricing_method, rate_unit_type, wpp = _map_unit_commercial(unit)
+    part_name = f"{job_type.strip()} ({skill_type.replace('_', ' ').strip()})"
     existing = db.scalar(
-        select(RateMaster).where(
-            RateMaster.job_type == job_type.strip(),
-            RateMaster.skill_type == skill_type.strip().lower(),
-            RateMaster.unit == unit.strip().lower(),
-            RateMaster.org_unit_id == int(plant_id),
-            RateMaster.effective_from == effective_from,
+        select(PartMaster).where(
+            PartMaster.part_code == part_code,
+            PartMaster.org_unit_id == int(plant_id),
+            PartMaster.effective_from == effective_from,
         )
     )
     if existing is not None:
         return existing
-    return svc.create_rate_master(
-        RateMasterCreate(
-            job_type=job_type,
-            skill_type=skill_type,
-            unit=unit,
+    return svc.create_part_master(
+        PartMasterCreate(
+            part_code=part_code,
+            part_name=part_name,
+            description=None,
+            unit_type=unit_type,
+            pricing_method=pricing_method,
+            weight_per_piece=wpp,
             base_rate=Decimal(base_rate),
+            rate_unit_type=rate_unit_type,
             org_unit_id=plant_id,
             effective_from=effective_from,
             effective_to=effective_to,
@@ -274,13 +299,13 @@ SEED_MARKER_PREFIX = "[seed] "
 
 
 def _has_seeded_rate(
-    db: Session, *, contractor_id: int, rate_master_id: int, marker_remarks: str
+    db: Session, *, contractor_id: int, part_master_id: int, marker_remarks: str
 ) -> ContractorRate | None:
     """Look up a previously seeded contractor_rate by a unique remarks marker."""
     return db.scalar(
         select(ContractorRate)
         .where(ContractorRate.contractor_id == int(contractor_id))
-        .where(ContractorRate.rate_master_id == int(rate_master_id))
+        .where(ContractorRate.part_master_id == int(part_master_id))
         .where(ContractorRate.remarks == marker_remarks)
     )
 
@@ -323,7 +348,7 @@ def _seed_contractor_rate(
     rate_svc: ContractorRateService,
     *,
     contractor_id: int,
-    rate_master_id: int,
+    part_master_id: int,
     negotiated_rate: str,
     effective_from: date,
     marker_remarks: str,
@@ -341,7 +366,7 @@ def _seed_contractor_rate(
     existing = _has_seeded_rate(
         db,
         contractor_id=contractor_id,
-        rate_master_id=rate_master_id,
+        part_master_id=part_master_id,
         marker_remarks=marker_remarks,
     )
     if existing is not None:
@@ -349,7 +374,7 @@ def _seed_contractor_rate(
     rate = rate_svc.create_rate(
         ContractorRateCreate(
             contractor_id=contractor_id,
-            rate_master_id=rate_master_id,
+            part_master_id=part_master_id,
             negotiated_rate=Decimal(negotiated_rate),
             initial_rate=Decimal(initial_rate) if initial_rate is not None else None,
             effective_from=effective_from,
@@ -365,7 +390,7 @@ def _seed_contractor_rate(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Seed rate-master + negotiation dummy data for manual UI testing."
+        description="Seed Part Master + negotiation dummy data for manual UI testing."
     )
     parser.add_argument(
         "--reset",
@@ -441,7 +466,7 @@ def main() -> int:
         c_zen = by_code.get("CTR-ZEN-002") or contractors[min(1, len(contractors) - 1)]
         c_orion = by_code.get("CTR-ORION-003") or contractors[min(2, len(contractors) - 1)]
 
-        rm_svc = RateMasterService(db)
+        pm_svc = PartMasterService(db)
         rate_svc = ContractorRateService(db)
 
         # ---- 1. Rate masters ---------------------------------------------------
@@ -449,8 +474,8 @@ def main() -> int:
         today = date.today()
 
         # Welder · skilled · hour @ Plant A — current active rate.
-        rm_welder_active = _find_or_create_rate_master(
-            db, rm_svc,
+        rm_welder_active = _find_or_create_part(
+            db, pm_svc,
             job_type="Welder",
             skill_type="skilled",
             unit="hour",
@@ -464,8 +489,8 @@ def main() -> int:
         )
 
         # Welder · skilled · hour @ Plant A — superseded historical row (expired).
-        rm_welder_old = _find_or_create_rate_master(
-            db, rm_svc,
+        rm_welder_old = _find_or_create_part(
+            db, pm_svc,
             job_type="Welder",
             skill_type="skilled",
             unit="hour",
@@ -480,15 +505,15 @@ def main() -> int:
         # If create_rate_master saw the active rate first, it would have superseded
         # this row; re-applying explicit deactivation is a no-op when already false.
         if rm_welder_old.is_active:
-            rm_svc.update_rate_master(
+            pm_svc.update_part_master(
                 int(rm_welder_old.id),
-                RateMasterUpdate(is_active=False),
+                PartMasterUpdate(is_active=False),
                 actor_user_id=actor_id,
             )
 
         # Electrician · semi_skilled · day @ Plant A.
-        rm_electrician = _find_or_create_rate_master(
-            db, rm_svc,
+        rm_electrician = _find_or_create_part(
+            db, pm_svc,
             job_type="Electrician",
             skill_type="semi_skilled",
             unit="day",
@@ -501,8 +526,8 @@ def main() -> int:
         )
 
         # Helper · unskilled · hour @ Plant A.
-        rm_helper = _find_or_create_rate_master(
-            db, rm_svc,
+        rm_helper = _find_or_create_part(
+            db, pm_svc,
             job_type="General Helper",
             skill_type="unskilled",
             unit="hour",
@@ -514,8 +539,8 @@ def main() -> int:
         )
 
         # Future-effective row to preview "scheduled" rates in UI.
-        rm_future = _find_or_create_rate_master(
-            db, rm_svc,
+        rm_future = _find_or_create_part(
+            db, pm_svc,
             job_type="Pipefitter",
             skill_type="skilled",
             unit="hour",
@@ -528,8 +553,8 @@ def main() -> int:
         )
 
         # Plant B — Welder skilled hour, distinct combo by plant.
-        rm_welder_plant_b = _find_or_create_rate_master(
-            db, rm_svc,
+        rm_welder_plant_b = _find_or_create_part(
+            db, pm_svc,
             job_type="Welder",
             skill_type="skilled",
             unit="hour",
@@ -541,8 +566,8 @@ def main() -> int:
         )
 
         # Expired row to demonstrate the "expired" warning in the negotiation UI.
-        rm_expired = _find_or_create_rate_master(
-            db, rm_svc,
+        rm_expired = _find_or_create_part(
+            db, pm_svc,
             job_type="Crane Operator",
             skill_type="skilled",
             unit="day",
@@ -592,9 +617,9 @@ def main() -> int:
         all_plants = [plant_id, plant_b_id, plant_c_id]
         for pi, pid in enumerate(all_plants):
             for job_type, skill_type, unit, base_rate in templates:
-                _find_or_create_rate_master(
+                _find_or_create_part(
                     db,
-                    rm_svc,
+                    pm_svc,
                     job_type=job_type,
                     skill_type=skill_type,
                     unit=unit,
@@ -610,19 +635,24 @@ def main() -> int:
         # Ensure a few negotiated contractor rates for the new units (kg/job),
         # so they appear in Contractor Rates + can resolve in Work Orders/Invoices.
         # We anchor on Plant A because demo WOs typically target the first plant.
-        kg_job_rms = list(
+        kg_job_pms = list(
             db.scalars(
-                select(RateMaster)
-                .where(RateMaster.org_unit_id == int(plant_id))
-                .where(RateMaster.is_active.is_(True))
-                .where(RateMaster.unit.in_(("kg", "job")))
-                .order_by(RateMaster.id.asc())
+                select(PartMaster)
+                .where(PartMaster.org_unit_id == int(plant_id))
+                .where(PartMaster.is_active.is_(True))
+                .where(
+                    or_(
+                        PartMaster.unit_type == "kg",
+                        PartMaster.part_code.endswith("-JOB"),
+                    )
+                )
+                .order_by(PartMaster.id.asc())
             ).all()
         )
-        for rm in kg_job_rms[:6]:
+        for pm in kg_job_pms[:6]:
             # Keep it simple: create a draft rate slightly below base to show savings.
             try:
-                base = Decimal(str(rm.base_rate))
+                base = Decimal(str(pm.base_rate))
             except Exception:
                 base = Decimal("1.00")
             negotiated = (base * Decimal("0.97")).quantize(Decimal("0.01"))
@@ -630,17 +660,13 @@ def main() -> int:
                 db,
                 rate_svc,
                 contractor_id=int(c_acme.id),
-                rate_master_id=int(rm.id),
+                part_master_id=int(pm.id),
                 negotiated_rate=str(negotiated),
                 initial_rate=str(base),
                 effective_from=today,
-                marker_remarks=f"[seed] kg/job unit demo for {rm.job_type}",
+                marker_remarks=f"[seed] kg/job unit demo for {pm.part_code}",
                 actor_user_id=actor_id,
             )
-
-        rate_master_count = int(
-            db.scalar(select(func.count()).select_from(RateMaster)) or 0
-        )
 
         # ---- 2. Approval workflow mapping --------------------------------------
 
@@ -659,7 +685,7 @@ def main() -> int:
         draft = _seed_contractor_rate(
             db, rate_svc,
             contractor_id=int(c_acme.id),
-            rate_master_id=int(rm_welder_active.id),
+            part_master_id=int(rm_welder_active.id),
             negotiated_rate="115.00",
             initial_rate="130.00",
             effective_from=today + timedelta(days=1),
@@ -671,7 +697,7 @@ def main() -> int:
         zen_welder = _seed_contractor_rate(
             db, rate_svc,
             contractor_id=int(c_zen.id),
-            rate_master_id=int(rm_welder_active.id),
+            part_master_id=int(rm_welder_active.id),
             negotiated_rate="118.00",
             initial_rate="125.00",
             effective_from=today - timedelta(days=5),
@@ -708,7 +734,7 @@ def main() -> int:
         approved = _seed_contractor_rate(
             db, rate_svc,
             contractor_id=int(c_acme.id),
-            rate_master_id=int(rm_electrician.id),
+            part_master_id=int(rm_electrician.id),
             negotiated_rate="800.00",
             initial_rate="900.00",  # vendor opened at 900; we shaved 100 off
             effective_from=today - timedelta(days=10),
@@ -745,7 +771,7 @@ def main() -> int:
         pending = _seed_contractor_rate(
             db, rate_svc,
             contractor_id=int(c_zen.id),
-            rate_master_id=int(rm_helper.id),
+            part_master_id=int(rm_helper.id),
             negotiated_rate="55.00",
             initial_rate="65.00",
             effective_from=today + timedelta(days=2),
@@ -763,7 +789,7 @@ def main() -> int:
         rejected = _seed_contractor_rate(
             db, rate_svc,
             contractor_id=int(c_orion.id),
-            rate_master_id=int(rm_welder_active.id),
+            part_master_id=int(rm_welder_active.id),
             negotiated_rate="98.00",
             initial_rate="125.00",  # vendor's opening ask before getting rejected
             effective_from=today + timedelta(days=3),
@@ -801,7 +827,7 @@ def main() -> int:
         multi = _seed_contractor_rate(
             db, rate_svc,
             contractor_id=int(c_zen.id),
-            rate_master_id=int(rm_welder_plant_b.id),
+            part_master_id=int(rm_welder_plant_b.id),
             negotiated_rate="125.00",  # vendor's opening ask
             initial_rate="125.00",
             effective_from=today,
@@ -870,8 +896,8 @@ def main() -> int:
 
         # ---- 4. Print summary --------------------------------------------------
 
-        n_rate_masters = int(
-            db.scalar(select(func.count()).select_from(RateMaster)) or 0
+        n_part_masters = int(
+            db.scalar(select(func.count()).select_from(PartMaster)) or 0
         )
         n_rates = int(
             db.scalar(select(func.count()).select_from(ContractorRate)) or 0
@@ -883,7 +909,7 @@ def main() -> int:
             db.scalar(select(func.count()).select_from(ContractorRateAuditLog)) or 0
         )
         n_master_audits = int(
-            db.scalar(select(func.count()).select_from(RateMasterAuditLog)) or 0
+            db.scalar(select(func.count()).select_from(PartMasterAuditLog)) or 0
         )
         by_status: dict[str, int] = {}
         for status, count in db.execute(
@@ -895,13 +921,13 @@ def main() -> int:
 
         print()
         print("=" * 72)
-        print("Rate-master + negotiation seed complete")
+        print("Part master + negotiation seed complete")
         print("=" * 72)
         print(f"Plants used (PLANT org_units): {len(plants)}")
         print(f"Approval workflow mapped for {ACTION_CODE_CREATE}: "
               f"{'yes (id=' + str(wf.id) + ')' if wf else 'no — skipped (no approver role)'}")
         print()
-        print(f"rate_master rows                  : {n_rate_masters}")
+        print(f"part_master rows                  : {n_part_masters}")
         print(f"  • new rows added this run       : "
               f"{len([rm_welder_active, rm_welder_old, rm_electrician, rm_helper, rm_future, rm_welder_plant_b, rm_expired])}")
         print(f"contractor_rates rows             : {n_rates}")
@@ -910,14 +936,14 @@ def main() -> int:
             print(f"    - {s:<18} : {by_status.get(s, 0)}")
         print(f"negotiation_logs rows             : {n_rounds}")
         print(f"contractor_rate_audit_logs rows   : {n_rate_audits}")
-        print(f"rate_master_audit_logs rows       : {n_master_audits}")
+        print(f"part_master_audit_logs rows       : {n_master_audits}")
         print()
         print("Demo accounts (password from seed_admin_test_data.py — default 'TestPass123!'):")
         print("  • ctr_manager     — creates / negotiates rates")
         print("  • rate_approver   — sees pending rate approvals in My Tasks")
         print()
         print("Try in the UI:")
-        print("  • /dashboard/rate-master       (filter by plant / skill / job)")
+        print("  • /dashboard/part-master       (filter by plant / part / pricing)")
         print("  • /dashboard/negotiated-rates  (workspace KPIs + table)")
         print(f"  • /dashboard/contractors/{c_acme.id}?tab=rates  (per-contractor rates tab)")
         print(f"  • /dashboard/contractors/{c_zen.id}?tab=rates&focus={multi.id} (deep-link)")

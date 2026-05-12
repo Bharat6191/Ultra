@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from core.permissions import require_any_permission, require_permission
 from db.session import get_db
 from modules.org_units.model import OrgUnit
-from modules.org_units.schema import OrgUnitCreate, OrgUnitPublic
+from modules.org_units.schema import OrgUnitCreate, OrgUnitPatch, OrgUnitPublic
 from modules.org_units.service import OrgUnitService
 
 router = APIRouter(prefix="/org-units", tags=["admin", "org-units"])
@@ -26,6 +26,8 @@ def list_org_units(
         Depends(
             require_any_permission(
                 "org_units.view",
+                "org_units.update",
+                "org_units.delete",
                 "users.create",
                 "users.update",
                 "roles.create",
@@ -37,11 +39,11 @@ def list_org_units(
                 "contractor.view",
                 "contractor.update",
                 "contractor.manage_plants",
-                # Rate master + negotiated rates UIs need the plant catalog for
+                # Part master + negotiated rates UIs need the plant catalog for
                 # plant filters / picker on the create / edit dialog.
-                "rate_master.view",
-                "rate_master.create",
-                "rate_master.update",
+                "part_master.view",
+                "part_master.create",
+                "part_master.update",
                 "contractor_rates.view",
                 "contractor_rates.create",
                 "contractor_rates.update",
@@ -63,3 +65,13 @@ def create_org_unit(
     _: Annotated[object, Depends(require_permission("org_units.create"))],
 ) -> OrgUnit:
     return svc.create_org_unit(payload)
+
+
+@router.patch("/{org_unit_id}", response_model=OrgUnitPublic)
+def patch_org_unit(
+    org_unit_id: int,
+    payload: OrgUnitPatch,
+    svc: Annotated[OrgUnitService, Depends(get_org_unit_service)],
+    _: Annotated[object, Depends(require_permission("org_units.update"))],
+) -> OrgUnit:
+    return svc.update_org_unit(int(org_unit_id), payload)

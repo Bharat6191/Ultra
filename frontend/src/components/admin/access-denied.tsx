@@ -8,7 +8,7 @@ export function AccessDenied({ message }: { message: string }) {
         <CardDescription>{message}</CardDescription>
       </CardHeader>
       <CardContent className="text-sm text-muted-foreground">
-        You do not have permission to view this page. Contact an administrator if you need access.
+        Contact an administrator if you need access.
       </CardContent>
     </Card>
   )

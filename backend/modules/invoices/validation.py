@@ -7,7 +7,8 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from modules.contractor_rates.models import ContractorRate, RateMaster
+from modules.contractor_rates.models import ContractorRate
+from modules.part_master.pricing import amount_from_snapshot
 from modules.invoices.models import Invoice, InvoiceLine, InvoiceValidationIssue
 from modules.settings.lookup import get_setting
 from modules.work_orders.models import WorkOrderItem, WorkOrderItemProgress, WorkOrderContractor, WorkOrder
@@ -251,12 +252,24 @@ class InvoiceValidationEngine:
 
             planned_contract_value = Decimal("0")
             if item.progress_type == "quantity" and item.planned_quantity is not None:
-                planned_contract_value = _dec(item.planned_quantity) * expected_rate
+                planned_contract_value = amount_from_snapshot(
+                    quantity=_dec(item.planned_quantity),
+                    resolved_rate=expected_rate,
+                    snapshot=item.pricing_snapshot,
+                )
             elif item.progress_type == "percentage":
                 if item.planned_percentage is not None:
-                    planned_contract_value = expected_rate * (_dec(item.planned_percentage) / Decimal("100"))
+                    planned_contract_value = amount_from_snapshot(
+                        quantity=_dec(item.planned_percentage) / Decimal("100"),
+                        resolved_rate=expected_rate,
+                        snapshot=item.pricing_snapshot,
+                    )
                 else:
-                    planned_contract_value = expected_rate
+                    planned_contract_value = amount_from_snapshot(
+                        quantity=Decimal("1"),
+                        resolved_rate=expected_rate,
+                        snapshot=item.pricing_snapshot,
+                    )
             if planned_contract_value > 0:
                 perm_value_line = planned_contract_value * (Decimal("1") + (tol / Decimal("100")))
                 cumulative_value = prev_amt_dec + _dec(line.amount)
@@ -291,15 +304,19 @@ class InvoiceValidationEngine:
                         metadata={"previous_invoiced_qty": str(prev_qty_dec)},
                     )
 
-            # Amount calc guardrail.
-            calc = _q2(_dec(line.quantity) * expected_rate)
-            if _q2(_dec(line.amount)) != calc:
+            # Amount calc guardrail (commercial engine vs naive qty×rate).
+            calc = amount_from_snapshot(
+                quantity=_dec(line.quantity),
+                resolved_rate=expected_rate,
+                snapshot=item.pricing_snapshot,
+            )
+            if _q2(_dec(line.amount)) != _q2(calc):
                 add_issue(
                     line_id=int(line.id),
                     code="AMOUNT_MISMATCH",
                     severity="warning",
-                    message="Line amount does not match quantity × approved rate.",
-                    allowed_value=calc,
+                    message="Line amount does not match commercial calculation for this part.",
+                    allowed_value=_q2(calc),
                     actual_value=_q2(_dec(line.amount)),
                 )
 

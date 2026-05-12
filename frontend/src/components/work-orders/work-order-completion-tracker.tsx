@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils"
 
 export type LineCompletion = {
   progress_type: string
-  unit: string
+  unit_type: string
   approved_quantity: number | null
   approved_percentage: number | null
   completed_quantity: number | null
@@ -31,9 +31,9 @@ export type LineCompletion = {
 
 export type LineWithCompletion = {
   id: number
-  job_type: string
-  skill_type: string
-  unit: string
+  part_code: string | null
+  part_name: string | null
+  unit_type: string
   progress_type: string
   planned_quantity: string | number | null
   planned_percentage: string | number | null
@@ -189,13 +189,15 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
   return (
     <Card className="overflow-hidden border-border/80">
       <CardHeader className="border-b bg-muted/20 py-3">
-        <CardTitle className="text-sm font-semibold">{item.job_type} · {String(item.skill_type).replace(/_/g, " ")}</CardTitle>
+        <CardTitle className="text-sm font-semibold">
+          <span className="font-mono text-xs">{item.part_code ?? "—"}</span> · {item.part_name ?? "—"}
+        </CardTitle>
         <CardDescription className="text-xs">{contractorLabel} · SR {lineSr}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-4">
         <div className="space-y-1.5">
           <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-            <span>Approved qty: <span className="font-medium tabular-nums text-foreground">{denomOk ? approved : "—"}</span> {item.unit}</span>
+            <span>Approved qty: <span className="font-medium tabular-nums text-foreground">{denomOk ? approved : "—"}</span> {item.unit_type}</span>
             {typeof c.remaining_quantity === "number" ? (
               <span>
                 Remaining: <span className="font-medium tabular-nums text-foreground">{c.remaining_quantity}</span>
@@ -218,7 +220,7 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
           {(item.progress_type === "quantity" || (item.progress_type === "percentage" && denomOk)) ? (
             <div className="grid gap-1.5">
               <Label htmlFor={`cq-${item.id}`} className="text-xs">
-                Completed qty ({item.unit})
+                Completed qty ({item.unit_type})
               </Label>
               <Input
                 id={`cq-${item.id}`}
@@ -435,7 +437,7 @@ export function WorkOrderLineCompletionInline({ item, onSaved }: LineEditorProps
     <div className="rounded-md border border-border/60 bg-background px-2 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-[11px] text-muted-foreground">
-          Appr: <span className="font-medium tabular-nums text-foreground">{denomOk ? approved : "—"}</span> {item.unit}
+          Appr: <span className="font-medium tabular-nums text-foreground">{denomOk ? approved : "—"}</span> {item.unit_type}
           <span className="mx-2 text-muted-foreground/60">•</span>
           Rem:{" "}
           <span className="font-medium tabular-nums text-foreground">

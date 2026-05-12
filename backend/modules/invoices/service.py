@@ -25,6 +25,7 @@ from modules.invoices.validation import (
     invoice_tolerance_percentage,
 )
 from modules.org_units.model import OrgUnit
+from modules.part_master.pricing import amount_from_snapshot
 from modules.work_orders.models import WorkOrder, WorkOrderContractor, WorkOrderItem
 from modules.work_orders.service import WorkOrderService
 
@@ -135,7 +136,7 @@ class InvoiceService:
                 raise ConflictError("Invoice contractor does not match work order contractor assignment.")
 
             rate = _dec(ln.rate) if ln.rate is not None else _dec(item.resolved_rate)
-            amount = _q2(_dec(ln.quantity) * rate)
+            amount = amount_from_snapshot(quantity=_dec(ln.quantity), resolved_rate=rate, snapshot=item.pricing_snapshot)
             tax_pct = _dec(ln.tax_pct) if ln.tax_pct is not None else Decimal("0")
             gross = _q2(amount * (Decimal("1") + tax_pct / Decimal("100")))
             row = InvoiceLine(
@@ -147,7 +148,7 @@ class InvoiceService:
                 tax_pct=tax_pct if tax_pct != Decimal("0") else None,
                 rate_source=item.rate_source,
                 resolved_contractor_rate_id=int(item.contractor_rate_id) if item.contractor_rate_id is not None else None,
-                resolved_rate_master_id=int(item.rate_master_id),
+                resolved_part_master_id=int(item.part_master_id),
                 notes=ln.notes or None,
             )
             self._db.add(row)
@@ -334,12 +335,20 @@ class InvoiceService:
                     rate = Decimal(str(it.resolved_rate))
                     planned_contract_val = Decimal("0")
                     if str(it.progress_type) == "quantity" and pq is not None:
-                        planned_contract_val = pq * rate
+                        planned_contract_val = amount_from_snapshot(
+                            quantity=pq, resolved_rate=rate, snapshot=it.pricing_snapshot
+                        )
                     elif str(it.progress_type) == "percentage":
                         if it.planned_percentage is not None:
-                            planned_contract_val = rate * (Decimal(str(it.planned_percentage)) / Decimal("100"))
+                            planned_contract_val = amount_from_snapshot(
+                                quantity=Decimal(str(it.planned_percentage)) / Decimal("100"),
+                                resolved_rate=rate,
+                                snapshot=it.pricing_snapshot,
+                            )
                         else:
-                            planned_contract_val = rate
+                            planned_contract_val = amount_from_snapshot(
+                                quantity=Decimal("1"), resolved_rate=rate, snapshot=it.pricing_snapshot
+                            )
                     perm_val = _q2(planned_contract_val * (Decimal("1") + tol / Decimal("100"))) if planned_contract_val > 0 else Decimal("0")
                     prev_qty = Decimal(str(prev_qty_raw or 0))
                     prev_amt = Decimal(str(prev_amt_raw or 0))
@@ -355,9 +364,10 @@ class InvoiceService:
                             "work_order_number": wo.work_order_number,
                             "work_order_item_id": int(it.id),
                             "contractor_id": int(contractor_id),
-                            "job_type": it.job_type,
-                            "skill_type": it.skill_type,
-                            "unit": it.unit,
+                            "part_code": (it.pricing_snapshot or {}).get("part_code"),
+                            "part_name": (it.pricing_snapshot or {}).get("part_name"),
+                            "unit_type": (it.pricing_snapshot or {}).get("unit_type"),
+                            "pricing_method": (it.pricing_snapshot or {}).get("pricing_method"),
                             "progress_type": it.progress_type,
                             "approved_quantity": proj.get("approved_quantity"),
                             "approved_percentage": proj.get("approved_percentage"),

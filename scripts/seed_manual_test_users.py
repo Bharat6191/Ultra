@@ -89,12 +89,14 @@ def main() -> int:
     db = SessionLocal()
     try:
         role = db.scalars(select(Role).order_by(Role.id.asc())).first()
-        org = db.scalars(select(OrgUnit).order_by(OrgUnit.id.asc())).first()
+        org = db.scalars(
+            select(OrgUnit).where(OrgUnit.type == "PLANT").order_by(OrgUnit.id.asc())
+        ).first()
         if role is None:
             print("error: no Role rows found. Create a role in the admin UI or seed the DB.", file=sys.stderr)
             return 3
         if org is None:
-            print("error: no OrgUnit rows found. Run migrations/sync_modules as in README.", file=sys.stderr)
+            print("error: no PLANT org unit found. Run migrations/sync_modules as in README.", file=sys.stderr)
             return 4
 
         seeds = [

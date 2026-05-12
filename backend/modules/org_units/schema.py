@@ -11,6 +11,15 @@ class OrgUnitCreate(BaseModel):
     parent_id: int | None = None
 
 
+class OrgUnitPatch(BaseModel):
+    """Partial update (omit fields you do not want to change)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    parent_id: int | None = None
+
+
 class OrgUnitPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -42,7 +42,7 @@ const shellNavItems: ShellNavItem[] = [
   },
   {
     id: "plants",
-    label: "Plants",
+    label: "Clusters & plants",
     icon: Factory,
     to: "/dashboard/plants",
     permission: ["org_units.view", "org_units.create", "org_units.update", "org_units.delete"],
@@ -76,11 +76,11 @@ const shellNavItems: ShellNavItem[] = [
     permission: "contractor.view",
   },
   {
-    id: "rate-master",
-    label: "Rate master",
+    id: "part-master",
+    label: "Part master",
     icon: BadgeIndianRupee,
-    to: "/dashboard/rate-master",
-    permission: ["rate_master.view", "rate_master.create", "rate_master.update"],
+    to: "/dashboard/part-master",
+    permission: ["part_master.view", "part_master.create", "part_master.update"],
   },
   {
     id: "negotiated-rates",
@@ -160,7 +160,7 @@ export function AppShellLayout({
           onRefreshProfile={onRefreshProfile}
         />
 
-        <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-6 py-6">
+        <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
           <div className="w-full">{children}</div>
         </main>
       </div>

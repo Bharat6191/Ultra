@@ -2,7 +2,7 @@ import * as React from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
-import type { ContractorLite, ExecutionDraftLine, OrgUnitLite, RateMasterLite } from "@/components/work-orders/work-order-execution-ui"
+import type { ContractorLite, ExecutionDraftLine, OrgUnitLite, PartMasterLite } from "@/components/work-orders/work-order-execution-ui"
 import {
   draftLinesToContractors,
   newDraftLine,
@@ -23,7 +23,7 @@ export function WorkOrderCreatePage() {
   const [loadError, setLoadError] = React.useState<string | null>(null)
 
   const [contractors, setContractors] = React.useState<ContractorLite[]>([])
-  const [rateMasters, setRateMasters] = React.useState<RateMasterLite[]>([])
+  const [partMasters, setPartMasters] = React.useState<PartMasterLite[]>([])
   const [plants, setPlants] = React.useState<OrgUnitLite[]>([])
 
   const [busy, setBusy] = React.useState(false)
@@ -41,18 +41,18 @@ export function WorkOrderCreatePage() {
       try {
         const [clist, rms, plist] = await Promise.all([
           getJson<ContractorLite[]>("/contractors/lookup?limit=200&status=active").catch(() => []),
-          getJson<RateMasterLite[]>("/rate-master?active=true").catch(() => []),
+          getJson<PartMasterLite[]>("/part-master?active=true").catch(() => []),
           canListOrgUnitsForAssignments()
             ? getJson<OrgUnitLite[]>("/admin/org-units?type=PLANT").catch(() => [])
             : Promise.resolve([]),
         ])
         setContractors(clist)
-        setRateMasters(Array.isArray(rms) ? rms : [])
+        setPartMasters(Array.isArray(rms) ? rms : [])
         setPlants(plist)
       } catch (e) {
         setLoadError(e instanceof Error ? e.message : "Failed to load dropdowns")
         setContractors([])
-        setRateMasters([])
+        setPartMasters([])
         setPlants([])
       } finally {
         setLoading(false)
@@ -154,7 +154,7 @@ export function WorkOrderCreatePage() {
         loading={loading}
         org_unit_id={org_unit_id}
         contractors={contractors}
-        rateMasters={rateMasters}
+        partMasters={partMasters}
         lines={lines}
         onLinesChange={setLines}
       />

@@ -26,10 +26,10 @@ type WorkOrderPublic = {
     contractor_id: number
     items?: {
       id: number
-      rate_master_id: number
-      job_type: string
-      skill_type: string
-      unit: string
+      part_master_id: number
+      part_code?: string | null
+      part_name?: string | null
+      unit_type?: string | null
       progress_type: string
       planned_quantity: string | number | null
       planned_percentage: string | number | null
@@ -76,12 +76,17 @@ function buildDetailRows(row: WorkOrderPublic, contractorName: (id: number) => s
         if (Number.isFinite(q) && Number.isFinite(rateN)) invoiceDisplay = fmtMoney(q * rateN)
       }
 
+      const lineLabel =
+        it.part_code || it.part_name
+          ? `${it.part_code ?? "—"} · ${it.part_name ?? "—"}`
+          : "—"
+
       out.push({
         sr,
         contractor_label: contractorName(c.contractor_id),
-        job_label: `${it.job_type} · ${String(it.skill_type).replace(/_/g, " ")}`,
+        job_label: lineLabel,
         qty_display: qtyDisplay,
-        unit_display: it.unit ?? "—",
+        unit_display: it.unit_type ?? "—",
         rate_display: rateDisplay,
         invoice_display: invoiceDisplay,
         remarks_display: it.notes?.trim() ? it.notes : "—",
@@ -127,9 +132,11 @@ function FallbackExecutionTable({ payload }: { payload: Record<string, unknown> 
                   ? `#${String(ln.contractor_id)}`
                   : "—"
             const job =
-              typeof ln.job_type === "string" && typeof ln.skill_type === "string"
-                ? `${ln.job_type} · ${String(ln.skill_type).replace(/_/g, " ")}`
-                : "—"
+              typeof ln.part_code === "string" || typeof ln.part_name === "string"
+                ? `${String(ln.part_code ?? "—")} · ${String(ln.part_name ?? "—")}`
+                : typeof ln.job_type === "string" && typeof ln.skill_type === "string"
+                  ? `${ln.job_type} · ${String(ln.skill_type).replace(/_/g, " ")}`
+                  : "—"
             const prog = typeof ln.progress_type === "string" ? ln.progress_type : ""
             const qty =
               prog === "percentage"
@@ -139,7 +146,12 @@ function FallbackExecutionTable({ payload }: { payload: Record<string, unknown> 
                 : ln.planned_quantity != null && String(ln.planned_quantity) !== ""
                   ? String(ln.planned_quantity)
                   : "—"
-            const unit = typeof ln.unit === "string" ? ln.unit : "—"
+            const unit =
+              typeof ln.unit_type === "string"
+                ? ln.unit_type
+                : typeof ln.unit === "string"
+                  ? ln.unit
+                  : "—"
             const rr = ln.resolved_rate != null ? String(ln.resolved_rate) : "—"
             const mr = ln.master_rate != null ? String(ln.master_rate) : "—"
             const src = typeof ln.rate_source === "string" ? ln.rate_source : "—"
@@ -344,7 +356,7 @@ export function WorkOrderApprovalReview(props: {
         loading={false}
         org_unit_id={String(row.org_unit_id)}
         contractors={contractors}
-        rateMasters={[]}
+        partMasters={[]}
         lines={[newDraftLine()]}
         onLinesChange={() => {}}
         detailRows={detailRows}
@@ -363,8 +375,11 @@ type OverridePayload = {
   override_rate?: string | null
   override_reason?: string | null
   line?: {
+    part_code?: string
+    part_name?: string
     job_type?: string
     skill_type?: string
+    unit_type?: string
     unit?: string
     progress_type?: string
     planned_quantity?: string | null
@@ -378,9 +393,11 @@ export function WorkOrderRateOverrideApprovalReview(props: { payload: Record<str
   const p = props.payload as OverridePayload
   const line = p.line ?? {}
   const jobLabel =
-    typeof line.job_type === "string" && typeof line.skill_type === "string"
-      ? `${line.job_type} · ${String(line.skill_type).replace(/_/g, " ")}`
-      : "—"
+    typeof line.part_code === "string" || typeof line.part_name === "string"
+      ? `${String(line.part_code ?? "—")} · ${String(line.part_name ?? "—")}`
+      : typeof line.job_type === "string" && typeof line.skill_type === "string"
+        ? `${line.job_type} · ${String(line.skill_type).replace(/_/g, " ")}`
+        : "—"
   const qty =
     line.progress_type === "percentage"
       ? line.planned_percentage != null && String(line.planned_percentage) !== ""
@@ -422,7 +439,12 @@ export function WorkOrderRateOverrideApprovalReview(props: { payload: Record<str
           <TableRow>
             <TableCell className="align-top text-muted-foreground">Qty / coverage</TableCell>
             <TableCell className="tabular-nums">
-              {qty} {typeof line.unit === "string" ? `· ${line.unit}` : ""}
+              {qty}{" "}
+              {typeof line.unit_type === "string"
+                ? `· ${line.unit_type}`
+                : typeof line.unit === "string"
+                  ? `· ${line.unit}`
+                  : ""}
             </TableCell>
           </TableRow>
           <TableRow>

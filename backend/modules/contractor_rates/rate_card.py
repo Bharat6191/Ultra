@@ -1,8 +1,8 @@
-"""Unified Rate Card view (3.4 Rate Master & Benchmark Control).
+"""Unified Rate Card view (3.4 Part Master & benchmark control).
 
 This is intentionally a derived view (no new table). Each row joins:
 
-* one ``rate_master`` (the plant + job/skill/unit baseline)
+* one ``part_master`` row (the plant + part commercial baseline)
 * an optional active or most-recent ``contractor_rates`` row for the requested
   contractor
 * the previous approved ``contractor_rates`` row for the pair (for variance)
@@ -31,9 +31,12 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from modules.contractor.models import Contractor
-from modules.contractor_rates.models import ContractorRate, RateMaster
-from modules.contractor_rates.service import ContractorRateService, RateMasterService
+from modules.contractor_rates.models import ContractorRate
+from modules.part_master.models import PartMaster
+from modules.contractor_rates.service import ContractorRateService
+from modules.part_master.service import PartMasterService
 from modules.errors import NotFoundError
+from modules.org_units.hierarchy import collect_plant_ids_under_scope
 from modules.org_units.model import OrgUnit
 
 
@@ -102,10 +105,12 @@ class NegotiatedRateSummary:
 
 @dataclass
 class RateCardRow:
-    rate_master_id: int
-    job_type: str
-    skill_type: str
-    unit: str
+    part_master_id: int
+    part_code: str
+    part_name: str
+    unit_type: str
+    pricing_method: str
+    rate_unit_type: str
     org_unit_id: int
     org_unit_name: str | None
     base_rate: Decimal
@@ -159,7 +164,7 @@ class RateCardService:
 
     def __init__(self, db: Session) -> None:
         self._db = db
-        self._rm_svc = RateMasterService(db)
+        self._rm_svc = PartMasterService(db)
         self._rate_svc = ContractorRateService(db)
 
     # ------------------------------------------------------------------
@@ -167,7 +172,7 @@ class RateCardService:
     # ------------------------------------------------------------------
 
     def _current_contractor_rate(
-        self, contractor_id: int, rate_master_id: int, today: date
+        self, contractor_id: int, part_master_id: int, today: date
     ) -> ContractorRate | None:
         """Most relevant contractor rate for a (contractor, rate_master).
 
@@ -181,7 +186,7 @@ class RateCardService:
             select(ContractorRate)
             .where(
                 ContractorRate.contractor_id == int(contractor_id),
-                ContractorRate.rate_master_id == int(rate_master_id),
+                ContractorRate.part_master_id == int(part_master_id),
                 ContractorRate.status == "approved",
                 ContractorRate.effective_from <= today,
                 or_(
@@ -201,7 +206,7 @@ class RateCardService:
             select(ContractorRate)
             .where(
                 ContractorRate.contractor_id == int(contractor_id),
-                ContractorRate.rate_master_id == int(rate_master_id),
+                ContractorRate.part_master_id == int(part_master_id),
                 ContractorRate.status.in_(("approved", "expired")),
             )
             .order_by(ContractorRate.effective_from.desc(), ContractorRate.id.desc())
@@ -216,7 +221,7 @@ class RateCardService:
             select(ContractorRate)
             .where(
                 ContractorRate.contractor_id == int(contractor_id),
-                ContractorRate.rate_master_id == int(rate_master_id),
+                ContractorRate.part_master_id == int(part_master_id),
             )
             .order_by(ContractorRate.updated_at.desc(), ContractorRate.id.desc())
             .limit(1)
@@ -226,7 +231,7 @@ class RateCardService:
     def _previous_contractor_rate(
         self,
         contractor_id: int,
-        rate_master_id: int,
+        part_master_id: int,
         *,
         before_id: int | None,
     ) -> ContractorRate | None:
@@ -234,7 +239,7 @@ class RateCardService:
             select(ContractorRate)
             .where(
                 ContractorRate.contractor_id == int(contractor_id),
-                ContractorRate.rate_master_id == int(rate_master_id),
+                ContractorRate.part_master_id == int(part_master_id),
                 ContractorRate.status.in_(("approved", "expired")),
             )
             .order_by(
@@ -266,23 +271,19 @@ class RateCardService:
         *,
         plant_id: int | None = None,
         contractor_id: int | None = None,
-        rate_master_id: int | None = None,
-        job_type: str | None = None,
-        skill_type: str | None = None,
-        unit: str | None = None,
+        part_master_id: int | None = None,
+        part_code: str | None = None,
         active_base_only: bool = True,
         today: date | None = None,
     ) -> list[RateCardRow]:
-        """Build the unified rate card.
+        """Build the unified commercial comparison grid.
 
         Filters:
-            plant_id        – limit to one plant
+            plant_id        – limit to one plant, or expand a cluster to all plants under it
             contractor_id   – join the named contractor's negotiated rate
-            rate_master_id  – return exactly this base rate row (ignores ``active_base_only``)
-            job_type        – ``ilike '%...%'``
-            skill_type      – exact (lower-cased)
-            unit            – exact (lower-cased)
-            active_base_only– only include base rates that are currently active
+            part_master_id  – return exactly this part row (ignores ``active_base_only``)
+            part_code       – match part code or name (case-insensitive)
+            active_base_only– only include parts that are currently active
                               (default True; pass False to also see retired bases)
         """
         d = today or date.today()
@@ -294,26 +295,30 @@ class RateCardService:
             if contractor_obj is None:
                 raise NotFoundError("Contractor", contractor_id)
 
-        rm_stmt = select(RateMaster)
-        if rate_master_id is not None:
-            rm_stmt = rm_stmt.where(RateMaster.id == int(rate_master_id))
+        plant_ids: list[int] | None = None
+        if plant_id is not None and part_master_id is None:
+            plant_ids = collect_plant_ids_under_scope(self._db, int(plant_id))
+            if not plant_ids:
+                return []
+
+        rm_stmt = select(PartMaster)
+        if part_master_id is not None:
+            rm_stmt = rm_stmt.where(PartMaster.id == int(part_master_id))
         else:
-            if plant_id is not None:
-                rm_stmt = rm_stmt.where(RateMaster.org_unit_id == int(plant_id))
-            if job_type:
-                rm_stmt = rm_stmt.where(RateMaster.job_type.ilike(f"%{job_type.strip()}%"))
-            if skill_type:
-                rm_stmt = rm_stmt.where(RateMaster.skill_type == skill_type.strip().lower())
-            if unit:
-                rm_stmt = rm_stmt.where(RateMaster.unit == unit.strip().lower())
+            if plant_ids is not None:
+                rm_stmt = rm_stmt.where(PartMaster.org_unit_id.in_(plant_ids))
+            if part_code:
+                q = part_code.strip()
+                rm_stmt = rm_stmt.where(
+                    (PartMaster.part_code.ilike(f"%{q}%")) | (PartMaster.part_name.ilike(f"%{q}%"))
+                )
             if active_base_only:
-                rm_stmt = rm_stmt.where(RateMaster.is_active.is_(True))
+                rm_stmt = rm_stmt.where(PartMaster.is_active.is_(True))
         rm_stmt = rm_stmt.order_by(
-            RateMaster.org_unit_id.asc(),
-            RateMaster.job_type.asc(),
-            RateMaster.skill_type.asc(),
-            RateMaster.unit.asc(),
-            RateMaster.effective_from.desc(),
+            PartMaster.org_unit_id.asc(),
+            PartMaster.part_code.asc(),
+            PartMaster.part_name.asc(),
+            PartMaster.effective_from.desc(),
         )
         rate_masters = list(self._db.scalars(rm_stmt).all())
 
@@ -324,12 +329,12 @@ class RateCardService:
             stmt = (
                 select(ContractorRate, Contractor.name)
                 .join(Contractor, ContractorRate.contractor_id == Contractor.id)
-                .where(ContractorRate.rate_master_id.in_(rm_ids))
+                .where(ContractorRate.part_master_id.in_(rm_ids))
             )
             for cr, cname in self._db.execute(stmt).all():
                 cid = int(cr.contractor_id)
                 contractor_names[cid] = str(cname)
-                cr_bucket.setdefault(int(cr.rate_master_id), {}).setdefault(cid, []).append(cr)
+                cr_bucket.setdefault(int(cr.part_master_id), {}).setdefault(cid, []).append(cr)
 
         plant_cache: dict[int, OrgUnit] = {}
 
@@ -409,10 +414,12 @@ class RateCardService:
 
             out.append(
                 RateCardRow(
-                    rate_master_id=int(rm.id),
-                    job_type=rm.job_type,
-                    skill_type=rm.skill_type,
-                    unit=rm.unit,
+                    part_master_id=int(rm.id),
+                    part_code=rm.part_code,
+                    part_name=rm.part_name,
+                    unit_type=rm.unit_type,
+                    pricing_method=rm.pricing_method,
+                    rate_unit_type=rm.rate_unit_type,
                     org_unit_id=int(rm.org_unit_id),
                     org_unit_name=org.name if org else None,
                     base_rate=Decimal(rm.base_rate),
@@ -443,10 +450,8 @@ class RateCardService:
         *,
         plant_id: int | None = None,
         contractor_id: int | None = None,
-        rate_master_id: int | None = None,
-        job_type: str | None = None,
-        skill_type: str | None = None,
-        unit: str | None = None,
+        part_master_id: int | None = None,
+        part_code: str | None = None,
         active_base_only: bool = True,
         today: date | None = None,
     ) -> dict[str, Any]:
@@ -454,10 +459,8 @@ class RateCardService:
         rows = self.get_rate_card(
             plant_id=plant_id,
             contractor_id=contractor_id,
-            rate_master_id=rate_master_id,
-            job_type=job_type,
-            skill_type=skill_type,
-            unit=unit,
+            part_master_id=part_master_id,
+            part_code=part_code,
             active_base_only=active_base_only,
             today=today,
         )

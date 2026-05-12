@@ -9,11 +9,14 @@ import { cn } from "@/lib/utils"
 export type OrgUnitLite = { id: number; name: string }
 export type ContractorLite = { id: number; name: string }
 
-export type RateMasterLite = {
+export type PartMasterLite = {
   id: number
-  job_type: string
-  skill_type: string
-  unit: string
+  part_code: string
+  part_name: string
+  unit_type: string
+  pricing_method: string
+  rate_unit_type: string
+  weight_per_piece: number | string | null
   base_rate: number | string
   org_unit_id: number
 }
@@ -21,7 +24,7 @@ export type RateMasterLite = {
 export type ExecutionDraftLine = {
   key: string
   contractor_id: string
-  rate_master_id: string
+  part_master_id: string
   progress_type: "quantity" | "percentage"
   qty: string
   remarks: string
@@ -45,7 +48,7 @@ export type WorkOrderLikeForLines = {
     contractor_id: number
     items?: {
       id: number
-      rate_master_id: number
+      part_master_id: number
       progress_type: string
       planned_quantity: string | number | null
       planned_percentage: string | number | null
@@ -62,7 +65,7 @@ export function flattenWorkOrderToDraftLines(row: WorkOrderLikeForLines): Execut
       out.push({
         key: `i-${it.id}`,
         contractor_id: String(c.contractor_id),
-        rate_master_id: String(it.rate_master_id),
+        part_master_id: String(it.part_master_id),
         progress_type: pct ? "percentage" : "quantity",
         qty: pct
           ? it.planned_percentage != null && String(it.planned_percentage) !== ""
@@ -82,26 +85,25 @@ export function newDraftLine(): ExecutionDraftLine {
   return {
     key: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random()),
     contractor_id: "",
-    rate_master_id: "",
+    part_master_id: "",
     progress_type: "quantity",
     qty: "",
     remarks: "",
   }
 }
 
-export function rmLabel(rm: RateMasterLite): string {
-  const sk = String(rm.skill_type).replace(/_/g, " ")
-  return `${rm.job_type} · ${sk} · ${rm.unit}`
+export function partLabel(pm: PartMasterLite): string {
+  return `${pm.part_code} — ${pm.part_name} (${pm.pricing_method}/${pm.rate_unit_type})`
 }
 
-export function filteredRateMasters(rms: RateMasterLite[], orgUnitId: string): RateMasterLite[] {
-  if (!orgUnitId) return rms
-  return rms.filter((rm) => String(rm.org_unit_id) === String(orgUnitId))
+export function filteredPartMasters(pms: PartMasterLite[], orgUnitId: string): PartMasterLite[] {
+  if (!orgUnitId) return pms
+  return pms.filter((pm) => String(pm.org_unit_id) === String(orgUnitId))
 }
 
-export function pickRateMaster(rms: RateMasterLite[], id: string | number | undefined): RateMasterLite | undefined {
+export function pickPartMaster(pms: PartMasterLite[], id: string | number | undefined): PartMasterLite | undefined {
   if (id === "" || id === undefined) return undefined
-  return rms.find((r) => String(r.id) === String(id))
+  return pms.find((r) => String(r.id) === String(id))
 }
 
 function fmtMoney(n: number): string {
@@ -190,13 +192,13 @@ export function WorkOrderExecutionTable(props: {
   loading: boolean
   org_unit_id: string
   contractors: ContractorLite[]
-  rateMasters: RateMasterLite[]
+  partMasters: PartMasterLite[]
   lines: ExecutionDraftLine[]
   onLinesChange: (lines: ExecutionDraftLine[]) => void
   detailRows?: ExecutionDetailRow[]
 }) {
-  const { mode, loading, org_unit_id, contractors, rateMasters, lines, onLinesChange, detailRows } = props
-  const rms = filteredRateMasters(rateMasters, org_unit_id)
+  const { mode, loading, org_unit_id, contractors, partMasters, lines, onLinesChange, detailRows } = props
+  const pms = filteredPartMasters(partMasters, org_unit_id)
   const isEdit = mode === "edit"
   const hasCompletion = !isEdit && (detailRows ?? []).some((r) => Boolean(r.completionCell))
 
@@ -215,7 +217,7 @@ export function WorkOrderExecutionTable(props: {
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0 pb-4">
         <div className="space-y-1">
           <CardTitle className="text-base font-semibold tracking-tight">Execution sheet</CardTitle>
-          <CardDescription>Contractor + item/job + qty. Unit and governed rates auto-resolve from approved setup.</CardDescription>
+          <CardDescription>Contractor + part + qty. Unit and governed rates auto-resolve from approved setup.</CardDescription>
         </div>
         {isEdit ? (
           <Button
@@ -235,7 +237,7 @@ export function WorkOrderExecutionTable(props: {
             <tr className="border-b">
               <th className={th}>SR</th>
               <th className={th}>Contractor</th>
-              <th className={th}>Item / job</th>
+              <th className={th}>Part</th>
               <th className={cn(th, "w-20")}>Qty</th>
               <th className={cn(th, "w-24")}>Unit</th>
               <th className={cn(th, "w-28 text-right tabular-nums")}>Unit rate</th>
@@ -255,15 +257,15 @@ export function WorkOrderExecutionTable(props: {
             ) : null}
             {isEdit
               ? lines.map((line, idx) => {
-                  const rm = pickRateMaster(rms, line.rate_master_id)
+                  const pm = pickPartMaster(pms, line.part_master_id)
                   const qtyN = parseDecimal(line.qty)
-                  const rateN = rm ? parseDecimal(rm.base_rate) : NaN
+                  const rateN = pm ? parseDecimal(pm.base_rate) : NaN
                   const invoice =
                     line.progress_type === "quantity" && Number.isFinite(qtyN) && Number.isFinite(rateN)
                       ? qtyN * rateN
                       : NaN
-                  const unitShown = rm?.unit ?? "—"
-                  const rateShown = rm ? fmtMoney(rateN) : "—"
+                  const unitShown = pm?.unit_type ?? "—"
+                  const rateShown = pm ? fmtMoney(rateN) : "—"
                   const invShown = Number.isFinite(invoice) ? fmtMoney(invoice) : "—"
 
                   return (
@@ -287,14 +289,14 @@ export function WorkOrderExecutionTable(props: {
                       <td className="min-w-[180px] px-2 py-2 align-middle">
                         <select
                           className="h-9 w-full max-w-[260px] rounded-md border border-input bg-background px-2 text-xs outline-none"
-                          value={line.rate_master_id}
-                          onChange={(e) => updateLine(line.key, { rate_master_id: e.target.value })}
+                          value={line.part_master_id}
+                          onChange={(e) => updateLine(line.key, { part_master_id: e.target.value })}
                           disabled={loading || !org_unit_id}
                         >
                           <option value="">Select…</option>
-                          {rms.map((r) => (
+                          {pms.map((r) => (
                             <option key={r.id} value={String(r.id)}>
-                              {rmLabel(r)}
+                              {partLabel(r)}
                             </option>
                           ))}
                         </select>
@@ -409,7 +411,7 @@ export function draftLinesToContractors(
   contractor_id: number
   scope_notes: null
   items: {
-    rate_master_id: number
+    part_master_id: number
     progress_type: "quantity" | "percentage"
     planned_quantity: string | null
     planned_percentage: string | null
@@ -418,7 +420,7 @@ export function draftLinesToContractors(
 }[] {
   const byContractor = new Map<number, typeof lines>()
   for (const line of lines) {
-    if (!line.contractor_id.trim() || !line.rate_master_id.trim()) continue
+    if (!line.contractor_id.trim() || !line.part_master_id.trim()) continue
     const cid = Number(line.contractor_id)
     if (!Number.isFinite(cid)) continue
     const bucket = byContractor.get(cid) ?? []
@@ -431,7 +433,7 @@ export function draftLinesToContractors(
     items: ls.map((x) => {
       const pt = x.progress_type === "percentage" ? "percentage" : "quantity"
       return {
-        rate_master_id: Number(x.rate_master_id),
+        part_master_id: Number(x.part_master_id),
         progress_type: pt as "quantity" | "percentage",
         planned_quantity: pt === "quantity" ? (x.qty.trim() ? x.qty : null) : null,
         planned_percentage: pt === "percentage" ? (x.qty.trim() ? x.qty : null) : null,

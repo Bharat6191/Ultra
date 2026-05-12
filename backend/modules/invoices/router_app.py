@@ -22,6 +22,7 @@ from modules.invoices.schema import (
 from modules.invoices.service import InvoiceService
 from modules.invoices.models import InvoiceAttachment
 from modules.invoices.storage import save_invoice_attachment
+from modules.part_master.pricing import amount_from_snapshot
 from modules.work_orders.models import WorkOrder, WorkOrderContractor, WorkOrderItem
 
 
@@ -55,7 +56,22 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
     for l in inv.lines or []:
         qty = Decimal(str(l.quantity))
         rate_dec = Decimal(str(l.rate))
-        base_expect = _q2(qty * rate_dec)
+        wo_no: str | None = None
+        job_desc: str | None = None
+        wit = db.get(WorkOrderItem, int(l.work_order_item_id)) if db is not None else None
+        if wit is not None:
+            base_expect = amount_from_snapshot(
+                quantity=qty, resolved_rate=rate_dec, snapshot=wit.pricing_snapshot
+            )
+            ps = wit.pricing_snapshot or {}
+            job_desc = f"{ps.get('part_code') or ''} — {ps.get('part_name') or ''}".strip(" —")
+            woc = db.get(WorkOrderContractor, int(wit.work_order_contractor_id))
+            if woc is not None:
+                wo = db.get(WorkOrder, int(woc.work_order_id))
+                if wo is not None:
+                    wo_no = wo.work_order_number
+        else:
+            base_expect = _q2(qty * rate_dec)
         amt = Decimal(str(l.amount))
         var_hint = None
         if base_expect != 0:
@@ -65,17 +81,6 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
                 var_hint = None
         tp = Decimal(str(l.tax_pct or 0))
         gross = _q2(amt * (Decimal("1") + tp / Decimal("100")))
-        wo_no: str | None = None
-        job_desc: str | None = None
-        if db is not None:
-            wit = db.get(WorkOrderItem, int(l.work_order_item_id))
-            if wit is not None:
-                job_desc = f"{wit.job_type} / {wit.skill_type}"
-                woc = db.get(WorkOrderContractor, int(wit.work_order_contractor_id))
-                if woc is not None:
-                    wo = db.get(WorkOrder, int(woc.work_order_id))
-                    if wo is not None:
-                        wo_no = wo.work_order_number
         line_rows.append(
             {
                 "id": int(l.id),
@@ -90,7 +95,7 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
                 "job_description": job_desc,
                 "rate_source": l.rate_source,
                 "resolved_contractor_rate_id": l.resolved_contractor_rate_id,
-                "resolved_rate_master_id": l.resolved_rate_master_id,
+                "resolved_part_master_id": l.resolved_part_master_id,
                 "notes": l.notes,
                 "validation_line_status": _line_validation_status(inv, line_pk=int(l.id)),
             }

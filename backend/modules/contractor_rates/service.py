@@ -6,11 +6,11 @@ approval-engine integration stay consistent.
 Business invariants enforced here:
 
 * Only one ACTIVE (``status='approved'``) ``contractor_rate`` can exist per
-  ``(contractor_id, rate_master_id)`` at a time.
+  ``(contractor_id, part_master_id)`` at a time.
 * Approving a rate auto-deactivates any previously approved rate for the same
-  ``(contractor_id, rate_master_id)`` (sets ``status='expired'`` and writes
+  ``(contractor_id, part_master_id)`` (sets ``status='expired'`` and writes
   ``RATE_DEACTIVATED`` + ``EXPIRED`` audit rows on it).
-* ``effective_from <= effective_to`` for both rate_master and contractor_rate.
+* ``effective_from <= effective_to`` for both part_master and contractor_rate.
 * Overlapping date ranges are rejected at submission time.
 * Audit log written on EVERY mutation (create / update / round / submit / approve /
   reject / cancel / activation / deactivation).
@@ -33,19 +33,13 @@ from modules.contractor_rates.models import (
     ContractorRate,
     ContractorRateAuditLog,
     ContractorRateVersion,
+    NegotiationAttachment,
     NegotiationLog,
-    RateMaster,
-    RateMasterAuditLog,
-    RateMasterVersion,
 )
-from modules.contractor_rates.schema import (
-    ContractorRateCreate,
-    ContractorRateUpdate,
-    NegotiationRoundCreate,
-    RateMasterCreate,
-    RateMasterUpdate,
-)
+from modules.contractor_rates.schema import ContractorRateCreate, ContractorRateUpdate, NegotiationRoundCreate
+from modules.part_master.models import PartMaster
 from modules.errors import ConflictError, NotFoundError
+from modules.org_units.hierarchy import collect_plant_ids_under_scope
 from modules.org_units.model import OrgUnit
 from modules.users.model import User
 
@@ -72,466 +66,6 @@ def _q4(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-# ---------- Rate master ----------
-
-
-class RateMasterService:
-    def __init__(self, db: Session) -> None:
-        self._db = db
-
-    # --- helpers ---
-
-    def _ensure_plant(self, org_unit_id: int) -> OrgUnit:
-        org = self._db.get(OrgUnit, int(org_unit_id))
-        if org is None:
-            raise NotFoundError("OrgUnit", org_unit_id)
-        if getattr(org, "type", None) and str(org.type).upper() != "PLANT":
-            raise ConflictError("rate_master can only be defined for org_units with type=PLANT.")
-        return org
-
-    @staticmethod
-    def _validate_dates(effective_from: date, effective_to: date | None) -> None:
-        if effective_to is not None and effective_from > effective_to:
-            raise ConflictError("effective_from must be on or before effective_to.")
-
-    def _check_overlap(
-        self,
-        *,
-        job_type: str,
-        skill_type: str,
-        unit: str,
-        org_unit_id: int,
-        effective_from: date,
-        effective_to: date | None,
-        exclude_id: int | None = None,
-    ) -> None:
-        """Strict 3.4 validity rule for **rate_master**.
-
-        Overlap is rejected for the same (job_type, skill_type, unit, plant) when
-        a candidate window collides with an existing **active** row's window.
-        Two intervals [a, b] and [c, d] overlap iff a <= d and c <= b. An
-        open-ended ``effective_to`` is treated as infinity.
-        """
-        from datetime import date as _date
-
-        stmt = select(RateMaster).where(
-            RateMaster.job_type == job_type.strip(),
-            RateMaster.skill_type == skill_type,
-            RateMaster.unit == unit,
-            RateMaster.org_unit_id == int(org_unit_id),
-            RateMaster.is_active.is_(True),
-        )
-        if exclude_id is not None:
-            stmt = stmt.where(RateMaster.id != int(exclude_id))
-
-        for other in self._db.scalars(stmt).all():
-            other_to = other.effective_to or _date(9999, 12, 31)
-            cand_to = effective_to or _date(9999, 12, 31)
-            if effective_from <= other_to and other.effective_from <= cand_to:
-                raise ConflictError(
-                    "An active base rate already exists for this "
-                    "job/skill/unit/plant in the requested date range."
-                )
-
-    def _public_dict(self, row: RateMaster) -> dict[str, Any]:
-        org = self._db.get(OrgUnit, int(row.org_unit_id)) if row.org_unit_id else None
-        return {
-            "id": int(row.id),
-            "job_type": row.job_type,
-            "skill_type": row.skill_type,
-            "unit": row.unit,
-            "base_rate": Decimal(row.base_rate or 0),
-            "org_unit_id": int(row.org_unit_id),
-            "org_unit_name": org.name if org else None,
-            "effective_from": row.effective_from,
-            "effective_to": row.effective_to,
-            "is_active": bool(row.is_active),
-            "notes": row.notes,
-            "created_by": row.created_by,
-            "created_at": row.created_at,
-            "updated_at": row.updated_at,
-        }
-
-    # --- CRUD ---
-
-    def list_rate_masters(
-        self,
-        *,
-        org_unit_id: int | None = None,
-        job_type: str | None = None,
-        skill_type: str | None = None,
-        unit: str | None = None,
-        active_only: bool = False,
-    ) -> list[RateMaster]:
-        stmt = select(RateMaster)
-        if org_unit_id is not None:
-            stmt = stmt.where(RateMaster.org_unit_id == int(org_unit_id))
-        if job_type:
-            stmt = stmt.where(RateMaster.job_type.ilike(f"%{job_type.strip()}%"))
-        if skill_type:
-            stmt = stmt.where(RateMaster.skill_type == skill_type.strip().lower())
-        if unit:
-            stmt = stmt.where(RateMaster.unit == unit.strip().lower())
-        if active_only:
-            stmt = stmt.where(RateMaster.is_active.is_(True))
-        stmt = stmt.order_by(RateMaster.created_at.desc())
-        return list(self._db.scalars(stmt).all())
-
-    def get_rate_master(self, rate_master_id: int) -> RateMaster:
-        row = self._db.get(RateMaster, int(rate_master_id))
-        if row is None:
-            raise NotFoundError("RateMaster", rate_master_id)
-        return row
-
-    def list_audit_logs(self, rate_master_id: int) -> list[dict[str, Any]]:
-        """Return audit rows for one base rate, oldest → newest, with actor names."""
-        # Touch the row first so we get a 404 for unknown ids rather than ``[]``.
-        self.get_rate_master(rate_master_id)
-        stmt = (
-            select(RateMasterAuditLog)
-            .where(RateMasterAuditLog.rate_master_id == int(rate_master_id))
-            .order_by(RateMasterAuditLog.created_at.asc(), RateMasterAuditLog.id.asc())
-        )
-        rows = list(self._db.scalars(stmt).all())
-        out: list[dict[str, Any]] = []
-        for r in rows:
-            actor_name: str | None = None
-            if r.changed_by is not None:
-                user = self._db.get(User, int(r.changed_by))
-                actor_name = getattr(user, "full_name", None) if user else None
-            out.append(
-                {
-                    "id": int(r.id),
-                    "rate_master_id": int(r.rate_master_id),
-                    "action": r.action,
-                    "changed_by": r.changed_by,
-                    "changed_by_name": actor_name,
-                    "old_value": r.old_value,
-                    "new_value": r.new_value,
-                    "metadata_json": r.metadata_json,
-                    "created_at": r.created_at,
-                }
-            )
-        return out
-
-    def create_rate_master(
-        self, payload: RateMasterCreate, *, actor_user_id: int | None = None
-    ) -> RateMaster:
-        self._ensure_plant(int(payload.org_unit_id))
-        self._validate_dates(payload.effective_from, payload.effective_to)
-
-        # Strict 3.4 validity: when activating, the candidate window cannot
-        # overlap any active row for the same combo. Existing active rows for
-        # the same combo are superseded (deactivated) below to satisfy "only
-        # one active rate at a time" — overlap is checked against ranges, not
-        # just ``effective_from``.
-        if payload.is_active:
-            # Pre-check: find an *active* row for the same combo whose window
-            # collides with [payload.effective_from, payload.effective_to].
-            # Note: when the new row's effective_from > previous row's range we
-            # still allow this (the previous row is superseded below). The only
-            # truly invalid case is when a future row's range starts BEFORE
-            # the new range begins and extends INTO it — which is the literal
-            # definition of overlap that we reject here.
-            from datetime import date as _date
-            stmt = select(RateMaster).where(
-                RateMaster.job_type == payload.job_type.strip(),
-                RateMaster.skill_type == payload.skill_type,
-                RateMaster.unit == payload.unit,
-                RateMaster.org_unit_id == int(payload.org_unit_id),
-                RateMaster.is_active.is_(True),
-                RateMaster.effective_from > payload.effective_from,
-            )
-            for fut in self._db.scalars(stmt).all():
-                fut_to = fut.effective_to or _date(9999, 12, 31)
-                cand_to = payload.effective_to or _date(9999, 12, 31)
-                if payload.effective_from <= fut_to and fut.effective_from <= cand_to:
-                    raise ConflictError(
-                        "Overlapping base rate exists for this "
-                        "job/skill/unit/plant in the requested date range."
-                    )
-
-        # Deactivate any existing active row for the same combo so that
-        # "is_active=True" remains unique per combo. Each superseded row gets
-        # its own audit entry so the timeline is complete.
-        superseded_ids: list[int] = []
-        if payload.is_active:
-            stmt = select(RateMaster).where(
-                RateMaster.job_type == payload.job_type.strip(),
-                RateMaster.skill_type == payload.skill_type,
-                RateMaster.unit == payload.unit,
-                RateMaster.org_unit_id == int(payload.org_unit_id),
-                RateMaster.is_active.is_(True),
-            )
-            for prev in self._db.scalars(stmt).all():
-                before = audit_helpers.snapshot_rate_master(prev)
-                prev.is_active = False
-                self._db.flush()
-                after = audit_helpers.snapshot_rate_master(prev)
-                old_d, new_d = audit_helpers.diff_dicts(before, after)
-                audit_helpers.write_rate_master_audit(
-                    self._db,
-                    rate_master_id=int(prev.id),
-                    action=audit_helpers.RM_ACTION_SUPERSEDED,
-                    actor_user_id=actor_user_id,
-                    old_value=old_d,
-                    new_value=new_d,
-                )
-                superseded_ids.append(int(prev.id))
-
-        row = RateMaster(
-            job_type=payload.job_type.strip(),
-            skill_type=payload.skill_type,
-            unit=payload.unit,
-            base_rate=Decimal(payload.base_rate),
-            org_unit_id=int(payload.org_unit_id),
-            effective_from=payload.effective_from,
-            effective_to=payload.effective_to,
-            is_active=bool(payload.is_active),
-            notes=(payload.notes or None),
-            created_by=actor_user_id,
-        )
-        self._db.add(row)
-        self._db.flush()
-
-        audit_helpers.write_rate_master_audit(
-            self._db,
-            rate_master_id=int(row.id),
-            action=audit_helpers.RM_ACTION_CREATED,
-            actor_user_id=actor_user_id,
-            new_value=audit_helpers.snapshot_rate_master(row),
-            metadata={"superseded_ids": superseded_ids} if superseded_ids else None,
-        )
-        # v1 snapshot for the time-travel UI.
-        audit_helpers.write_rate_master_version(
-            self._db,
-            rate=row,
-            actor_user_id=actor_user_id,
-            change_reason=audit_helpers.RM_ACTION_CREATED,
-        )
-        audit_helpers.write_rate_master_audit(
-            self._db,
-            rate_master_id=int(row.id),
-            action=audit_helpers.ACTION_VERSION_CREATED,
-            actor_user_id=actor_user_id,
-            new_value={"version_number": 1},
-            metadata={"reason": audit_helpers.RM_ACTION_CREATED},
-        )
-        # If we superseded a previously-active row for the same combo, log
-        # RATE_REPLACED on the new row so the standardised diff timeline is
-        # explicit about the takeover.
-        if superseded_ids:
-            audit_helpers.write_rate_master_audit(
-                self._db,
-                rate_master_id=int(row.id),
-                action=audit_helpers.ACTION_RATE_REPLACED,
-                actor_user_id=actor_user_id,
-                new_value={"replaced_rate_master_ids": superseded_ids},
-                metadata={"superseded_ids": superseded_ids},
-            )
-
-        self._db.commit()
-        self._db.refresh(row)
-        return row
-
-    def update_rate_master(
-        self,
-        rate_master_id: int,
-        payload: RateMasterUpdate,
-        *,
-        actor_user_id: int | None = None,
-    ) -> RateMaster:
-        row = self.get_rate_master(rate_master_id)
-        before = audit_helpers.snapshot_rate_master(row)
-        upd = payload.model_dump(exclude_unset=True)
-        activation_change: str | None = None  # "ACTIVATED" / "DEACTIVATED"
-        superseded_ids: list[int] = []
-
-        if "base_rate" in upd and upd["base_rate"] is not None:
-            row.base_rate = Decimal(upd["base_rate"])
-        if "effective_from" in upd and upd["effective_from"] is not None:
-            row.effective_from = upd["effective_from"]
-        if "effective_to" in upd:
-            row.effective_to = upd["effective_to"]
-        if "notes" in upd:
-            row.notes = upd["notes"] or None
-        if "is_active" in upd and upd["is_active"] is not None:
-            new_active = bool(upd["is_active"])
-            # Activating? Deactivate other actives for the same combo first.
-            if new_active and not row.is_active:
-                activation_change = audit_helpers.RM_ACTION_ACTIVATED
-                stmt = select(RateMaster).where(
-                    RateMaster.id != row.id,
-                    RateMaster.job_type == row.job_type,
-                    RateMaster.skill_type == row.skill_type,
-                    RateMaster.unit == row.unit,
-                    RateMaster.org_unit_id == row.org_unit_id,
-                    RateMaster.is_active.is_(True),
-                )
-                for prev in self._db.scalars(stmt).all():
-                    prev_before = audit_helpers.snapshot_rate_master(prev)
-                    prev.is_active = False
-                    self._db.flush()
-                    prev_after = audit_helpers.snapshot_rate_master(prev)
-                    old_d, new_d = audit_helpers.diff_dicts(prev_before, prev_after)
-                    audit_helpers.write_rate_master_audit(
-                        self._db,
-                        rate_master_id=int(prev.id),
-                        action=audit_helpers.RM_ACTION_SUPERSEDED,
-                        actor_user_id=actor_user_id,
-                        old_value=old_d,
-                        new_value=new_d,
-                    )
-                    superseded_ids.append(int(prev.id))
-            elif not new_active and row.is_active:
-                activation_change = audit_helpers.RM_ACTION_DEACTIVATED
-            row.is_active = new_active
-
-        self._validate_dates(row.effective_from, row.effective_to)
-
-        # Re-check overlap if the candidate window changed AND the row remains
-        # active. Strict 3.4 validity rule.
-        if row.is_active and (
-            "effective_from" in upd or "effective_to" in upd or activation_change == audit_helpers.RM_ACTION_ACTIVATED
-        ):
-            self._check_overlap(
-                job_type=row.job_type,
-                skill_type=row.skill_type,
-                unit=row.unit,
-                org_unit_id=int(row.org_unit_id),
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                exclude_id=int(row.id),
-            )
-
-        self._db.flush()
-
-        after = audit_helpers.snapshot_rate_master(row)
-        old_d, new_d = audit_helpers.diff_dicts(before, after)
-        if old_d or new_d:
-            audit_helpers.write_rate_master_audit(
-                self._db,
-                rate_master_id=int(row.id),
-                action=audit_helpers.RM_ACTION_UPDATED,
-                actor_user_id=actor_user_id,
-                old_value=old_d,
-                new_value=new_d,
-            )
-            # If the validity window was the (only) thing that changed, also
-            # log VALIDITY_CHANGED so reports / filters can pick it up cleanly.
-            validity_keys = {"effective_from", "effective_to"}
-            if validity_keys & set(new_d.keys()):
-                audit_helpers.write_rate_master_audit(
-                    self._db,
-                    rate_master_id=int(row.id),
-                    action=audit_helpers.ACTION_VALIDITY_CHANGED,
-                    actor_user_id=actor_user_id,
-                    old_value={k: old_d.get(k) for k in validity_keys if k in old_d},
-                    new_value={k: new_d.get(k) for k in validity_keys if k in new_d},
-                )
-            # Snapshot the new state. Snapshots are immutable; this guarantees
-            # full time-travel even when audit diffs are field-scoped.
-            ver = audit_helpers.write_rate_master_version(
-                self._db,
-                rate=row,
-                actor_user_id=actor_user_id,
-                change_reason=audit_helpers.RM_ACTION_UPDATED,
-            )
-            audit_helpers.write_rate_master_audit(
-                self._db,
-                rate_master_id=int(row.id),
-                action=audit_helpers.ACTION_VERSION_CREATED,
-                actor_user_id=actor_user_id,
-                new_value={"version_number": int(ver.version_number)},
-                metadata={"reason": audit_helpers.RM_ACTION_UPDATED},
-            )
-        if activation_change is not None:
-            audit_helpers.write_rate_master_audit(
-                self._db,
-                rate_master_id=int(row.id),
-                action=activation_change,
-                actor_user_id=actor_user_id,
-                new_value={"is_active": row.is_active},
-                metadata={"superseded_ids": superseded_ids} if superseded_ids else None,
-            )
-            if superseded_ids:
-                audit_helpers.write_rate_master_audit(
-                    self._db,
-                    rate_master_id=int(row.id),
-                    action=audit_helpers.ACTION_RATE_REPLACED,
-                    actor_user_id=actor_user_id,
-                    new_value={"replaced_rate_master_ids": superseded_ids},
-                    metadata={"superseded_ids": superseded_ids},
-                )
-
-        self._db.commit()
-        self._db.refresh(row)
-        return row
-
-    # --- versions / status engine ---
-
-    def list_versions(self, rate_master_id: int) -> list[RateMasterVersion]:
-        self.get_rate_master(rate_master_id)
-        stmt = (
-            select(RateMasterVersion)
-            .where(RateMasterVersion.rate_master_id == int(rate_master_id))
-            .order_by(RateMasterVersion.version_number.asc())
-        )
-        return list(self._db.scalars(stmt).all())
-
-    @staticmethod
-    def derive_status(row: RateMaster, *, today: date | None = None) -> str:
-        """Derive a human-friendly lifecycle status without overwriting ``is_active``.
-
-        Returns one of ``upcoming`` / ``active`` / ``expired`` / ``inactive``.
-        """
-        d = today or date.today()
-        if not bool(row.is_active):
-            return "inactive"
-        if row.effective_from and row.effective_from > d:
-            return "upcoming"
-        if row.effective_to is not None and row.effective_to < d:
-            return "expired"
-        return "active"
-
-    def mark_expired(self, *, today: date | None = None, actor_user_id: int | None = None) -> int:
-        """Auto-flip rows whose ``effective_to`` is in the past to ``is_active=False``.
-
-        Returns the number of rows updated. Idempotent — safe to run on a cron.
-        """
-        d = today or date.today()
-        stmt = select(RateMaster).where(
-            RateMaster.is_active.is_(True),
-            RateMaster.effective_to.is_not(None),
-            RateMaster.effective_to < d,
-        )
-        rows = list(self._db.scalars(stmt).all())
-        for row in rows:
-            before = audit_helpers.snapshot_rate_master(row)
-            row.is_active = False
-            self._db.flush()
-            after = audit_helpers.snapshot_rate_master(row)
-            old_d, new_d = audit_helpers.diff_dicts(before, after)
-            audit_helpers.write_rate_master_audit(
-                self._db,
-                rate_master_id=int(row.id),
-                action=audit_helpers.RM_ACTION_DEACTIVATED,
-                actor_user_id=actor_user_id,
-                old_value=old_d,
-                new_value=new_d,
-                metadata={"reason": "auto_expired", "today": d.isoformat()},
-            )
-            audit_helpers.write_rate_master_version(
-                self._db,
-                rate=row,
-                actor_user_id=actor_user_id,
-                change_reason="AUTO_EXPIRED",
-            )
-        if rows:
-            self._db.commit()
-        return len(rows)
-
-
 # ---------- Contractor rate (negotiation) ----------
 
 
@@ -547,10 +81,10 @@ class ContractorRateService:
             raise NotFoundError("Contractor", contractor_id)
         return c
 
-    def _ensure_rate_master(self, rate_master_id: int) -> RateMaster:
-        rm = self._db.get(RateMaster, int(rate_master_id))
+    def _ensure_part_master(self, part_master_id: int) -> PartMaster:
+        rm = self._db.get(PartMaster, int(part_master_id))
         if rm is None:
-            raise NotFoundError("RateMaster", rate_master_id)
+            raise NotFoundError("PartMaster", part_master_id)
         return rm
 
     @staticmethod
@@ -559,14 +93,14 @@ class ContractorRateService:
             raise ConflictError("effective_from must be on or before effective_to.")
 
     def _last_approved_rate(
-        self, contractor_id: int, rate_master_id: int, *, exclude_id: int | None = None
+        self, contractor_id: int, part_master_id: int, *, exclude_id: int | None = None
     ) -> ContractorRate | None:
-        """Most recently approved rate for this (contractor, rate_master) pair."""
+        """Most recently approved rate for this (contractor, part_master) pair."""
         stmt = (
             select(ContractorRate)
             .where(
                 ContractorRate.contractor_id == int(contractor_id),
-                ContractorRate.rate_master_id == int(rate_master_id),
+                ContractorRate.part_master_id == int(part_master_id),
                 ContractorRate.status.in_(("approved", "expired")),
             )
             .order_by(ContractorRate.approved_at.desc().nullslast(), ContractorRate.id.desc())
@@ -605,13 +139,13 @@ class ContractorRateService:
         self,
         *,
         contractor_id: int,
-        rate_master_id: int,
+        part_master_id: int,
         effective_from: date,
         effective_to: date | None,
         exclude_id: int | None = None,
     ) -> None:
         """Reject when a candidate window collides with an already-approved range
-        for the same (contractor, rate_master).
+        for the same (contractor, part_master).
 
         Two intervals [a, b] and [c, d] overlap iff a <= d and c <= b. We treat
         an open-ended ``effective_to`` as "infinity".
@@ -620,7 +154,7 @@ class ContractorRateService:
 
         stmt = select(ContractorRate).where(
             ContractorRate.contractor_id == int(contractor_id),
-            ContractorRate.rate_master_id == int(rate_master_id),
+            ContractorRate.part_master_id == int(part_master_id),
             ContractorRate.status == "approved",
         )
         if exclude_id is not None:
@@ -638,9 +172,9 @@ class ContractorRateService:
     # --- public-shape helper ---
 
     def to_public_dict(self, row: ContractorRate, *, include_rounds: bool = True) -> dict[str, Any]:
-        """Build the shape returned by the API (joins contractor + rate master + plant)."""
+        """Build the shape returned by the API (joins contractor + part master + plant)."""
         contractor = self._db.get(Contractor, int(row.contractor_id))
-        rm = self._db.get(RateMaster, int(row.rate_master_id))
+        rm = self._db.get(PartMaster, int(row.part_master_id))
         org = self._db.get(OrgUnit, int(rm.org_unit_id)) if rm else None
         creator = self._db.get(User, int(row.created_by)) if row.created_by else None
 
@@ -654,6 +188,7 @@ class ContractorRateService:
                     "proposed_rate": r.proposed_rate,
                     "counter_rate": r.counter_rate,
                     "remarks": r.remarks,
+                    "round_summary": r.round_summary,
                     "created_by": r.created_by,
                     "created_by_name": (
                         self._db.get(User, int(r.created_by)).full_name
@@ -661,6 +196,17 @@ class ContractorRateService:
                         else None
                     ),
                     "created_at": r.created_at,
+                    "attachments": [
+                        {
+                            "id": int(a.id),
+                            "file_path": a.file_path,
+                            "file_name": a.file_name,
+                            "content_type": a.content_type,
+                            "uploaded_by": a.uploaded_by,
+                            "uploaded_at": a.uploaded_at,
+                        }
+                        for a in (r.attachments or [])
+                    ],
                 }
                 for r in row.negotiation_logs
             ]
@@ -669,10 +215,13 @@ class ContractorRateService:
             "id": int(row.id),
             "contractor_id": int(row.contractor_id),
             "contractor_name": contractor.name if contractor else None,
-            "rate_master_id": int(row.rate_master_id),
-            "job_type": rm.job_type if rm else None,
-            "skill_type": rm.skill_type if rm else None,
-            "unit": rm.unit if rm else None,
+            "part_master_id": int(row.part_master_id),
+            "part_code": rm.part_code if rm else None,
+            "part_name": rm.part_name if rm else None,
+            "unit_type": rm.unit_type if rm else None,
+            "pricing_method": rm.pricing_method if rm else None,
+            "rate_unit_type": rm.rate_unit_type if rm else None,
+            "weight_per_piece": Decimal(rm.weight_per_piece) if rm and rm.weight_per_piece is not None else None,
             "org_unit_id": int(rm.org_unit_id) if rm else None,
             "org_unit_name": org.name if org else None,
             "base_rate": Decimal(rm.base_rate) if rm else None,
@@ -721,9 +270,9 @@ class ContractorRateService:
         *,
         contractor_id: int | None = None,
         status: str | None = None,
-        rate_master_id: int | None = None,
+        part_master_id: int | None = None,
         org_unit_id: int | None = None,
-        job_type: str | None = None,
+        part_code: str | None = None,
     ) -> list[ContractorRate]:
         stmt = (
             select(ContractorRate)
@@ -734,14 +283,20 @@ class ContractorRateService:
             stmt = stmt.where(ContractorRate.contractor_id == int(contractor_id))
         if status:
             stmt = stmt.where(ContractorRate.status == status.strip().lower())
-        if rate_master_id is not None:
-            stmt = stmt.where(ContractorRate.rate_master_id == int(rate_master_id))
-        if org_unit_id is not None or job_type:
-            stmt = stmt.join(RateMaster, RateMaster.id == ContractorRate.rate_master_id)
+        if part_master_id is not None:
+            stmt = stmt.where(ContractorRate.part_master_id == int(part_master_id))
+        if org_unit_id is not None or part_code:
+            stmt = stmt.join(PartMaster, PartMaster.id == ContractorRate.part_master_id)
             if org_unit_id is not None:
-                stmt = stmt.where(RateMaster.org_unit_id == int(org_unit_id))
-            if job_type:
-                stmt = stmt.where(RateMaster.job_type.ilike(f"%{job_type.strip()}%"))
+                plant_ids = collect_plant_ids_under_scope(self._db, int(org_unit_id))
+                if not plant_ids:
+                    return []
+                stmt = stmt.where(PartMaster.org_unit_id.in_(plant_ids))
+            if part_code:
+                q = part_code.strip().upper()
+                stmt = stmt.where(
+                    (PartMaster.part_code.ilike(f"%{q}%")) | (PartMaster.part_name.ilike(f"%{part_code.strip()}%"))
+                )
         return list(self._db.scalars(stmt).unique().all())
 
     def get_rate(self, rate_id: int) -> ContractorRate:
@@ -764,7 +319,7 @@ class ContractorRateService:
         self, payload: ContractorRateCreate, *, actor_user_id: int | None = None
     ) -> ContractorRate:
         self._ensure_contractor(int(payload.contractor_id))
-        rm = self._ensure_rate_master(int(payload.rate_master_id))
+        rm = self._ensure_part_master(int(payload.part_master_id))
         self._validate_dates(payload.effective_from, payload.effective_to)
 
         prev = self._last_approved_rate(int(payload.contractor_id), int(rm.id))
@@ -789,7 +344,7 @@ class ContractorRateService:
 
         row = ContractorRate(
             contractor_id=int(payload.contractor_id),
-            rate_master_id=int(rm.id),
+            part_master_id=int(rm.id),
             negotiated_rate=Decimal(payload.negotiated_rate),
             initial_rate=initial_rate,
             previous_rate=previous_rate,
@@ -812,7 +367,7 @@ class ContractorRateService:
             new_value=audit_helpers.snapshot_rate(row),
             metadata={
                 "contractor_id": int(row.contractor_id),
-                "rate_master_id": int(row.rate_master_id),
+                "part_master_id": int(row.part_master_id),
                 "base_rate": str(rm.base_rate),
                 "initial_rate": str(initial_rate),
                 "previous_rate": str(previous_rate) if previous_rate is not None else None,
@@ -934,6 +489,7 @@ class ContractorRateService:
             proposed_rate=payload.proposed_rate,
             counter_rate=payload.counter_rate,
             remarks=payload.remarks or None,
+            round_summary=(payload.round_summary.strip() if payload.round_summary else None),
             created_by=actor_user_id,
         )
         self._db.add(log)
@@ -1001,6 +557,87 @@ class ContractorRateService:
         self._db.commit()
         return log
 
+    def seed_opening_evidence_round(
+        self, rate_id: int, *, actor_user_id: int | None = None
+    ) -> NegotiationLog:
+        """Create round 1 so files can attach to a brand-new draft (current_round 0, no logs)."""
+        row = self.get_rate(rate_id)
+        if row.status != "draft":
+            raise ConflictError(
+                "Opening evidence can only be added to draft negotiations that have no rounds yet."
+            )
+        if int(row.current_round or 0) != 0:
+            raise ConflictError("This negotiation already has rounds.")
+        if row.negotiation_logs:
+            raise ConflictError("This negotiation already has rounds.")
+        payload = NegotiationRoundCreate(
+            proposed_rate=Decimal(row.negotiated_rate),
+            counter_rate=None,
+            remarks=None,
+            round_summary="Opening evidence",
+            apply_to_negotiated_rate=False,
+        )
+        return self.add_negotiation_round(rate_id, payload, actor_user_id=actor_user_id)
+
+    def upload_opening_evidence(
+        self,
+        rate_id: int,
+        files: list[tuple[str, bytes, str | None]],
+        *,
+        actor_user_id: int | None = None,
+    ) -> tuple[NegotiationLog, list[NegotiationAttachment]]:
+        if not files:
+            raise ConflictError("At least one file is required for opening evidence.")
+        log = self.seed_opening_evidence_round(rate_id, actor_user_id=actor_user_id)
+        saved: list[NegotiationAttachment] = []
+        for filename, content, content_type in files:
+            saved.append(
+                self.add_negotiation_attachment(
+                    rate_id,
+                    int(log.id),
+                    filename=filename,
+                    content=content,
+                    content_type=content_type,
+                    actor_user_id=actor_user_id,
+                )
+            )
+        return log, saved
+
+    def add_negotiation_attachment(
+        self,
+        rate_id: int,
+        log_id: int,
+        *,
+        filename: str,
+        content: bytes,
+        content_type: str | None,
+        actor_user_id: int | None = None,
+    ) -> NegotiationAttachment:
+        row = self.get_rate(rate_id)
+        log = self._db.get(NegotiationLog, int(log_id))
+        if log is None or int(log.contractor_rate_id) != int(row.id):
+            raise NotFoundError("NegotiationLog", log_id)
+
+        from modules.part_master.storage import save_negotiation_attachment
+
+        path = save_negotiation_attachment(
+            contractor_rate_id=int(row.id),
+            round_id=int(log.id),
+            filename=filename,
+            content=content,
+        )
+        att = NegotiationAttachment(
+            negotiation_log_id=int(log.id),
+            file_path=path,
+            file_name=filename,
+            content_type=content_type,
+            uploaded_by=actor_user_id,
+        )
+        self._db.add(att)
+        self._db.commit()
+        self._db.refresh(att)
+        return att
+
     # --- submit / cancel ---
 
     def submit_for_approval(
@@ -1015,7 +652,7 @@ class ContractorRateService:
         # Reject overlapping windows up-front so the user doesn't waste an approval cycle.
         self._check_overlap(
             contractor_id=int(row.contractor_id),
-            rate_master_id=int(row.rate_master_id),
+            part_master_id=int(row.part_master_id),
             effective_from=row.effective_from,
             effective_to=row.effective_to,
             exclude_id=int(row.id),
@@ -1034,7 +671,7 @@ class ContractorRateService:
                     "action_code": ACTION_CODE_CREATE,
                     "contractor_rate_id": int(row.id),
                     "contractor_id": int(row.contractor_id),
-                    "rate_master_id": int(row.rate_master_id),
+                    "part_master_id": int(row.part_master_id),
                     "negotiated_rate": str(row.negotiated_rate),
                     "previous_rate": str(row.previous_rate)
                     if row.previous_rate is not None
@@ -1156,7 +793,7 @@ class ContractorRateService:
         # Re-check overlap right before activation in case another rate landed in the meantime.
         self._check_overlap(
             contractor_id=int(row.contractor_id),
-            rate_master_id=int(row.rate_master_id),
+            part_master_id=int(row.part_master_id),
             effective_from=row.effective_from,
             effective_to=row.effective_to,
             exclude_id=int(row.id),
@@ -1173,7 +810,7 @@ class ContractorRateService:
         # on the contractor's initial ask. ``initial_rate`` is immutable from this
         # point on; we just recompute the derived figures.
         prev = self._last_approved_rate(
-            int(row.contractor_id), int(row.rate_master_id), exclude_id=int(row.id)
+            int(row.contractor_id), int(row.part_master_id), exclude_id=int(row.id)
         )
         row.previous_rate = Decimal(prev.negotiated_rate) if prev is not None else row.previous_rate
         if row.initial_rate is None:
@@ -1199,7 +836,7 @@ class ContractorRateService:
         prev_active_stmt = select(ContractorRate).where(
             ContractorRate.id != row.id,
             ContractorRate.contractor_id == row.contractor_id,
-            ContractorRate.rate_master_id == row.rate_master_id,
+            ContractorRate.part_master_id == row.part_master_id,
             ContractorRate.status == "approved",
         )
         for prev_active in self._db.scalars(prev_active_stmt).all():
@@ -1434,9 +1071,9 @@ class ContractorRateService:
             select(
                 ContractorRate.id.label("rate_id"),
                 ContractorRate.negotiated_rate,
-                RateMaster.base_rate,
+                PartMaster.base_rate,
             )
-            .join(RateMaster, RateMaster.id == ContractorRate.rate_master_id)
+            .join(PartMaster, PartMaster.id == ContractorRate.part_master_id)
             .where(ContractorRate.status == "approved")
         )
         if scope_contractor_id is not None:

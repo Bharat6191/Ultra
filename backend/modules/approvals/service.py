@@ -237,21 +237,23 @@ class ApprovalEngineService:
         if et == "contractor_rate_approval":
             try:
                 from modules.contractor.models import Contractor
-                from modules.contractor_rates.models import ContractorRate, RateMaster
+                from modules.contractor_rates.models import ContractorRate
+                from modules.part_master.models import PartMaster
 
                 rate = self._db.get(ContractorRate, int(eid))
                 if rate is not None:
                     contractor = self._db.get(Contractor, int(rate.contractor_id))
-                    rm = self._db.get(RateMaster, int(rate.rate_master_id))
-                    job = rm.job_type if rm is not None else "rate"
-                    skill = (rm.skill_type if rm is not None else "").replace("_", " ")
+                    pm = self._db.get(PartMaster, int(rate.part_master_id))
+                    part_label = (
+                        f"{pm.part_code} · {pm.part_name}" if pm is not None else "part"
+                    )
                     contractor_name = contractor.name if contractor is not None else f"Contractor #{rate.contractor_id}"
-                    title = f"Rate approval: {contractor_name} · {job}"
+                    title = f"Rate approval: {contractor_name} · {part_label}"
                     bits = [
                         f"Negotiated ₹{rate.negotiated_rate}",
                     ]
-                    if rm is not None:
-                        bits.append(f"base ₹{rm.base_rate}")
+                    if pm is not None:
+                        bits.append(f"base ₹{pm.base_rate}")
                     if rate.previous_rate is not None:
                         bits.append(f"previous ₹{rate.previous_rate}")
                     if rate.savings_amount is not None and rate.savings_percentage is not None:
@@ -263,7 +265,7 @@ class ApprovalEngineService:
                         + (f" → {rate.effective_to}" if rate.effective_to else "")
                     )
                     desc = (
-                        f"Review the {skill or 'requested'} {job} rate for {contractor_name}: "
+                        f"Review the negotiated rate for {part_label} with {contractor_name}: "
                         + ", ".join(bits)
                         + "."
                     )

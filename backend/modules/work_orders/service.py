@@ -10,8 +10,11 @@ from sqlalchemy.orm import Session, selectinload
 from modules.approvals.assignment_service import get_workflow_for_action
 from modules.approvals.service import ApprovalEngineService
 from modules.contractor.models import Contractor
-from modules.contractor_rates.models import ContractorRate, RateMaster
+from modules.contractor_rates.models import ContractorRate
+from modules.part_master.models import PartMaster
+from modules.part_master.pricing import commercial_snapshot_from_part_row, amount_from_snapshot
 from modules.errors import ConflictError, NotFoundError
+from modules.org_units.hierarchy import collect_plant_ids_under_scope
 from modules.org_units.model import OrgUnit
 from modules.users.model import User
 from modules.work_orders import audit as audit_helpers
@@ -81,17 +84,17 @@ class WorkOrderService:
             raise NotFoundError("Contractor", contractor_id)
         return c
 
-    def _ensure_rate_master(self, rate_master_id: int) -> RateMaster:
-        rm = self._db.get(RateMaster, int(rate_master_id))
+    def _ensure_part_master(self, part_master_id: int) -> PartMaster:
+        rm = self._db.get(PartMaster, int(part_master_id))
         if rm is None:
-            raise NotFoundError("RateMaster", rate_master_id)
+            raise NotFoundError("PartMaster", part_master_id)
         return rm
 
     def _resolve_rate_for(
         self,
         *,
         contractor_id: int,
-        rate_master_id: int,
+        part_master_id: int,
         work_date: date,
     ) -> tuple[Decimal, str, int | None]:
         """Return (rate, source, contractor_rate_id)."""
@@ -100,7 +103,7 @@ class WorkOrderService:
             select(ContractorRate)
             .where(
                 ContractorRate.contractor_id == int(contractor_id),
-                ContractorRate.rate_master_id == int(rate_master_id),
+                ContractorRate.part_master_id == int(part_master_id),
                 ContractorRate.status == "approved",
                 ContractorRate.effective_from <= work_date,
                 func.coalesce(ContractorRate.effective_to, date(9999, 12, 31)) >= work_date,
@@ -111,15 +114,14 @@ class WorkOrderService:
         if cr is not None:
             return Decimal(cr.negotiated_rate), "negotiated", int(cr.id)
 
-        # Fallback to active rate master.
-        rm = self._ensure_rate_master(int(rate_master_id))
+        # Fallback to active Part Master baseline.
+        rm = self._ensure_part_master(int(part_master_id))
         if not bool(rm.is_active):
-            # Even if inactive, allow creation but flag it via ConflictError? We enforce governance.
-            raise ConflictError("Selected base rate is not active.")
+            raise ConflictError("Selected part master row is not active.")
         if rm.effective_from and rm.effective_from > work_date:
-            raise ConflictError("Selected base rate is not yet effective for the work date.")
+            raise ConflictError("Selected part master is not yet effective for the work date.")
         if rm.effective_to is not None and rm.effective_to < work_date:
-            raise ConflictError("Selected base rate is expired for the work date.")
+            raise ConflictError("Selected part master is expired for the work date.")
         return Decimal(rm.base_rate), "master", None
 
     def _next_number(self, *, org_unit_id: int) -> str:
@@ -165,7 +167,10 @@ class WorkOrderService:
         # Default: hide archived/inactive work orders.
         stmt = stmt.where(WorkOrder.is_active.is_(True))
         if org_unit_id is not None:
-            stmt = stmt.where(WorkOrder.org_unit_id == int(org_unit_id))
+            plant_ids = collect_plant_ids_under_scope(self._db, int(org_unit_id))
+            if not plant_ids:
+                return []
+            stmt = stmt.where(WorkOrder.org_unit_id.in_(plant_ids))
         if status:
             stmt = stmt.where(WorkOrder.status == status.strip().lower())
         stmt = stmt.limit(int(limit))
@@ -256,21 +261,20 @@ class WorkOrderService:
             if not c.items:
                 raise ConflictError("Each contractor must have at least one assigned item.")
             for it in c.items:
-                rm = self._ensure_rate_master(int(it.rate_master_id))
+                rm = self._ensure_part_master(int(it.part_master_id))
                 rate, src, contractor_rate_id = self._resolve_rate_for(
                     contractor_id=int(c.contractor_id),
-                    rate_master_id=int(rm.id),
+                    part_master_id=int(rm.id),
                     work_date=work_date,
                 )
                 pt = it.progress_type.strip().lower()
                 if pt not in WORK_ORDER_ITEM_PROGRESS_TYPES:
                     raise ConflictError(f"Invalid progress_type '{pt}'.")
+                snap = commercial_snapshot_from_part_row(rm)
                 row = WorkOrderItem(
                     work_order_contractor_id=int(woc.id),
-                    rate_master_id=int(rm.id),
-                    job_type=str(rm.job_type),
-                    skill_type=str(rm.skill_type),
-                    unit=str(rm.unit),
+                    part_master_id=int(rm.id),
+                    pricing_snapshot=snap,
                     progress_type=pt,
                     planned_quantity=it.planned_quantity,
                     planned_percentage=it.planned_percentage,
@@ -332,21 +336,31 @@ class WorkOrderService:
                 inv_est: str | None = None
                 try:
                     if str(it.progress_type) == "quantity" and it.planned_quantity is not None:
-                        inv_est = str(_q2(Decimal(str(it.planned_quantity)) * Decimal(str(it.resolved_rate))))
+                        inv_est = str(
+                            amount_from_snapshot(
+                                quantity=Decimal(str(it.planned_quantity)),
+                                resolved_rate=Decimal(str(it.resolved_rate)),
+                                snapshot=it.pricing_snapshot,
+                            )
+                        )
                     else:
                         inv_est = None
                 except Exception:
                     inv_est = None
-                rm_row = self._db.get(RateMaster, int(it.rate_master_id))
+                rm_row = self._db.get(PartMaster, int(it.part_master_id))
                 master_rate_s = str(rm_row.base_rate) if rm_row is not None else None
+                ps = it.pricing_snapshot or {}
                 lines_out.append(
                     {
                         "contractor_id": int(woc.contractor_id),
                         "contractor_name": contractor_name,
-                        "rate_master_id": int(it.rate_master_id),
-                        "job_type": str(it.job_type),
-                        "skill_type": str(it.skill_type),
-                        "unit": str(it.unit),
+                        "part_master_id": int(it.part_master_id),
+                        "part_code": ps.get("part_code"),
+                        "part_name": ps.get("part_name"),
+                        "pricing_method": ps.get("pricing_method"),
+                        "rate_unit_type": ps.get("rate_unit_type"),
+                        "unit_type": ps.get("unit_type"),
+                        "pricing_snapshot": it.pricing_snapshot,
                         "progress_type": str(it.progress_type),
                         "planned_quantity": _json_decimal(it.planned_quantity),
                         "planned_percentage": _json_decimal(it.planned_percentage),
@@ -659,9 +673,10 @@ class WorkOrderService:
         if approved_qty is not None and cq is not None:
             remaining = max(approved_qty - cq, 0.0)
 
+        ps = item.pricing_snapshot or {}
         return {
             "progress_type": str(item.progress_type),
-            "unit": item.unit,
+            "unit_type": str(ps.get("unit_type") or ""),
             "approved_quantity": approved_qty,
             "approved_percentage": planned_pct_raw,
             "completed_quantity": cq,
@@ -794,9 +809,8 @@ class WorkOrderService:
                 "contractor_id": int(woc.contractor_id) if woc is not None else None,
                 "contractor_name": contractor_name,
                 "line": {
-                    "job_type": str(item.job_type),
-                    "skill_type": str(item.skill_type),
-                    "unit": str(item.unit),
+                    "part_master_id": int(item.part_master_id),
+                    "pricing_snapshot": item.pricing_snapshot,
                     "progress_type": str(item.progress_type),
                     "planned_quantity": _json_decimal(item.planned_quantity),
                     "planned_percentage": _json_decimal(item.planned_percentage),

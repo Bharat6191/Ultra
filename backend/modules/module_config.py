@@ -9,10 +9,8 @@ from __future__ import annotations
 from typing import TypedDict
 
 from modules.contractor.module_config import CONTRACTOR_MODULE_CONFIG
-from modules.contractor_rates.module_config import (
-    CONTRACTOR_RATES_MODULE_CONFIG,
-    RATE_MASTER_MODULE_CONFIG,
-)
+from modules.contractor_rates.module_config import CONTRACTOR_RATES_MODULE_CONFIG
+from modules.part_master.module_config import PART_MASTER_MODULE_CONFIG
 from modules.work_orders.module_config import WORK_ORDERS_MODULE_CONFIG
 from modules.invoices.module_config import INVOICES_MODULE_CONFIG
 
@@ -45,11 +43,11 @@ MODULE_CONFIG: list[ModuleConfigDict] = [
     },
     {
         "key": "org_units",
-        "title": "Plants (org units)",
+        "title": "Clusters & plants (org units)",
         "tabs": [
             {
                 "key": "org_units",
-                "title": "Plants",
+                "title": "Hierarchy & catalog",
                 "actions": list(DEFAULT_TAB_ACTIONS),
             },
         ],
@@ -143,7 +141,7 @@ MODULE_CONFIG: list[ModuleConfigDict] = [
         ],
     },
     CONTRACTOR_MODULE_CONFIG,
-    RATE_MASTER_MODULE_CONFIG,
+    PART_MASTER_MODULE_CONFIG,
     CONTRACTOR_RATES_MODULE_CONFIG,
     WORK_ORDERS_MODULE_CONFIG,
     INVOICES_MODULE_CONFIG,

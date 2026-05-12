@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Link } from "react-router-dom"
 import { toast } from "sonner"
 import {
   CheckCircle2,
@@ -32,28 +33,7 @@ import {
   rateStepperIndex,
   RATE_STEPPER_STEPS,
 } from "@/components/contractors/rateStatus"
-import {
-  NegotiationRoundDialog,
-  NewNegotiationDialog,
-  type NewRateForm,
-  type RateMasterPick,
-  type RoundForm,
-} from "@/components/contractors/ContractorRateDialog"
 import { ContractorRateTimeline } from "@/components/contractors/ContractorRateTimeline"
-
-export type RateMasterPublic = {
-  id: number
-  job_type: string
-  skill_type: string
-  unit: string
-  base_rate: number | string
-  org_unit_id: number
-  org_unit_name: string | null
-  effective_from: string
-  effective_to: string | null
-  is_active: boolean
-  notes: string | null
-}
 
 export type NegotiationRoundPublic = {
   id: number
@@ -69,10 +49,12 @@ export type ContractorRatePublic = {
   id: number
   contractor_id: number
   contractor_name: string | null
-  rate_master_id: number
-  job_type: string | null
-  skill_type: string | null
-  unit: string | null
+  part_master_id: number
+  part_code: string | null
+  part_name: string | null
+  unit_type: string | null
+  pricing_method: string | null
+  rate_unit_type: string | null
   org_unit_id: number | null
   org_unit_name: string | null
   base_rate: number | string | null
@@ -122,8 +104,8 @@ export type RatesSummary = {
  * dialogs, and exposes a `focusRateId` so other pages can deep-link to a specific
  * rate (e.g. opening from a My Tasks approval).
  *
- * Pass ``readOnly`` to suppress every mutating affordance (New negotiation,
- * Submit / Cancel actions, Add round button). The panel still loads, lists, and
+ * Pass ``readOnly`` to suppress every mutating affordance (New negotiation link,
+ * Submit / Cancel actions, negotiate link). The panel still loads, lists, and
  * shows the timeline so the contractor profile tab can display the negotiation
  * history without offering edit controls.
  */
@@ -140,16 +122,9 @@ export function ContractorRatesPanel({
 }) {
   const [rates, setRates] = React.useState<ContractorRatePublic[] | null>(null)
   const [summary, setSummary] = React.useState<RatesSummary | null>(null)
-  const [rateMasters, setRateMasters] = React.useState<RateMasterPublic[]>([])
   const [error, setError] = React.useState<string | null>(null)
 
   const [selectedRateId, setSelectedRateId] = React.useState<number | null>(null)
-  const [newOpen, setNewOpen] = React.useState(false)
-  const [newSaving, setNewSaving] = React.useState(false)
-  const [newError, setNewError] = React.useState<string | null>(null)
-  const [roundOpen, setRoundOpen] = React.useState(false)
-  const [roundSaving, setRoundSaving] = React.useState(false)
-  const [roundError, setRoundError] = React.useState<string | null>(null)
 
   const canView = hasPermission("contractor_rates.view")
   // ``readOnly`` strips every mutating affordance regardless of RBAC, used by
@@ -181,16 +156,14 @@ export function ContractorRatesPanel({
   async function load() {
     setError(null)
     try {
-      const [list, sum, rm] = await Promise.all([
+      const [list, sum] = await Promise.all([
         getJson<ContractorRatePublic[]>(
           `/contractor-rates?contractor_id=${contractorId}`,
         ),
         getJson<RatesSummary>(`/contractor-rates/summary?contractor_id=${contractorId}`),
-        getJson<RateMasterPublic[]>(`/rate-master?active=true`).catch(() => []),
       ])
       setRates(list)
       setSummary(sum)
-      setRateMasters(rm)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load contractor rates")
     }
@@ -205,50 +178,6 @@ export function ContractorRatesPanel({
     () => (rates ?? []).filter((r) => r.status === "approved"),
     [rates],
   )
-
-  const rateMasterPicks: RateMasterPick[] = React.useMemo(
-    () =>
-      rateMasters.map((rm) => ({
-        id: rm.id,
-        job_type: rm.job_type,
-        skill_type: rm.skill_type,
-        unit: rm.unit,
-        base_rate: rm.base_rate,
-        org_unit_id: rm.org_unit_id,
-        org_unit_name: rm.org_unit_name,
-      })),
-    [rateMasters],
-  )
-
-  async function createDraft(form: NewRateForm) {
-    if (form.rate_master_id === null) {
-      setNewError("Pick a base rate first.")
-      return
-    }
-    setNewSaving(true)
-    setNewError(null)
-    try {
-      const created = await postJson<ContractorRatePublic>(`/contractor-rates`, {
-        contractor_id: contractorId,
-        rate_master_id: form.rate_master_id,
-        negotiated_rate: form.negotiated_rate,
-        // Forward the opening ask only when entered; the backend defaults
-        // ``initial_rate`` to the negotiated_rate otherwise.
-        initial_rate: form.initial_rate.trim() ? form.initial_rate : null,
-        effective_from: form.effective_from,
-        effective_to: form.effective_to || null,
-        remarks: form.remarks || null,
-      })
-      toast.success(`Draft created for ${created.job_type ?? "rate"}`)
-      setNewOpen(false)
-      await load()
-      setSelectedRateId(created.id)
-    } catch (e) {
-      setNewError(e instanceof Error ? e.message : "Failed to create draft")
-    } finally {
-      setNewSaving(false)
-    }
-  }
 
   async function submitForApproval(rate: ContractorRatePublic) {
     try {
@@ -268,27 +197,6 @@ export function ContractorRatesPanel({
       await load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Cancel failed")
-    }
-  }
-
-  async function addRound(form: RoundForm) {
-    if (selectedRateId === null) return
-    setRoundSaving(true)
-    setRoundError(null)
-    try {
-      await postJson(`/contractor-rates/${selectedRateId}/negotiate`, {
-        proposed_rate: form.proposed_rate || null,
-        counter_rate: form.counter_rate || null,
-        remarks: form.remarks || null,
-        apply_to_negotiated_rate: form.apply_to_negotiated_rate,
-      })
-      toast.success("Round added")
-      setRoundOpen(false)
-      await load()
-    } catch (e) {
-      setRoundError(e instanceof Error ? e.message : "Add round failed")
-    } finally {
-      setRoundSaving(false)
     }
   }
 
@@ -325,12 +233,14 @@ export function ContractorRatesPanel({
         <div>
           <h2 className="text-base font-semibold">Negotiated rates</h2>
           <p className="text-xs text-muted-foreground">
-            Negotiate rates per job/plant, route to procurement approval, and track savings.
+            Negotiate against Part Master baselines per plant, route to procurement approval, and track savings.
           </p>
         </div>
         {canCreate ? (
-          <Button onClick={() => setNewOpen(true)}>
-            <Plus className="size-4" /> New negotiation
+          <Button asChild>
+            <Link to={`/dashboard/negotiated-rates/new?contractorId=${contractorId}`}>
+              <Plus className="size-4" /> New negotiation
+            </Link>
           </Button>
         ) : null}
       </div>
@@ -395,7 +305,7 @@ export function ContractorRatesPanel({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Job · Skill</TableHead>
+                <TableHead>Part</TableHead>
                 <TableHead>Plant</TableHead>
                 <TableHead className="text-right">Base</TableHead>
                 <TableHead className="text-right">Negotiated</TableHead>
@@ -420,9 +330,10 @@ export function ContractorRatesPanel({
                     onClick={() => setSelectedRateId(r.id)}
                   >
                     <TableCell>
-                      <div className="font-medium text-foreground">{r.job_type ?? "—"}</div>
-                      <div className="text-xs text-muted-foreground capitalize">
-                        {(r.skill_type ?? "").replace(/_/g, " ") || "—"}
+                      <div className="font-mono text-xs font-medium text-foreground">{r.part_code ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground">{r.part_name ?? "—"}</div>
+                      <div className="text-[11px] capitalize text-muted-foreground">
+                        {(r.pricing_method ?? "").replace(/_/g, " ") || "—"} · {r.unit_type ?? "—"}
                       </div>
                     </TableCell>
                     <TableCell>{r.org_unit_name ?? "—"}</TableCell>
@@ -498,33 +409,10 @@ export function ContractorRatesPanel({
       {/* Detail panel for the selected rate */}
       {selectedRate ? (
         <div ref={detailRef}>
-          <RateDetailPanel
-            rate={selectedRate}
-            onAddRound={() => setRoundOpen(true)}
-            canUpdate={canUpdate}
-          />
+          <RateDetailPanel rate={selectedRate} canUpdate={canUpdate} />
         </div>
       ) : null}
 
-      {/* Dialogs */}
-      <NewNegotiationDialog
-        open={newOpen}
-        onOpenChange={setNewOpen}
-        fixedContractorId={contractorId}
-        rateMasters={rateMasterPicks}
-        saving={newSaving}
-        error={newError}
-        onSave={async (form, _ctx) => createDraft(form)}
-      />
-      <NegotiationRoundDialog
-        open={roundOpen}
-        onOpenChange={setRoundOpen}
-        saving={roundSaving}
-        error={roundError}
-        currentRate={selectedRate?.negotiated_rate ?? null}
-        baseRate={selectedRate?.base_rate ?? null}
-        onSave={addRound}
-      />
     </div>
   )
 }
@@ -579,9 +467,10 @@ function ActiveRateCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <div className="font-medium text-foreground">{rate.job_type ?? "—"}</div>
-          <div className="text-xs text-muted-foreground capitalize">
-            {(rate.skill_type ?? "").replace(/_/g, " ") || "—"} · per {rate.unit ?? "—"}
+          <div className="font-mono text-xs font-medium text-foreground">{rate.part_code ?? "—"}</div>
+          <div className="text-xs text-muted-foreground">{rate.part_name ?? "—"}</div>
+          <div className="text-[11px] capitalize text-muted-foreground">
+            {(rate.pricing_method ?? "").replace(/_/g, " ") || "—"} · {rate.unit_type ?? "—"}
           </div>
         </div>
         <Badge variant="success">Active</Badge>
@@ -615,11 +504,9 @@ function ActiveRateCard({
 
 export function RateDetailPanel({
   rate,
-  onAddRound,
   canUpdate,
 }: {
   rate: ContractorRatePublic
-  onAddRound: () => void
   canUpdate: boolean
 }) {
   const stepIdx = rateStepperIndex(rate.status)
@@ -631,13 +518,13 @@ export function RateDetailPanel({
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle className="text-base">
-                {rate.job_type} ·{" "}
-                <span className="capitalize">
-                  {(rate.skill_type ?? "").replace(/_/g, " ")}
-                </span>
+                <span className="font-mono text-sm">{rate.part_code ?? "—"}</span>
+                <span className="text-muted-foreground"> · </span>
+                {rate.part_name ?? "—"}
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                {rate.org_unit_name ?? "—"} · per {rate.unit ?? "—"}
+                {rate.org_unit_name ?? "—"} · {(rate.pricing_method ?? "").replace(/_/g, " ")} ·{" "}
+                {rate.unit_type ?? "—"}
               </p>
             </div>
             <Badge variant={rateStatusVariant(rate.status)}>{rateStatusLabel(rate.status)}</Badge>
@@ -735,8 +622,10 @@ export function RateDetailPanel({
               (rate.status === "draft" ||
                 rate.status === "pending_approval" ||
                 rate.status === "rejected") ? (
-                <Button size="sm" variant="outline" onClick={onAddRound}>
-                  <Plus className="size-3.5" /> Add round
+                <Button size="sm" variant="outline" asChild>
+                  <Link to={`/dashboard/negotiated-rates/${rate.id}/negotiate`}>
+                    <Plus className="size-3.5" /> Negotiate
+                  </Link>
                 </Button>
               ) : null}
             </div>

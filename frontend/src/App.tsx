@@ -15,10 +15,13 @@ import { UsersPage } from "@/pages/users"
 import { ContractorsPage } from "@/pages/contractors"
 import { ContractorDetailPage } from "@/pages/contractor-detail"
 import { ContractorCreatePage } from "@/pages/contractor-create"
-import { RateMasterPage } from "@/pages/rate-master"
-import { RateMasterDetailPage } from "@/pages/rate-master-detail"
+import { PartMasterPage } from "@/pages/part-master"
+import { PartMasterCreatePage } from "@/pages/part-master-create"
+import { PartMasterDetailPage } from "@/pages/part-master-detail"
 import { NegotiatedRatesPage } from "@/pages/negotiated-rates"
 import { NegotiatedRateDetailPage } from "@/pages/negotiated-rate-detail"
+import { NegotiatedRateNewPage } from "@/pages/negotiated-rate-new"
+import { NegotiatedRateNegotiatePage } from "@/pages/negotiated-rate-negotiate"
 import { WorkOrdersPage } from "@/pages/work-orders"
 import { WorkOrderDetailPage } from "@/pages/work-order-detail"
 import { WorkOrderCreatePage } from "@/pages/work-order-create"
@@ -130,19 +133,27 @@ function App() {
             <Route path=":id" element={<ContractorDetailPage />} />
           </Route>
           <Route
-            path="rate-master"
+            path="part-master"
             element={
               <RequirePermission
-                anyOf={["rate_master.view", "rate_master.create", "rate_master.update"]}
+                anyOf={["part_master.view", "part_master.create", "part_master.update"]}
               >
                 <Outlet />
               </RequirePermission>
             }
           >
-            <Route index element={<RateMasterPage />} />
-            <Route path=":rateMasterId" element={<RateMasterDetailPage />} />
+            <Route index element={<PartMasterPage />} />
+            <Route
+              path="new"
+              element={
+                <RequirePermission code="part_master.create">
+                  <PartMasterCreatePage />
+                </RequirePermission>
+              }
+            />
+            <Route path=":partMasterId" element={<PartMasterDetailPage />} />
           </Route>
-          <Route path="rate-card" element={<Navigate to="/dashboard/rate-master" replace />} />
+          <Route path="rate-card" element={<Navigate to="/dashboard/part-master" replace />} />
           <Route
             path="negotiated-rates"
             element={
@@ -159,6 +170,22 @@ function App() {
             }
           >
             <Route index element={<NegotiatedRatesPage />} />
+            <Route
+              path="new"
+              element={
+                <RequirePermission code="contractor_rates.create">
+                  <NegotiatedRateNewPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path=":rateId/negotiate"
+              element={
+                <RequirePermission code="contractor_rates.update">
+                  <NegotiatedRateNegotiatePage />
+                </RequirePermission>
+              }
+            />
             <Route
               path=":rateId"
               element={

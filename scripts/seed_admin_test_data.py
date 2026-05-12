@@ -211,9 +211,14 @@ def main() -> int:
         # Ensure permissions exist.
         sync_all_modules_to_db(db)
 
-        org = db.scalars(select(OrgUnit).order_by(OrgUnit.id.asc())).first()
+        org = db.scalars(
+            select(OrgUnit).where(OrgUnit.type == "PLANT").order_by(OrgUnit.id.asc())
+        ).first()
         if org is None:
-            print("error: no OrgUnit rows found. Run migrations/sync_modules as in README.", file=sys.stderr)
+            print(
+                "error: no PLANT org unit found. Run migrations/sync_modules and seed plants first.",
+                file=sys.stderr,
+            )
             return 3
 
         roles = {
@@ -226,9 +231,9 @@ def main() -> int:
                     "contractor.delete",
                     "contractor.manage_plants",
                     "contractor.document.upload",
-                    "rate_master.view",
-                    "rate_master.create",
-                    "rate_master.update",
+                    "part_master.view",
+                    "part_master.create",
+                    "part_master.update",
                     "contractor_rates.view",
                     "contractor_rates.create",
                     "contractor_rates.update",

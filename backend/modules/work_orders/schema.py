@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class WorkOrderItemCreate(BaseModel):
-    rate_master_id: int
+    part_master_id: int
     progress_type: str = Field(default="quantity", pattern="^(quantity|percentage)$")
     planned_quantity: Decimal | None = None
     planned_percentage: Decimal | None = None
@@ -51,7 +51,7 @@ class WorkOrderLineCompletionSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     progress_type: str
-    unit: str
+    unit_type: str
     approved_quantity: float | None = None
     approved_percentage: float | None = None
     completed_quantity: float | None = None
@@ -83,10 +83,13 @@ class WorkOrderItemProgressHistoryEntry(BaseModel):
 
 class WorkOrderItemPublic(BaseModel):
     id: int
-    rate_master_id: int
-    job_type: str
-    skill_type: str
-    unit: str
+    part_master_id: int
+    part_code: str | None = None
+    part_name: str | None = None
+    unit_type: str | None = None
+    pricing_method: str | None = None
+    rate_unit_type: str | None = None
+    pricing_snapshot: dict[str, Any] | None = None
     progress_type: str
     planned_quantity: Decimal | None
     planned_percentage: Decimal | None

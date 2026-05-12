@@ -17,10 +17,6 @@ import {
   RateDetailPanel,
   type ContractorRatePublic,
 } from "@/components/contractors/ContractorRatesPanel"
-import {
-  NegotiationRoundDialog,
-  type RoundForm,
-} from "@/components/contractors/ContractorRateDialog"
 import { RateVersionHistoryButton } from "@/components/contractors/RateVersionHistoryDrawer"
 
 /**
@@ -37,9 +33,6 @@ export function NegotiatedRateDetailPage() {
 
   const [rate, setRate] = React.useState<ContractorRatePublic | null>(null)
   const [error, setError] = React.useState<string | null>(null)
-  const [roundOpen, setRoundOpen] = React.useState(false)
-  const [roundError, setRoundError] = React.useState<string | null>(null)
-  const [roundSaving, setRoundSaving] = React.useState(false)
   const [actionBusy, setActionBusy] = React.useState(false)
 
   const canView = hasPermission("contractor_rates.view") || isSuperuser()
@@ -91,27 +84,6 @@ export function NegotiatedRateDetailPage() {
     }
   }
 
-  async function addRound(form: RoundForm) {
-    if (!rate) return
-    setRoundSaving(true)
-    setRoundError(null)
-    try {
-      await postJson(`/contractor-rates/${rate.id}/negotiate`, {
-        proposed_rate: form.proposed_rate || null,
-        counter_rate: form.counter_rate || null,
-        remarks: form.remarks || null,
-        apply_to_negotiated_rate: form.apply_to_negotiated_rate,
-      })
-      toast.success("Round added")
-      setRoundOpen(false)
-      await load()
-    } catch (e) {
-      setRoundError(e instanceof Error ? e.message : "Add round failed")
-    } finally {
-      setRoundSaving(false)
-    }
-  }
-
   if (!canView) {
     return (
       <Alert>
@@ -151,7 +123,7 @@ export function NegotiatedRateDetailPage() {
     )
   }
 
-  const skillLabel = (rate.skill_type ?? "").replace(/_/g, " ")
+  const partSubtitle = [rate.pricing_method, rate.unit_type].filter(Boolean).join(" · ")
   const canSubmit = canCreate && (rate.status === "draft" || rate.status === "rejected")
   const canCancelNow =
     canUpdate && (rate.status === "draft" || rate.status === "pending_approval")
@@ -168,12 +140,12 @@ export function NegotiatedRateDetailPage() {
             <ArrowLeft className="size-3.5" /> Back to negotiated rates
           </Link>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-            {rate.job_type ?? "Rate"}
-            {skillLabel ? (
-              <span className="text-muted-foreground"> · </span>
-            ) : null}
-            {skillLabel ? (
-              <span className="capitalize text-muted-foreground">{skillLabel}</span>
+            <span className="font-mono text-xl">{rate.part_code ?? "—"}</span>
+            {rate.part_name ? (
+              <>
+                <span className="text-muted-foreground"> · </span>
+                <span className="text-muted-foreground">{rate.part_name}</span>
+              </>
             ) : null}
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
@@ -191,7 +163,7 @@ export function NegotiatedRateDetailPage() {
               )}
             </span>
             <span>· {rate.org_unit_name ?? "—"}</span>
-            <span>· per {rate.unit ?? "—"}</span>
+            {partSubtitle ? <span className="capitalize">· {partSubtitle.replace(/_/g, " ")}</span> : null}
             <span className="inline-flex items-center gap-1">
               <CalendarDays className="size-3.5" />
               {rate.effective_from}
@@ -204,8 +176,8 @@ export function NegotiatedRateDetailPage() {
           <RateVersionHistoryButton
             resource="contractor-rates"
             parentId={rate.id}
-            title={`${rate.job_type ?? "Rate"} · ${rate.contractor_name ?? `#${rate.contractor_id}`}`}
-            subtitle={`${rate.org_unit_name ?? "—"} · per ${rate.unit ?? "—"}`}
+            title={`${rate.part_code ?? "Part"} · ${rate.contractor_name ?? `#${rate.contractor_id}`}`}
+            subtitle={`${rate.org_unit_name ?? "—"}${partSubtitle ? ` · ${partSubtitle.replace(/_/g, " ")}` : ""}`}
           />
           {canSubmit ? (
             <Button size="sm" onClick={submitForApproval} disabled={actionBusy}>
@@ -225,24 +197,7 @@ export function NegotiatedRateDetailPage() {
         </div>
       </div>
 
-      <RateDetailPanel
-        rate={rate}
-        onAddRound={() => setRoundOpen(true)}
-        canUpdate={canUpdate}
-      />
-
-      <NegotiationRoundDialog
-        open={roundOpen}
-        onOpenChange={(o) => {
-          setRoundOpen(o)
-          if (!o) setRoundError(null)
-        }}
-        currentRate={rate.negotiated_rate}
-        baseRate={rate.base_rate}
-        onSave={addRound}
-        saving={roundSaving}
-        error={roundError}
-      />
+      <RateDetailPanel rate={rate} canUpdate={canUpdate} />
     </div>
   )
 }

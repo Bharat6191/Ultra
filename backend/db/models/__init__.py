@@ -26,10 +26,14 @@ from modules.contractor_rates.models import (
     ContractorRate,
     ContractorRateAuditLog,
     ContractorRateVersion,
+    NegotiationAttachment,
     NegotiationLog,
-    RateMaster,
-    RateMasterAuditLog,
-    RateMasterVersion,
+)
+from modules.part_master.models import (
+    PartMaster,
+    PartMasterAttachment,
+    PartMasterAuditLog,
+    PartMasterVersion,
 )
 from modules.notifications.model import NotificationDedupKey, NotificationSetting
 from modules.work_orders.models import (
@@ -67,13 +71,15 @@ __all__ = [
     "User",
     "Contractor",
     "ContractorDocument",
-    "RateMaster",
-    "RateMasterAuditLog",
-    "RateMasterVersion",
+    "PartMaster",
+    "PartMasterAuditLog",
+    "PartMasterVersion",
+    "PartMasterAttachment",
     "ContractorRate",
     "ContractorRateAuditLog",
     "ContractorRateVersion",
     "NegotiationLog",
+    "NegotiationAttachment",
     "NotificationSetting",
     "NotificationDedupKey",
     "UserSession",
