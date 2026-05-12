@@ -114,10 +114,23 @@ class WorkOrderPublic(BaseModel):
     work_date: date
     status: str
     approval_request_id: int | None
+    approved_value_total: Decimal | None = None
+    invoiced_ex_tax_total: Decimal | None = None
+    remaining_invoiceable_value: Decimal | None = None
     created_by: int | None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     items: list[WorkOrderItemPublic]
+
+
+class WorkOrderLinkedInvoice(BaseModel):
+    """Invoice header summary when listing invoices tied to a work order."""
+
+    id: int
+    invoice_number: str
+    invoice_date: date
+    status: str
+    total_amount: Decimal
 
 
 class WorkOrderAuditEntry(BaseModel):

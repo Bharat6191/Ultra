@@ -22,6 +22,7 @@ from modules.work_orders.schema import (
 from modules.work_orders.service import WorkOrderService
 from modules.invoices.schema import InvoiceCreate, InvoiceLineCreate
 from modules.invoices.service import InvoiceService
+from modules.errors import ConflictError
 
 
 @pytest.fixture()
@@ -55,9 +56,13 @@ def _first_contractor(db) -> Contractor:
 
 
 def _first_part_master_for_org(db, org_unit_id: int) -> PartMaster:
-    pm = db.scalars(select(PartMaster).where(PartMaster.org_unit_id == int(org_unit_id)).order_by(PartMaster.id.asc())).first()
+    pm = db.scalars(
+        select(PartMaster)
+        .where(PartMaster.org_unit_id == int(org_unit_id), PartMaster.is_active.is_(True))
+        .order_by(PartMaster.id.asc())
+    ).first()
     if pm is None:
-        pytest.skip("No part master seeded in DB for this org unit")
+        pytest.skip("No active part master seeded in DB for this org unit")
     return pm
 
 
@@ -93,6 +98,8 @@ def test_work_order_create_and_invoice_validate(db):
     if str(wo2.status) == "pending_approval":
         wo2 = svc_w.finalize_approval(int(wo2.id), approver_user_id=actor, approval_request_id=wo2.approval_request_id)
     assert str(wo2.status) == "active"
+    assert wo2.approved_value_total is not None
+    assert Decimal(str(wo2.approved_value_total)) == WorkOrderService.approved_total_from_items(wo2)
     item_id = int(wo2.items[0].id)
 
     # Snapshot completion (eligible invoice qty follows latest cumulative snapshot).
@@ -180,3 +187,96 @@ def test_work_order_draft_update_replaces_lines(db):
     assert updated.description == "ref2"
     assert len(updated.items) == 2
     assert updated.items[0].notes == "note a"
+
+
+def test_second_invoice_blocked_when_exceeding_work_order_total(db):
+    actor = _first_user(db)
+    org = _first_plant(db)
+    contractor = _first_contractor(db)
+    pm = _first_part_master_for_org(db, int(org.id))
+
+    wo = WorkOrderService(db).create(
+        WorkOrderCreate(
+            org_unit_id=int(org.id),
+            contractor_id=int(contractor.id),
+            title="WO invoice cap",
+            description=None,
+            work_date=date.today(),
+            items=[
+                WorkOrderItemCreate(
+                    part_master_id=int(pm.id),
+                    progress_type="quantity",
+                    planned_quantity=Decimal("10"),
+                    planned_percentage=None,
+                    weight_per_piece=Decimal("1"),
+                    notes=None,
+                ),
+            ],
+        ),
+        actor_user_id=actor,
+    )
+    svc_w = WorkOrderService(db)
+    wo2 = svc_w.submit_for_approval(int(wo.id), actor_user_id=actor)
+    if str(wo2.status) == "pending_approval":
+        wo2 = svc_w.finalize_approval(int(wo2.id), approver_user_id=actor, approval_request_id=wo2.approval_request_id)
+    assert str(wo2.status) == "active"
+    cap = Decimal(str(wo2.approved_value_total))
+    assert cap > 0
+    item_id = int(wo2.items[0].id)
+
+    WorkOrderService(db).add_progress(
+        item_id,
+        WorkOrderItemProgressCreate(
+            completed_quantity=Decimal("10"), completed_percentage=None, remarks="done"
+        ),
+        actor_user_id=actor,
+    )
+
+    inv_svc = InvoiceService(db)
+    n1 = f"INV-{date.today().strftime('%Y%m%d')}-C1-{uuid.uuid4().hex[:8]}"
+    inv_svc.create(
+        InvoiceCreate(
+            contractor_id=int(contractor.id),
+            org_unit_id=int(org.id),
+            invoice_number=n1,
+            invoice_date=date.today(),
+            lines=[
+                InvoiceLineCreate(work_order_item_id=item_id, quantity=Decimal("9"), rate=None, notes=None),
+            ],
+        ),
+        actor_user_id=actor,
+    )
+
+    n2 = f"INV-{date.today().strftime('%Y%m%d')}-C2-{uuid.uuid4().hex[:8]}"
+    inv_svc.create(
+        InvoiceCreate(
+            contractor_id=int(contractor.id),
+            org_unit_id=int(org.id),
+            invoice_number=n2,
+            invoice_date=date.today(),
+            lines=[
+                InvoiceLineCreate(work_order_item_id=item_id, quantity=Decimal("1"), rate=None, notes=None),
+            ],
+        ),
+        actor_user_id=actor,
+    )
+
+    n3 = f"INV-{date.today().strftime('%Y%m%d')}-C3-{uuid.uuid4().hex[:8]}"
+    with pytest.raises(ConflictError):
+        inv_svc.create(
+            InvoiceCreate(
+                contractor_id=int(contractor.id),
+                org_unit_id=int(org.id),
+                invoice_number=n3,
+                invoice_date=date.today(),
+                lines=[
+                    InvoiceLineCreate(
+                        work_order_item_id=item_id,
+                        quantity=Decimal("0.51"),
+                        rate=None,
+                        notes=None,
+                    ),
+                ],
+            ),
+            actor_user_id=actor,
+        )

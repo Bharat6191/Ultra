@@ -70,6 +70,9 @@ class WorkOrder(Base):
     rejected_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Sum of line taxable_value at activation; governs cumulative invoice ex-VAT amounts (with tolerance).
+    approved_value_total: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

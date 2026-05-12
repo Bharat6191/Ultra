@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -7,9 +8,9 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from modules.contractor_rates.models import ContractorRate
-from modules.part_master.pricing import amount_from_snapshot
+from modules.errors import ConflictError
 from modules.invoices.models import Invoice, InvoiceLine, InvoiceValidationIssue
+from modules.part_master.pricing import amount_from_snapshot
 from modules.settings.lookup import get_setting
 from modules.work_orders.models import WorkOrderItem, WorkOrderItemProgress, WorkOrder
 
@@ -35,6 +36,16 @@ STATUSES_COUNTING_TOWARD_CUMULATIVES = (
     "paid",
 )
 
+# Draft invoices still consume the work-order value budget (prevents parallel drafts over-cap).
+STATUSES_COUNTING_TOWARD_WO_VALUE_CAP = (
+    "draft",
+    "submitted",
+    "pending_exception_approval",
+    "approved",
+    "paid",
+    "blocked",
+)
+
 
 def _tolerance_pct(db: Session) -> Decimal:
     # Config key (admin editable): invoice.validation.tolerance_pct
@@ -51,6 +62,69 @@ def invoice_tolerance_percentage(db: Session) -> Decimal:
     """Public helper for callers that need tolerance without running full validation."""
 
     return _tolerance_pct(db)
+
+
+def work_order_ex_vat_cap(db: Session, wo: WorkOrder) -> Decimal:
+    """Frozen total at approval, or sum of line taxable values for legacy rows."""
+    if wo.approved_value_total is not None:
+        return _q2(_dec(wo.approved_value_total))
+    tot = db.scalar(
+        select(func.coalesce(func.sum(WorkOrderItem.taxable_value), 0)).where(
+            WorkOrderItem.work_order_id == int(wo.id)
+        )
+    )
+    return _q2(_dec(tot or 0))
+
+
+def prior_invoiced_ex_vat_for_work_order(
+    db: Session, *, work_order_id: int, exclude_invoice_id: int | None
+) -> Decimal:
+    """Sum of ex-VAT line amounts on invoices counted toward the WO cap."""
+    stmt = (
+        select(func.coalesce(func.sum(InvoiceLine.amount), 0))
+        .select_from(InvoiceLine)
+        .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
+        .join(WorkOrderItem, WorkOrderItem.id == InvoiceLine.work_order_item_id)
+        .where(
+            WorkOrderItem.work_order_id == int(work_order_id),
+            Invoice.status.in_(STATUSES_COUNTING_TOWARD_WO_VALUE_CAP),
+        )
+    )
+    if exclude_invoice_id is not None:
+        stmt = stmt.where(Invoice.id != int(exclude_invoice_id))
+    row = db.scalar(stmt)
+    return _q2(_dec(row or 0))
+
+
+def raise_if_new_invoice_breaches_work_order_caps(
+    db: Session,
+    *,
+    exclude_invoice_id: int | None,
+    item_amounts: list[tuple[int, Decimal]],
+) -> None:
+    """Reject create when ex-VAT totals would exceed the approved work order value (strict, no tolerance)."""
+    by_wo: dict[int, Decimal] = defaultdict(Decimal)
+    for item_id, amt in item_amounts:
+        item = db.get(WorkOrderItem, int(item_id))
+        if item is None:
+            continue
+        wo = db.get(WorkOrder, int(item.work_order_id))
+        if wo is None or str(wo.status) != "active":
+            continue
+        by_wo[int(wo.id)] += _q2(amt)
+    for wid, add_amt in by_wo.items():
+        wo_row = db.get(WorkOrder, int(wid))
+        if wo_row is None:
+            continue
+        cap = work_order_ex_vat_cap(db, wo_row)
+        prev = prior_invoiced_ex_vat_for_work_order(
+            db, work_order_id=int(wid), exclude_invoice_id=exclude_invoice_id
+        )
+        if _q2(prev + add_amt) > _q2(cap):
+            raise ConflictError(
+                f"Cumulative invoice amounts for work order {wo_row.work_order_number} would exceed "
+                f"the approved work order value ({_q2(cap)} ex. tax; already invoiced {_q2(prev)} ex. tax)."
+            )
 
 
 @dataclass(frozen=True)
@@ -76,6 +150,9 @@ class InvoiceValidationEngine:
         self._db.flush()
 
         tol = _tolerance_pct(self._db)
+
+        wo_add_by_id: dict[int, Decimal] = defaultdict(Decimal)
+        wo_first_line: dict[int, int] = {}
 
         blocker = 0
         errors = 0
@@ -158,6 +235,12 @@ class InvoiceValidationEngine:
                     requires_attachments=True,
                 )
 
+            if wo is not None and str(wo.status) == "active":
+                wid = int(wo.id)
+                wo_add_by_id[wid] += _dec(line.amount)
+                if wid not in wo_first_line:
+                    wo_first_line[wid] = int(line.id)
+
             # Completion -> allowed quantity/value (latest approved snapshot per line; matches WO completion engine).
             allowed_qty: Decimal | None = None
             if item.progress_type == "quantity":
@@ -177,12 +260,12 @@ class InvoiceValidationEngine:
                     add_issue(
                         line_id=int(line.id),
                         code="QTY_EXCEEDS_COMPLETION",
-                        severity="blocker",
-                        message="Invoiced quantity exceeds completed quantity (beyond tolerance).",
+                        severity="warning",
+                        message="Invoiced quantity is above recorded completion (informational).",
                         allowed_qty=allowed_qty,
                         actual_qty=_dec(line.quantity),
-                        requires_justification=True,
-                        requires_attachments=True,
+                        requires_justification=False,
+                        requires_attachments=False,
                     )
             else:
                 latest_p = self._db.scalar(
@@ -200,12 +283,12 @@ class InvoiceValidationEngine:
                     add_issue(
                         line_id=int(line.id),
                         code="PCT_EXCEEDS_COMPLETION",
-                        severity="blocker",
-                        message="Invoiced percentage exceeds completed percentage (beyond tolerance).",
+                        severity="warning",
+                        message="Invoiced quantity is above recorded completion % (informational).",
                         allowed_qty=allowed_qty,
                         actual_qty=_dec(line.quantity),
-                        requires_justification=True,
-                        requires_attachments=True,
+                        requires_justification=False,
+                        requires_attachments=False,
                     )
 
             # Rate governance: must match work order resolved rate.
@@ -276,12 +359,12 @@ class InvoiceValidationEngine:
                     add_issue(
                         line_id=int(line.id),
                         code="VALUE_EXCEEDS_APPROVED_TOLERANCE",
-                        severity="blocker",
-                        message="Cumulative invoice value exceeds work order approved value (including tolerance).",
+                        severity="warning",
+                        message="Cumulative invoice value for this line exceeds its line budget (informational).",
                         allowed_value=_q2(perm_value_line),
                         actual_value=_q2(cumulative_value),
-                        requires_justification=True,
-                        requires_attachments=True,
+                        requires_justification=False,
+                        requires_attachments=False,
                         metadata={
                             "previous_invoiced_value": str(_q2(prev_amt_dec)),
                             "planned_contract_value_strict": str(_q2(planned_contract_value)),
@@ -294,12 +377,12 @@ class InvoiceValidationEngine:
                     add_issue(
                         line_id=int(line.id),
                         code="CUMULATIVE_QTY_EXCEEDS_ALLOWED",
-                        severity="blocker",
-                        message="Cumulative invoicing exceeds allowed completed quantity (beyond tolerance).",
+                        severity="warning",
+                        message="Cumulative invoiced quantity is above completion (informational).",
                         allowed_qty=allowed_qty,
                         actual_qty=prev_qty_dec + _dec(line.quantity),
-                        requires_justification=True,
-                        requires_attachments=True,
+                        requires_justification=False,
+                        requires_attachments=False,
                         metadata={"previous_invoiced_qty": str(prev_qty_dec)},
                     )
 
@@ -322,6 +405,36 @@ class InvoiceValidationEngine:
             tax_pct_ln = _dec(line.tax_pct or 0)
             gross_line = _q2(_dec(line.amount) * (Decimal("1") + tax_pct_ln / Decimal("100")))
             total += gross_line
+
+        for wid, add_amt in wo_add_by_id.items():
+            wo_row = self._db.get(WorkOrder, int(wid))
+            if wo_row is None or str(wo_row.status) != "active":
+                continue
+            cap = work_order_ex_vat_cap(self._db, wo_row)
+            prev = prior_invoiced_ex_vat_for_work_order(
+                self._db, work_order_id=int(wid), exclude_invoice_id=int(invoice.id)
+            )
+            if _q2(prev + add_amt) > _q2(cap):
+                lid = wo_first_line.get(int(wid))
+                add_issue(
+                    line_id=lid,
+                    code="WO_INVOICE_TOTAL_EXCEEDED",
+                    severity="blocker",
+                    message=(
+                        f"Cumulative invoice amounts for work order {wo_row.work_order_number} exceed "
+                        f"the approved work order value ({_q2(cap)} ex. tax; "
+                        f"including this invoice: {_q2(prev + add_amt)} ex. tax)."
+                    ),
+                    allowed_value=_q2(cap),
+                    actual_value=_q2(prev + add_amt),
+                    metadata={
+                        "work_order_id": int(wid),
+                        "previous_invoiced_ex_tax": str(_q2(prev)),
+                        "approved_value_total": str(_q2(cap)),
+                    },
+                    requires_justification=True,
+                    requires_attachments=True,
+                )
 
         invoice.total_amount = _q2(total)
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,6 +11,10 @@ from core.permissions import require_any_permission, require_permission
 from db.session import get_db
 from modules.contractor.models import Contractor
 from modules.errors import ConflictError, NotFoundError
+from modules.invoices.validation import (
+    prior_invoiced_ex_vat_for_work_order,
+    work_order_ex_vat_cap,
+)
 from modules.work_orders.models import WorkOrder
 from modules.work_orders.schema import (
     WorkOrderCreate,
@@ -20,6 +25,7 @@ from modules.work_orders.schema import (
     WorkOrderRateOverrideRequest,
     WorkOrderAuditEntry,
     WorkOrderItemProgressCreate,
+    WorkOrderLinkedInvoice,
 )
 from modules.work_orders.service import WorkOrderService
 
@@ -35,6 +41,13 @@ def _to_public(db: Session, row: WorkOrder) -> dict:
     svc = WorkOrderService(db)
     ctr = db.get(Contractor, int(row.contractor_id))
     contractor_name = getattr(ctr, "name", None) if ctr is not None else None
+    cap_dec = work_order_ex_vat_cap(db, row)
+    inv_ex = prior_invoiced_ex_vat_for_work_order(
+        db, work_order_id=int(row.id), exclude_invoice_id=None
+    )
+    rem = (cap_dec - inv_ex).quantize(Decimal("0.01"))
+    if rem < Decimal("0"):
+        rem = Decimal("0")
     return {
         "id": int(row.id),
         "work_order_number": row.work_order_number,
@@ -46,6 +59,9 @@ def _to_public(db: Session, row: WorkOrder) -> dict:
         "work_date": row.work_date,
         "status": row.status,
         "approval_request_id": row.approval_request_id,
+        "approved_value_total": row.approved_value_total,
+        "invoiced_ex_tax_total": inv_ex,
+        "remaining_invoiceable_value": rem,
         "created_by": row.created_by,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
@@ -130,6 +146,31 @@ def get_work_order(
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return WorkOrderPublic.model_validate(_to_public(db, row))
+
+
+@router.get(
+    "/work-orders/{work_order_id:int}/invoices",
+    response_model=list[WorkOrderLinkedInvoice],
+    dependencies=[Depends(require_any_permission("work_orders.view", "work_orders.approve"))],
+)
+def list_work_order_invoices(
+    work_order_id: int,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+) -> list[WorkOrderLinkedInvoice]:
+    try:
+        rows = svc.list_invoices_for_work_order(work_order_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return [
+        WorkOrderLinkedInvoice(
+            id=int(r.id),
+            invoice_number=str(r.invoice_number),
+            invoice_date=r.invoice_date,
+            status=str(r.status),
+            total_amount=r.total_amount,
+        )
+        for r in rows
+    ]
 
 
 @router.get(

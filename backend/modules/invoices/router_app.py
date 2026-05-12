@@ -21,6 +21,7 @@ from modules.invoices.schema import (
 )
 from modules.invoices.service import InvoiceService
 from modules.invoices.models import InvoiceAttachment
+from modules.invoices.line_format import rate_basis_label, unit_label_from_type
 from modules.invoices.storage import save_invoice_attachment
 from modules.part_master.pricing import amount_from_snapshot
 from modules.work_orders.models import WorkOrder, WorkOrderItem
@@ -59,11 +60,11 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
         wo_no: str | None = None
         job_desc: str | None = None
         wit = db.get(WorkOrderItem, int(l.work_order_item_id)) if db is not None else None
+        ps = (wit.pricing_snapshot or {}) if wit is not None else {}
         if wit is not None:
             base_expect = amount_from_snapshot(
                 quantity=qty, resolved_rate=rate_dec, snapshot=wit.pricing_snapshot
             )
-            ps = wit.pricing_snapshot or {}
             job_desc = f"{ps.get('part_code') or ''} — {ps.get('part_name') or ''}".strip(" —")
             wo = db.get(WorkOrder, int(wit.work_order_id))
             if wo is not None:
@@ -79,6 +80,11 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
                 var_hint = None
         tp = Decimal(str(l.tax_pct or 0))
         gross = _q2(amt * (Decimal("1") + tp / Decimal("100")))
+        tax_amt = _q2(amt * tp / Decimal("100")) if tp else Decimal("0")
+        ut_raw = ps.get("unit_type")
+        ut = str(ut_raw) if ut_raw not in (None, "") else None
+        rut_raw = ps.get("rate_unit_type")
+        rut = str(rut_raw) if rut_raw not in (None, "") else None
         line_rows.append(
             {
                 "id": int(l.id),
@@ -91,6 +97,16 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
                 "variance_pct_hint": var_hint,
                 "work_order_number": wo_no,
                 "job_description": job_desc,
+                "part_code": ps.get("part_code"),
+                "part_name": ps.get("part_name"),
+                "unit_type": ut,
+                "unit_label": unit_label_from_type(ut),
+                "pricing_method": ps.get("pricing_method"),
+                "rate_unit_type": rut,
+                "rate_basis_label": rate_basis_label(rut),
+                "unit_rate": l.rate,
+                "taxable_value": amt,
+                "tax_amount": tax_amt,
                 "rate_source": l.rate_source,
                 "resolved_contractor_rate_id": l.resolved_contractor_rate_id,
                 "resolved_part_master_id": l.resolved_part_master_id,

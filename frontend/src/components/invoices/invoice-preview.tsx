@@ -1,9 +1,7 @@
-export type InvoicePreviewLine = {
-  description: string
-  unitPrice: number
-  qty: number
-  total: number
-}
+import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
+import { invoicePreviewTotals } from "@/components/invoices/invoice-line-types"
+
+export type InvoicePreviewLine = InvoiceDisplayLine
 
 export type InvoicePreviewData = {
   invoiceNo: string
@@ -12,6 +10,7 @@ export type InvoicePreviewData = {
   issuedTo: { name: string; address?: string }
   payTo: { name: string; bank?: string; accountName?: string; accountNoMasked?: string }
   currencySymbol?: string
+  /** When line-level tax amounts are zero, optional flat % applied to ex-tax subtotal (legacy preview). */
   taxPct?: number
   lines: InvoicePreviewLine[]
 }
@@ -23,10 +22,11 @@ function money(n: number, symbol: string) {
 
 export function InvoicePreview({ data }: { data: InvoicePreviewData }) {
   const symbol = data.currencySymbol ?? "₹"
-  const subtotal = data.lines.reduce((s, l) => s + (Number.isFinite(l.total) ? l.total : 0), 0)
-  const taxPct = Number.isFinite(data.taxPct ?? NaN) ? (data.taxPct as number) : 0
-  const tax = subtotal * (taxPct / 100)
-  const total = subtotal + tax
+  const { subtotalEx, lineTaxSum } = invoicePreviewTotals(data.lines)
+  const headerTaxPct = Number.isFinite(data.taxPct ?? NaN) ? (data.taxPct as number) : 0
+  const tax =
+    lineTaxSum > 0 ? lineTaxSum : headerTaxPct > 0 ? subtotalEx * (headerTaxPct / 100) : 0
+  const total = subtotalEx + tax
 
   return (
     <div className="rounded-xl border bg-white text-zinc-900 shadow-sm">
@@ -71,40 +71,57 @@ export function InvoicePreview({ data }: { data: InvoicePreviewData }) {
           </div>
         </div>
 
-        <div className="mt-10 overflow-hidden rounded-lg">
-          <div className="grid grid-cols-[1fr_140px_80px_140px] border-b border-zinc-900/50 pb-2 text-[11px] font-semibold tracking-wider text-zinc-900/70">
-            <div>DESCRIPTION</div>
-            <div className="text-right">UNIT PRICE</div>
-            <div className="text-right">QTY</div>
-            <div className="text-right">TOTAL</div>
-          </div>
-          <div className="divide-y divide-zinc-200">
-            {data.lines.map((l, idx) => (
-              <div key={idx} className="grid grid-cols-[1fr_140px_80px_140px] py-2 text-sm">
-                <div>{l.description}</div>
-                <div className="text-right tabular-nums">{money(l.unitPrice, symbol)}</div>
-                <div className="text-right tabular-nums">{l.qty}</div>
-                <div className="text-right tabular-nums">{money(l.total, symbol)}</div>
-              </div>
-            ))}
+        <div className="mt-10 overflow-x-auto rounded-lg">
+          <div className="min-w-[760px]">
+            <div className="grid grid-cols-[minmax(120px,1.4fr)_44px_56px_88px_72px_88px_40px_72px_88px] gap-1 border-b border-zinc-900/50 pb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-900/70">
+              <div>Description</div>
+              <div className="text-right">Qty</div>
+              <div>Unit</div>
+              <div className="text-right">Unit rate</div>
+              <div className="text-[9px] leading-tight text-zinc-600">Basis</div>
+              <div className="text-right">Taxable</div>
+              <div className="text-right">Tax %</div>
+              <div className="text-right">Tax</div>
+              <div className="text-right">Total</div>
+            </div>
+            <div className="divide-y divide-zinc-200">
+              {data.lines.map((l, idx) => (
+                <div
+                  key={idx}
+                  className="grid grid-cols-[minmax(120px,1.4fr)_44px_56px_88px_72px_88px_40px_72px_88px] gap-1 py-2 text-xs"
+                >
+                  <div className="min-w-0 break-words pr-1">{l.description}</div>
+                  <div className="text-right tabular-nums">{l.qty}</div>
+                  <div className="text-[11px] text-zinc-700">{l.unit ?? "—"}</div>
+                  <div className="text-right tabular-nums">{money(l.unitPrice, symbol)}</div>
+                  <div className="text-[10px] leading-tight text-zinc-600">{l.rateBasis ?? "—"}</div>
+                  <div className="text-right tabular-nums">{money(l.taxable, symbol)}</div>
+                  <div className="text-right tabular-nums text-[11px]">
+                    {l.lineTaxPct != null && l.lineTaxPct > 0 ? `${l.lineTaxPct.toFixed(2)}` : "—"}
+                  </div>
+                  <div className="text-right tabular-nums">{money(l.taxAmount ?? 0, symbol)}</div>
+                  <div className="text-right tabular-nums font-medium">{money(l.totalInclTax, symbol)}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
         <div className="mt-8 flex justify-end">
           <div className="w-[320px] space-y-2 text-sm">
             <div className="flex justify-between">
-              <div className="text-[11px] font-semibold tracking-wider text-zinc-900/70">SUBTOTAL</div>
-              <div className="tabular-nums font-semibold">{money(subtotal, symbol)}</div>
+              <div className="text-[11px] font-semibold tracking-wider text-zinc-900/70">Taxable subtotal</div>
+              <div className="tabular-nums font-semibold">{money(subtotalEx, symbol)}</div>
             </div>
             <div className="flex justify-between">
               <div className="text-[11px] font-semibold tracking-wider text-zinc-900/70">Tax</div>
               <div className="tabular-nums font-semibold">
-                {taxPct ? `${taxPct.toFixed(2)}% · ` : ""}
+                {lineTaxSum <= 0 && headerTaxPct > 0 ? `${headerTaxPct.toFixed(2)}% · ` : ""}
                 {money(tax, symbol)}
               </div>
             </div>
             <div className="flex justify-between pt-1">
-              <div className="text-[11px] font-semibold tracking-wider text-zinc-900">TOTAL</div>
+              <div className="text-[11px] font-semibold tracking-wider text-zinc-900">Total (incl. tax)</div>
               <div className="tabular-nums text-base font-semibold">{money(total, symbol)}</div>
             </div>
           </div>
@@ -120,4 +137,3 @@ export function InvoicePreview({ data }: { data: InvoicePreviewData }) {
     </div>
   )
 }
-

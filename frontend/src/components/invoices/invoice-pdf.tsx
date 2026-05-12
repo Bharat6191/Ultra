@@ -7,12 +7,10 @@ import {
   View,
 } from "@react-pdf/renderer"
 
-export type InvoicePdfLine = {
-  description: string
-  unitPrice: number
-  qty: number
-  total: number
-}
+import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
+import { invoicePreviewTotals } from "@/components/invoices/invoice-line-types"
+
+export type InvoicePdfLine = InvoiceDisplayLine
 
 export type InvoicePdfData = {
   title?: string
@@ -41,48 +39,59 @@ function money(n: number, symbol: string) {
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 48,
-    paddingBottom: 48,
-    paddingHorizontal: 48,
-    fontSize: 10,
+    paddingTop: 40,
+    paddingBottom: 40,
+    paddingHorizontal: 40,
+    fontSize: 9,
     color: "#111827",
     fontFamily: "Helvetica",
   },
   topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   hairline: { height: 1, backgroundColor: "#111827", flexGrow: 1, marginRight: 16, opacity: 0.35 },
-  heading: { letterSpacing: 6, fontSize: 24, fontWeight: 700 },
-  cols: { flexDirection: "row", marginTop: 26, gap: 24 },
+  heading: { letterSpacing: 4, fontSize: 20, fontWeight: 700 },
+  cols: { flexDirection: "row", marginTop: 22, gap: 20 },
   col: { flexGrow: 1 },
-  label: { fontSize: 8, letterSpacing: 1.2, color: "#111827", opacity: 0.85, marginBottom: 4 },
-  text: { fontSize: 10, color: "#111827", opacity: 0.9, lineHeight: 1.35 },
-  metaRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
-  metaKey: { fontSize: 8, letterSpacing: 1.2, opacity: 0.75 },
-  metaVal: { fontSize: 10, fontWeight: 600, textAlign: "right" },
-  table: { marginTop: 28 },
-  thRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#111827", borderBottomStyle: "solid", paddingBottom: 6, opacity: 0.75 },
-  th: { fontSize: 8, letterSpacing: 1.2, fontWeight: 700 },
-  tr: { flexDirection: "row", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "#E5E7EB", borderBottomStyle: "solid" },
-  td: { fontSize: 10 },
+  label: { fontSize: 7, letterSpacing: 1.1, color: "#111827", opacity: 0.85, marginBottom: 3 },
+  text: { fontSize: 9, color: "#111827", opacity: 0.9, lineHeight: 1.35 },
+  metaRow: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
+  metaKey: { fontSize: 7, letterSpacing: 1.1, opacity: 0.75 },
+  metaVal: { fontSize: 9, fontWeight: 600, textAlign: "right" },
+  table: { marginTop: 22 },
+  thRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#111827",
+    borderBottomStyle: "solid",
+    paddingBottom: 4,
+    opacity: 0.8,
+  },
+  th: { fontSize: 6, letterSpacing: 0.6, fontWeight: 700 },
+  tr: {
+    flexDirection: "row",
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    borderBottomStyle: "solid",
+    alignItems: "flex-start",
+  },
+  td: { fontSize: 8 },
   right: { textAlign: "right" },
-  wDesc: { flexGrow: 1 },
-  wUnit: { width: 80 },
-  wQty: { width: 50 },
-  wTotal: { width: 80 },
-  totals: { marginTop: 18, flexDirection: "row", justifyContent: "flex-end" },
-  totalsBox: { width: 220, gap: 6 },
+  totals: { marginTop: 16, flexDirection: "row", justifyContent: "flex-end" },
+  totalsBox: { width: 200, gap: 4 },
   totRow: { flexDirection: "row", justifyContent: "space-between" },
-  totKey: { fontSize: 9, letterSpacing: 1.1, opacity: 0.75 },
-  totVal: { fontSize: 10, fontWeight: 700 },
-  signature: { marginTop: 28, flexDirection: "row", justifyContent: "flex-end" },
-  sigLine: { width: 220, borderBottomWidth: 1, borderBottomColor: "#111827", borderBottomStyle: "solid", opacity: 0.35 },
+  totKey: { fontSize: 8, letterSpacing: 0.8, opacity: 0.75 },
+  totVal: { fontSize: 9, fontWeight: 700 },
+  signature: { marginTop: 22, flexDirection: "row", justifyContent: "flex-end" },
+  sigLine: { width: 200, borderBottomWidth: 1, borderBottomColor: "#111827", borderBottomStyle: "solid", opacity: 0.35 },
 })
 
 export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
   const symbol = data.currencySymbol ?? "₹"
-  const subtotal = data.lines.reduce((s, l) => s + (Number.isFinite(l.total) ? l.total : 0), 0)
-  const taxPct = Number.isFinite(data.taxPct ?? NaN) ? (data.taxPct as number) : 0
-  const tax = subtotal * (taxPct / 100)
-  const total = subtotal + tax
+  const { subtotalEx, lineTaxSum } = invoicePreviewTotals(data.lines)
+  const headerTaxPct = Number.isFinite(data.taxPct ?? NaN) ? (data.taxPct as number) : 0
+  const tax =
+    lineTaxSum > 0 ? lineTaxSum : headerTaxPct > 0 ? subtotalEx * (headerTaxPct / 100) : 0
+  const total = subtotalEx + tax
 
   return (
     <Document title={data.title ?? `Invoice ${data.invoiceNo}`}>
@@ -98,7 +107,7 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
             <Text style={styles.text}>{data.issuedTo.name}</Text>
             {data.issuedTo.address ? <Text style={styles.text}>{data.issuedTo.address}</Text> : null}
 
-            <View style={{ height: 14 }} />
+            <View style={{ height: 12 }} />
             <Text style={styles.label}>PAY TO:</Text>
             <Text style={styles.text}>{data.payTo.name}</Text>
             {data.payTo.bank ? <Text style={styles.text}>{data.payTo.bank}</Text> : null}
@@ -111,14 +120,14 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
               <Text style={styles.metaKey}>INVOICE NO:</Text>
               <Text style={styles.metaVal}>{data.invoiceNo}</Text>
             </View>
-            <View style={{ height: 6 }} />
+            <View style={{ height: 4 }} />
             <View style={styles.metaRow}>
               <Text style={styles.metaKey}>DATE:</Text>
               <Text style={styles.metaVal}>{data.invoiceDate}</Text>
             </View>
             {data.dueDate ? (
               <>
-                <View style={{ height: 6 }} />
+                <View style={{ height: 4 }} />
                 <View style={styles.metaRow}>
                   <Text style={styles.metaKey}>DUE DATE:</Text>
                   <Text style={styles.metaVal}>{data.dueDate}</Text>
@@ -130,18 +139,30 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
 
         <View style={styles.table}>
           <View style={styles.thRow}>
-            <Text style={[styles.th, styles.wDesc]}>DESCRIPTION</Text>
-            <Text style={[styles.th, styles.wUnit, styles.right]}>UNIT PRICE</Text>
-            <Text style={[styles.th, styles.wQty, styles.right]}>QTY</Text>
-            <Text style={[styles.th, styles.wTotal, styles.right]}>TOTAL</Text>
+            <Text style={[styles.th, { flex: 2.1, paddingRight: 4 }]}>DESCRIPTION</Text>
+            <Text style={[styles.th, { width: 34 }, styles.right]}>QTY</Text>
+            <Text style={[styles.th, { width: 40 }]}>UNIT</Text>
+            <Text style={[styles.th, { width: 58 }, styles.right]}>UNIT RATE</Text>
+            <Text style={[styles.th, { width: 44 }]}>BASIS</Text>
+            <Text style={[styles.th, { width: 56 }, styles.right]}>TAXABLE</Text>
+            <Text style={[styles.th, { width: 28 }, styles.right]}>TAX%</Text>
+            <Text style={[styles.th, { width: 48 }, styles.right]}>TAX</Text>
+            <Text style={[styles.th, { width: 54 }, styles.right]}>TOTAL</Text>
           </View>
 
           {data.lines.map((l, idx) => (
             <View key={`${idx}`} style={styles.tr}>
-              <Text style={[styles.td, styles.wDesc]}>{l.description}</Text>
-              <Text style={[styles.td, styles.wUnit, styles.right]}>{money(l.unitPrice, symbol)}</Text>
-              <Text style={[styles.td, styles.wQty, styles.right]}>{String(l.qty)}</Text>
-              <Text style={[styles.td, styles.wTotal, styles.right]}>{money(l.total, symbol)}</Text>
+              <Text style={[styles.td, { flex: 2.1, paddingRight: 4 }]}>{l.description}</Text>
+              <Text style={[styles.td, { width: 34 }, styles.right]}>{String(l.qty)}</Text>
+              <Text style={[styles.td, { width: 40, fontSize: 7 }]}>{l.unit ?? "—"}</Text>
+              <Text style={[styles.td, { width: 58 }, styles.right]}>{money(l.unitPrice, symbol)}</Text>
+              <Text style={[styles.td, { width: 44, fontSize: 6 }]}>{l.rateBasis ?? "—"}</Text>
+              <Text style={[styles.td, { width: 56 }, styles.right]}>{money(l.taxable, symbol)}</Text>
+              <Text style={[styles.td, { width: 28 }, styles.right]}>
+                {l.lineTaxPct != null && l.lineTaxPct > 0 ? `${l.lineTaxPct.toFixed(1)}` : "—"}
+              </Text>
+              <Text style={[styles.td, { width: 48 }, styles.right]}>{money(l.taxAmount ?? 0, symbol)}</Text>
+              <Text style={[styles.td, { width: 54 }, styles.right]}>{money(l.totalInclTax, symbol)}</Text>
             </View>
           ))}
         </View>
@@ -149,27 +170,27 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
         <View style={styles.totals}>
           <View style={styles.totalsBox}>
             <View style={styles.totRow}>
-              <Text style={styles.totKey}>SUBTOTAL</Text>
-              <Text style={styles.totVal}>{money(subtotal, symbol)}</Text>
+              <Text style={styles.totKey}>TAXABLE SUBTOTAL</Text>
+              <Text style={styles.totVal}>{money(subtotalEx, symbol)}</Text>
             </View>
             <View style={styles.totRow}>
-              <Text style={styles.totKey}>Tax</Text>
+              <Text style={styles.totKey}>TAX</Text>
               <Text style={styles.totVal}>
-                {taxPct ? `${taxPct.toFixed(2)}% · ` : ""}
+                {lineTaxSum <= 0 && headerTaxPct > 0 ? `${headerTaxPct.toFixed(2)}% · ` : ""}
                 {money(tax, symbol)}
               </Text>
             </View>
             <View style={[styles.totRow, { marginTop: 2 }]}>
-              <Text style={[styles.totKey, { fontSize: 10, fontWeight: 700, opacity: 1 }]}>TOTAL</Text>
-              <Text style={[styles.totVal, { fontSize: 12 }]}>{money(total, symbol)}</Text>
+              <Text style={[styles.totKey, { fontSize: 9, fontWeight: 700, opacity: 1 }]}>TOTAL (INCL.)</Text>
+              <Text style={[styles.totVal, { fontSize: 11 }]}>{money(total, symbol)}</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.signature}>
-          <View style={{ width: 220 }}>
+          <View style={{ width: 200 }}>
             <View style={styles.sigLine} />
-            <Text style={{ marginTop: 8, fontSize: 8, letterSpacing: 1.2, opacity: 0.75, textAlign: "right" }}>
+            <Text style={{ marginTop: 6, fontSize: 7, letterSpacing: 1.1, opacity: 0.75, textAlign: "right" }}>
               Authorized Signature
             </Text>
           </View>
@@ -198,4 +219,3 @@ export function InvoicePdfDownloadButton({
     </PDFDownloadLink>
   )
 }
-

@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,9 +10,9 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ApiError, getJson, postJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
+import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
 import { InvoicePdfDownloadButton } from "@/components/invoices/invoice-pdf"
 import { InvoicePreview } from "@/components/invoices/invoice-preview"
-import { cn } from "@/lib/utils"
 
 type BillableLine = {
   work_order_id: number
@@ -23,6 +22,8 @@ type BillableLine = {
   part_name?: string | null
   unit_type?: string | null
   pricing_method?: string | null
+  rate_unit_type?: string | null
+  rate_basis_label?: string | null
   /** @deprecated legacy API */
   job_type?: string
   unit?: string
@@ -174,6 +175,17 @@ export function InvoiceCreatePage() {
     return lines
   }, [billableByItemId, preflight, selectedLineIds])
 
+  function defaultInvoiceQtyFromCompletion(ln: BillableLine): string {
+    if (ln.progress_type === "percentage") {
+      const cp = ln.completed_percentage
+      if (cp != null && Number.isFinite(cp)) return String(cp / 100)
+      return ""
+    }
+    const cq = ln.completed_quantity
+    if (cq != null && Number.isFinite(cq)) return String(cq)
+    return ""
+  }
+
   function addPendingLine() {
     if (pendingItemId === "" || !preflight) return
     const ln = billableByItemId.get(pendingItemId)
@@ -186,8 +198,9 @@ export function InvoiceCreatePage() {
     setLineInputs((m) => {
       const next = { ...m }
       const cur = next[ln.work_order_item_id] ?? { qty: "", tax_pct: "", notes: "" }
-      if (!cur.qty.trim() && ln.remaining_invoiceable_qty_hint != null) {
-        next[ln.work_order_item_id] = { ...cur, qty: String(ln.remaining_invoiceable_qty_hint) }
+      if (!cur.qty.trim()) {
+        const def = defaultInvoiceQtyFromCompletion(ln)
+        next[ln.work_order_item_id] = { ...cur, qty: def }
       } else {
         next[ln.work_order_item_id] = cur
       }
@@ -231,7 +244,7 @@ export function InvoiceCreatePage() {
 
   const previewLines = React.useMemo(() => {
     if (!preflight) return []
-    const out: { description: string; unitPrice: number; qty: number; total: number }[] = []
+    const out: InvoiceDisplayLine[] = []
     for (const ln of selectedInvoiceLines) {
       const inp = lineInputs[ln.work_order_item_id]
       const qRaw = inp?.qty?.trim() ?? ""
@@ -239,12 +252,22 @@ export function InvoiceCreatePage() {
       const qty = Number(qRaw.replace(/,/g, ""))
       if (!Number.isFinite(qty) || qty <= 0) continue
       const unitPrice = ln.approved_rate
-      const total = qty * unitPrice
+      const taxable = qty * unitPrice
+      const taxRaw = inp?.tax_pct?.trim()
+      const tp = taxRaw === "" || taxRaw === undefined ? 0 : Number(taxRaw.replace(/,/g, ""))
+      const taxPctLine = Number.isFinite(tp) && tp > 0 ? tp : 0
+      const taxAmount = taxPctLine > 0 ? taxable * (taxPctLine / 100) : 0
+      const totalInclTax = taxable + taxAmount
       out.push({
-        description: `${ln.work_order_number} · ${ln.part_code ?? ln.job_type ?? "—"} (${ln.unit_type ?? ln.unit ?? "—"})`,
-        unitPrice,
+        description: `${ln.work_order_number} · ${ln.part_code ?? ln.job_type ?? "—"}`,
         qty,
-        total,
+        unit: ln.unit_type ?? ln.unit ?? "—",
+        rateBasis: ln.rate_basis_label ?? undefined,
+        unitPrice,
+        taxable,
+        lineTaxPct: taxPctLine > 0 ? taxPctLine : undefined,
+        taxAmount,
+        totalInclTax,
       })
     }
     return out
@@ -410,8 +433,7 @@ export function InvoiceCreatePage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Step 2 · Work order</CardTitle>
           <CardDescription>
-            Select a work order, then pick line items below. Rate will auto-populate from the work order setup. Tolerance defaulted to{" "}
-            {(preflight?.tolerance_pct ?? 5).toFixed(2)}%.
+            Select a work order, then add line items. Rates come from the approved work order.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -469,11 +491,6 @@ export function InvoiceCreatePage() {
                     Add
                   </Button>
                 </div>
-                {selectedWoId !== "" ? (
-                  <p className="text-[11px] text-muted-foreground">
-                    Tip: when you add a line, invoice qty auto-fills from remaining completion.
-                  </p>
-                ) : null}
               </div>
             </>
           )}
@@ -490,7 +507,8 @@ export function InvoiceCreatePage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium">Step 3 · Invoice line items</CardTitle>
                   <CardDescription>
-                    Only added line items appear here. Qty is validated against completion and previously invoiced quantities.
+                    Edit invoice qty and tax %; taxable value follows the work order rate. Cumulative invoice amounts
+                    (ex. tax) per work order cannot exceed the approved work order value.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -502,14 +520,16 @@ export function InvoiceCreatePage() {
                         <Table>
                         <TableHeader>
                           <TableRow className="bg-muted/50">
-                            <TableHead className="w-[140px]">Work order</TableHead>
+                            <TableHead className="w-[120px]">Work order</TableHead>
                             <TableHead>Line item</TableHead>
-                            <TableHead className="text-right">Remaining qty</TableHead>
-                            <TableHead className="text-right">Rate</TableHead>
-                            <TableHead className="w-[110px] text-right">Invoice qty</TableHead>
-                            <TableHead className="w-[80px] text-right">Tax %</TableHead>
-                            <TableHead className="w-[220px]">Note</TableHead>
-                            <TableHead className="text-right">Line value</TableHead>
+                            <TableHead className="w-[56px]">Unit</TableHead>
+                            <TableHead className="w-[72px] text-right">Rate basis</TableHead>
+                            <TableHead className="text-right">Unit rate</TableHead>
+                            <TableHead className="w-[100px] text-right">Invoice qty</TableHead>
+                            <TableHead className="w-[72px] text-right">Tax %</TableHead>
+                            <TableHead className="text-right">Taxable</TableHead>
+                            <TableHead className="text-right">Incl. tax</TableHead>
+                            <TableHead className="w-[180px]">Note</TableHead>
                             <TableHead className="w-[50px]" />
                           </TableRow>
                         </TableHeader>
@@ -519,37 +539,26 @@ export function InvoiceCreatePage() {
                             const q = Number((inp.qty || "").replace(/,/g, ""))
                             const base = Number.isFinite(q) && q > 0 ? q * ln.approved_rate : 0
                             const tp = inp.tax_pct?.trim() ? Number(inp.tax_pct.replace(/,/g, "")) : 0
-                            const gross = Number.isFinite(tp) && tp > 0 ? base * (1 + tp / 100) : base
-                            const allowedQty = ln.remaining_invoiceable_qty_hint
-                            const allowedValue = ln.remaining_invoiceable_value
-                            const qtyOver = allowedQty != null && Number.isFinite(q) && q > allowedQty + 1e-9
-                            const valueOver =
-                              allowedValue != null && Number.isFinite(base) && base > allowedValue + 0.009
+                            const taxAmt = Number.isFinite(tp) && tp > 0 ? base * (tp / 100) : 0
+                            const gross = base + taxAmt
                             return (
-                              <TableRow key={ln.work_order_item_id} className={qtyOver || valueOver ? "bg-red-500/5" : undefined}>
+                              <TableRow key={ln.work_order_item_id}>
                                 <TableCell className="text-xs font-mono">{ln.work_order_number}</TableCell>
                                 <TableCell className="text-xs">
                                   <div className="font-medium">{ln.part_code ?? ln.job_type ?? "—"}</div>
                                   <div className="text-[11px] text-muted-foreground">
-                                    {ln.part_name ?? "—"} · {ln.unit_type ?? ln.unit ?? "—"} ·{" "}
+                                    {ln.part_name ?? "—"} ·{" "}
                                     <span className="uppercase tracking-wide">{ln.progress_type}</span>
-                                    {ln.near_tolerance_warning ? (
-                                      <Badge variant="warning" className="ml-2 text-[10px] font-normal px-1.5">
-                                        Near tolerance
-                                      </Badge>
-                                    ) : null}
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-right text-xs tabular-nums">
-                                  {ln.remaining_invoiceable_qty_hint != null ? ln.remaining_invoiceable_qty_hint : "—"}
+                                <TableCell className="text-xs text-muted-foreground">{ln.unit_type ?? ln.unit ?? "—"}</TableCell>
+                                <TableCell className="text-right text-[11px] text-muted-foreground">
+                                  {ln.rate_basis_label ?? "—"}
                                 </TableCell>
                                 <TableCell className="text-right text-xs tabular-nums">{money(ln.approved_rate)}</TableCell>
                                 <TableCell>
                                   <Input
-                                    className={cn(
-                                      "h-8 text-xs tabular-nums text-right",
-                                      qtyOver ? "border-red-500 focus-visible:ring-red-500/30" : null,
-                                    )}
+                                    className="h-8 text-xs tabular-nums text-right"
                                     value={inp.qty}
                                     onChange={(e) =>
                                       setLineInputs((m) => ({
@@ -559,11 +568,6 @@ export function InvoiceCreatePage() {
                                     }
                                     placeholder="0"
                                   />
-                                  {qtyOver ? (
-                                    <div className="mt-1 text-[11px] text-red-600">
-                                      Over completion. Max allowed: {allowedQty}
-                                    </div>
-                                  ) : null}
                                 </TableCell>
                                 <TableCell>
                                   <Input
@@ -578,6 +582,8 @@ export function InvoiceCreatePage() {
                                     placeholder="—"
                                   />
                                 </TableCell>
+                                <TableCell className="text-right text-xs tabular-nums">{money(base)}</TableCell>
+                                <TableCell className="text-right text-xs tabular-nums">{money(gross)}</TableCell>
                                 <TableCell>
                                   <Input
                                     className="h-8 text-xs"
@@ -590,14 +596,6 @@ export function InvoiceCreatePage() {
                                     }
                                     placeholder="Optional note for approval…"
                                   />
-                                </TableCell>
-                                <TableCell className={cn("text-right text-xs tabular-nums", valueOver ? "text-red-600 font-semibold" : null)}>
-                                  {money(gross)}
-                                  {valueOver ? (
-                                    <div className="mt-1 text-[11px] font-normal text-red-600">
-                                      Over WO remaining value.
-                                    </div>
-                                  ) : null}
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <button

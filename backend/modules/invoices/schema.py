@@ -53,6 +53,21 @@ class InvoiceLinePublic(BaseModel):
     variance_pct_hint: float | None = None
     work_order_number: str | None = None
     job_description: str | None = None
+    part_code: str | None = None
+    part_name: str | None = None
+    unit_type: str | None = None
+    """Commercial quantity unit from the work order snapshot (e.g. hr, kg, day, pcs)."""
+    unit_label: str | None = None
+    """Human-readable unit for display."""
+    pricing_method: str | None = None
+    rate_unit_type: str | None = None
+    rate_basis_label: str | None = None
+    """How the unit rate applies (e.g. per kg, per piece)."""
+    unit_rate: Decimal | None = None
+    """Same as ``rate``; explicit name for invoice grids."""
+    taxable_value: Decimal | None = None
+    """Ex-tax line amount (mirrors ``amount``)."""
+    tax_amount: Decimal | None = None
     rate_source: str | None
     resolved_contractor_rate_id: int | None
     resolved_part_master_id: int | None
@@ -103,6 +118,8 @@ class BillableWOLinePublic(BaseModel):
     part_name: str | None = None
     unit_type: str | None = None
     pricing_method: str | None = None
+    rate_unit_type: str | None = None
+    rate_basis_label: str | None = None
     progress_type: str
     approved_quantity: float | None = None
     approved_percentage: float | None = None

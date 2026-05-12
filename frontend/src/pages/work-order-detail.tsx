@@ -50,6 +50,9 @@ type WorkOrder = {
   work_date: string
   status: string
   updated_at?: string | null
+  approved_value_total?: string | number | null
+  invoiced_ex_tax_total?: string | number | null
+  remaining_invoiceable_value?: string | number | null
   items?: {
     id: number
     part_master_id: number
@@ -81,6 +84,14 @@ type AuditEntry = {
   old_value?: any
   new_value?: any
   metadata?: any
+}
+
+type LinkedInvoice = {
+  id: number
+  invoice_number: string
+  invoice_date: string
+  status: string
+  total_amount: string | number
 }
 
 function fmtMoney(n: number): string {
@@ -119,6 +130,7 @@ export function WorkOrderDetailPage() {
   const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [audit, setAudit] = React.useState<AuditEntry[]>([])
+  const [linkedInvoices, setLinkedInvoices] = React.useState<LinkedInvoice[]>([])
 
   const [plants, setPlants] = React.useState<OrgUnitLite[]>([])
   const [contractors, setContractors] = React.useState<ContractorLite[]>([])
@@ -138,6 +150,7 @@ export function WorkOrderDetailPage() {
   const canManageCompletion =
     hasPermission("work_orders.manage_completion") || hasPermission("work_orders.track_completion")
   const canDelete = hasPermission("work_orders.delete")
+  const canViewInvoices = hasPermission("invoices.view")
 
   const contractorName = React.useCallback(
     (id: number) => contractors.find((c) => c.id === id)?.name ?? `Contractor #${id}`,
@@ -200,10 +213,14 @@ export function WorkOrderDetailPage() {
     setLoading(true)
     setError(null)
     try {
-      const r = await getJson<WorkOrder>(`/work-orders/${woId}`)
+      const [r, logs, invs] = await Promise.all([
+        getJson<WorkOrder>(`/work-orders/${woId}`),
+        getJson<AuditEntry[]>(`/work-orders/${woId}/audit-logs`).catch(() => []),
+        getJson<LinkedInvoice[]>(`/work-orders/${woId}/invoices`).catch(() => []),
+      ])
       setRow(r)
-      const logs = await getJson<AuditEntry[]>(`/work-orders/${woId}/audit-logs`).catch(() => [])
       setAudit(Array.isArray(logs) ? logs : [])
+      setLinkedInvoices(Array.isArray(invs) ? invs : [])
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load work order")
     } finally {
@@ -419,13 +436,92 @@ export function WorkOrderDetailPage() {
           editableDraft
             ? "Tip: choose the contractor once, then edit part lines. Saved taxable values use negotiated rates when approved."
             : showCompletionEngine
-              ? "Active work order: update completion per line — invoice lines cannot exceed the latest saved completion."
+              ? "Active work order: update completion per line — invoice lines cannot exceed the latest saved completion. After approval, the approved work order value is fixed; cumulative invoices (ex. tax) cannot exceed that total (with validation tolerance)."
               : "Rates shown are governed (negotiated where applicable)."
         }
         onCancel={() => navigate("/dashboard/work-orders")}
         onSave={() => void saveDraft()}
         onSubmitApproval={() => void submit()}
       />
+
+      {(row.status === "active" || row.status === "closed") &&
+      (row.approved_value_total != null ||
+        row.invoiced_ex_tax_total != null ||
+        linkedInvoices.length > 0) ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Billing & invoices</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            {row.approved_value_total != null ? (
+              <div className="grid gap-2 sm:grid-cols-3">
+                <div className="rounded-md border bg-muted/30 px-3 py-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Approved work order value (ex. tax)
+                  </div>
+                  <div className="mt-1 font-medium tabular-nums">{fmtMoney(parseNum(row.approved_value_total))}</div>
+                  <p className="mt-1 text-xs text-muted-foreground">Set when the work order was approved; not editable here.</p>
+                </div>
+                <div className="rounded-md border px-3 py-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Invoiced to date (ex. tax)</div>
+                  <div className="mt-1 font-medium tabular-nums">
+                    {fmtMoney(parseNum(row.invoiced_ex_tax_total ?? 0))}
+                  </div>
+                </div>
+                <div className="rounded-md border px-3 py-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Remaining (ex. tax)</div>
+                  <div className="mt-1 font-medium tabular-nums">
+                    {fmtMoney(parseNum(row.remaining_invoiceable_value ?? 0))}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            <div>
+              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Invoices linked to this work order
+              </div>
+              {linkedInvoices.length === 0 ? (
+                <p className="text-muted-foreground">
+                  No invoices yet. Create one from Invoices → New and select lines from this work order.
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                        <th className="px-3 py-2 font-medium">Invoice #</th>
+                        <th className="px-3 py-2 font-medium">Date</th>
+                        <th className="px-3 py-2 font-medium">Status</th>
+                        <th className="px-3 py-2 font-medium text-right">Total</th>
+                        <th className="px-3 py-2 font-medium" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {linkedInvoices.map((inv) => (
+                        <tr key={inv.id} className="border-b last:border-0">
+                          <td className="px-3 py-2 font-mono text-xs">{inv.invoice_number}</td>
+                          <td className="px-3 py-2 tabular-nums">{inv.invoice_date}</td>
+                          <td className="px-3 py-2">
+                            <Badge variant="secondary">{inv.status}</Badge>
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(parseNum(inv.total_amount))}</td>
+                          <td className="px-3 py-2 text-right">
+                            {canViewInvoices ? (
+                              <Button asChild variant="ghost" size="sm" className="h-7">
+                                <Link to={`/dashboard/invoices/${inv.id}`}>Open</Link>
+                              </Button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="pb-2">

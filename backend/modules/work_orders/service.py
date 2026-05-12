@@ -25,7 +25,7 @@ from modules.work_orders.models import (
     WorkOrderItem,
     WorkOrderItemProgress,
 )
-from modules.invoices.models import InvoiceLine
+from modules.invoices.models import Invoice, InvoiceLine
 from modules.work_orders.schema import (
     WorkOrderCreate,
     WorkOrderDraftUpdate,
@@ -72,6 +72,17 @@ def _json_decimal(v: Decimal | None) -> str | None:
 class WorkOrderService:
     def __init__(self, db: Session) -> None:
         self._db = db
+
+    @staticmethod
+    def approved_total_from_items(wo: WorkOrder) -> Decimal:
+        """Approved commercial total = sum of line taxable values (ex tax)."""
+        return _q2(sum(_dec(it.taxable_value) for it in (wo.items or [])))
+
+    def _sync_approved_value_total_from_lines(self, wo: WorkOrder) -> None:
+        """Refresh header cap after governed line changes (e.g. approved rate override)."""
+        if str(wo.status) != "active":
+            return
+        wo.approved_value_total = WorkOrderService.approved_total_from_items(wo)
 
     def _ensure_plant(self, org_unit_id: int) -> OrgUnit:
         org = self._db.get(OrgUnit, int(org_unit_id))
@@ -162,6 +173,18 @@ class WorkOrderService:
         if wo is None:
             raise NotFoundError("WorkOrder", work_order_id)
         return wo
+
+    def list_invoices_for_work_order(self, work_order_id: int) -> list[Invoice]:
+        """Distinct invoices that reference any line item on this work order."""
+        self.get(work_order_id)
+        subq = (
+            select(InvoiceLine.invoice_id)
+            .join(WorkOrderItem, WorkOrderItem.id == InvoiceLine.work_order_item_id)
+            .where(WorkOrderItem.work_order_id == int(work_order_id))
+            .distinct()
+        )
+        stmt = select(Invoice).where(Invoice.id.in_(subq)).order_by(Invoice.id.desc())
+        return list(self._db.scalars(stmt).unique().all())
 
     def list(self, *, org_unit_id: int | None = None, status: str | None = None, limit: int = 100) -> list[WorkOrder]:
         stmt = select(WorkOrder).options(selectinload(WorkOrder.items)).order_by(WorkOrder.id.desc())
@@ -571,6 +594,7 @@ class WorkOrderService:
         wf = get_workflow_for_action(self._db, ACTION_CODE_CREATE)
         if wf is None:
             # No workflow configured: auto-approve and activate.
+            wo.approved_value_total = WorkOrderService.approved_total_from_items(wo)
             wo.status = "approved"
             wo.approved_by = actor_user_id
             wo.approved_at = _now_utc()
@@ -618,6 +642,7 @@ class WorkOrderService:
         wo = self.get(work_order_id)
         if wo.status != "pending_approval":
             return wo
+        wo.approved_value_total = WorkOrderService.approved_total_from_items(wo)
         wo.status = "approved"
         wo.approved_by = approver_user_id
         wo.approved_at = _now_utc()
@@ -940,6 +965,8 @@ class WorkOrderService:
             item.rate_source = "override"
             item.resolved_rate = _q2(Decimal(item.override_rate or item.resolved_rate))
             self._recompute_taxable_for_item(item)
+            if wo is not None:
+                self._sync_approved_value_total_from_lines(wo)
 
         if wo_id is not None:
             audit_helpers.write_audit(
@@ -967,11 +994,14 @@ class WorkOrderService:
             return item
         item.override_status = "approved"
         item.override_approval_request_id = approval_request_id or item.override_approval_request_id
+        wo_id = int(item.work_order_id)
         if item.override_rate is not None:
             item.rate_source = "override"
             item.resolved_rate = _q2(Decimal(item.override_rate))
             self._recompute_taxable_for_item(item)
-        wo_id = int(item.work_order_id)
+        wo_hdr = self._db.get(WorkOrder, wo_id)
+        if wo_hdr is not None:
+            self._sync_approved_value_total_from_lines(wo_hdr)
         if wo_id is not None:
             audit_helpers.write_audit(
                 self._db,

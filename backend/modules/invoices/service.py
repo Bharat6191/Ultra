@@ -12,6 +12,7 @@ from modules.approvals.service import ApprovalEngineService
 from modules.contractor.models import Contractor
 from modules.errors import ConflictError, NotFoundError
 from modules.invoices import audit as audit_helpers
+from modules.invoices.line_format import rate_basis_label
 from modules.invoices.models import (
     ContractorInvoiceCompliance,
     Invoice,
@@ -23,6 +24,7 @@ from modules.invoices.validation import (
     InvoiceValidationEngine,
     STATUSES_COUNTING_TOWARD_CUMULATIVES,
     invoice_tolerance_percentage,
+    raise_if_new_invoice_breaches_work_order_caps,
 )
 from modules.org_units.model import OrgUnit
 from modules.part_master.pricing import amount_from_snapshot
@@ -120,6 +122,7 @@ class InvoiceService:
         self._db.flush()
 
         total = Decimal("0")
+        cap_checks: list[tuple[int, Decimal]] = []
         for ln in payload.lines:
             item = self._db.get(WorkOrderItem, int(ln.work_order_item_id))
             if item is None:
@@ -155,6 +158,14 @@ class InvoiceService:
             )
             self._db.add(row)
             total += gross
+            cap_checks.append((int(item.id), _q2(amount)))
+
+        self._db.flush()
+        raise_if_new_invoice_breaches_work_order_caps(
+            self._db,
+            exclude_invoice_id=int(inv.id),
+            item_amounts=cap_checks,
+        )
 
         inv.total_amount = _q2(total)
         audit_helpers.write_audit(
@@ -310,6 +321,9 @@ class InvoiceService:
         out_lines: list[dict[str, Any]] = []
         for wo in wos:
             for it in wo.items or []:
+                snap = it.pricing_snapshot or {}
+                rut_raw = snap.get("rate_unit_type")
+                rut = str(rut_raw).strip() if rut_raw not in (None, "") else None
                 proj = wo_svc.item_completion_projection(it)
                 prev_qty_raw = self._db.scalar(
                     select(func.coalesce(func.sum(InvoiceLine.quantity), 0))
@@ -362,10 +376,12 @@ class InvoiceService:
                         "work_order_number": wo.work_order_number,
                         "work_order_item_id": int(it.id),
                         "contractor_id": int(contractor_id),
-                        "part_code": (it.pricing_snapshot or {}).get("part_code"),
-                        "part_name": (it.pricing_snapshot or {}).get("part_name"),
-                        "unit_type": (it.pricing_snapshot or {}).get("unit_type"),
-                        "pricing_method": (it.pricing_snapshot or {}).get("pricing_method"),
+                        "part_code": snap.get("part_code"),
+                        "part_name": snap.get("part_name"),
+                        "unit_type": snap.get("unit_type"),
+                        "pricing_method": snap.get("pricing_method"),
+                        "rate_unit_type": rut,
+                        "rate_basis_label": rate_basis_label(rut),
                         "progress_type": it.progress_type,
                         "approved_quantity": proj.get("approved_quantity"),
                         "approved_percentage": proj.get("approved_percentage"),
@@ -401,7 +417,9 @@ class InvoiceService:
 
     def _recompute_contractor_compliance(self, *, contractor_id: int) -> None:
         # Minimal rolling aggregation for now.
-        agg = self._db.get(ContractorInvoiceCompliance, contractor_id)  # type: ignore[arg-type]
+        agg = self._db.scalars(
+            select(ContractorInvoiceCompliance).where(ContractorInvoiceCompliance.contractor_id == int(contractor_id))
+        ).first()
         if agg is None:
             agg = ContractorInvoiceCompliance(contractor_id=int(contractor_id))
             self._db.add(agg)
