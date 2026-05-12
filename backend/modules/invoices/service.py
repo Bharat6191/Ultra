@@ -26,7 +26,7 @@ from modules.invoices.validation import (
 )
 from modules.org_units.model import OrgUnit
 from modules.part_master.pricing import amount_from_snapshot
-from modules.work_orders.models import WorkOrder, WorkOrderContractor, WorkOrderItem
+from modules.work_orders.models import WorkOrder, WorkOrderItem
 from modules.work_orders.service import WorkOrderService
 
 
@@ -124,19 +124,21 @@ class InvoiceService:
             item = self._db.get(WorkOrderItem, int(ln.work_order_item_id))
             if item is None:
                 raise NotFoundError("WorkOrderItem", int(ln.work_order_item_id))
-            woc = self._db.get(WorkOrderContractor, int(item.work_order_contractor_id))
-            wo = self._db.get(WorkOrder, int(woc.work_order_id)) if woc is not None else None
+            wo = self._db.get(WorkOrder, int(item.work_order_id))
             if wo is None:
                 raise ConflictError("Work order is missing for the selected item.")
             if str(wo.status) != "active":
                 raise ConflictError("Invoices may only reference active work orders.")
             if int(wo.org_unit_id) != int(inv.org_unit_id):
                 raise ConflictError("Invoice plant does not match work order plant.")
-            if woc is not None and int(woc.contractor_id) != int(inv.contractor_id):
-                raise ConflictError("Invoice contractor does not match work order contractor assignment.")
+            if int(wo.contractor_id) != int(inv.contractor_id):
+                raise ConflictError("Invoice contractor does not match work order contractor.")
 
             rate = _dec(ln.rate) if ln.rate is not None else _dec(item.resolved_rate)
-            amount = amount_from_snapshot(quantity=_dec(ln.quantity), resolved_rate=rate, snapshot=item.pricing_snapshot)
+            try:
+                amount = amount_from_snapshot(quantity=_dec(ln.quantity), resolved_rate=rate, snapshot=item.pricing_snapshot)
+            except ValueError as exc:
+                raise ConflictError(str(exc)) from exc
             tax_pct = _dec(ln.tax_pct) if ln.tax_pct is not None else Decimal("0")
             gross = _q2(amount * (Decimal("1") + tax_pct / Decimal("100")))
             row = InvoiceLine(
@@ -298,98 +300,94 @@ class InvoiceService:
                 WorkOrder.org_unit_id == int(org_unit_id),
                 WorkOrder.status == "active",
                 WorkOrder.is_active.is_(True),
+                WorkOrder.contractor_id == int(contractor_id),
             )
-            .options(selectinload(WorkOrder.contractors).selectinload(WorkOrderContractor.items))
+            .options(selectinload(WorkOrder.items))
         )
         if work_order_ids:
             stmt = stmt.where(WorkOrder.id.in_(tuple({int(x) for x in work_order_ids if int(x) > 0})))
         wos = list(self._db.scalars(stmt).unique().all())
         out_lines: list[dict[str, Any]] = []
         for wo in wos:
-            if not wo.contractors:
-                continue
-            for woc in wo.contractors:
-                if int(woc.contractor_id) != int(contractor_id):
-                    continue
-                for it in woc.items or []:
-                    proj = wo_svc.item_completion_projection(it)
-                    prev_qty_raw = self._db.scalar(
-                        select(func.coalesce(func.sum(InvoiceLine.quantity), 0))
-                        .select_from(InvoiceLine)
-                        .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
-                        .where(
-                            InvoiceLine.work_order_item_id == int(it.id),
-                            Invoice.status.in_(STATUSES_COUNTING_TOWARD_CUMULATIVES),
-                        )
+            for it in wo.items or []:
+                proj = wo_svc.item_completion_projection(it)
+                prev_qty_raw = self._db.scalar(
+                    select(func.coalesce(func.sum(InvoiceLine.quantity), 0))
+                    .select_from(InvoiceLine)
+                    .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
+                    .where(
+                        InvoiceLine.work_order_item_id == int(it.id),
+                        Invoice.status.in_(STATUSES_COUNTING_TOWARD_CUMULATIVES),
                     )
-                    prev_amt_raw = self._db.scalar(
-                        select(func.coalesce(func.sum(InvoiceLine.amount), 0))
-                        .select_from(InvoiceLine)
-                        .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
-                        .where(
-                            InvoiceLine.work_order_item_id == int(it.id),
-                            Invoice.status.in_(STATUSES_COUNTING_TOWARD_CUMULATIVES),
-                        )
+                )
+                prev_amt_raw = self._db.scalar(
+                    select(func.coalesce(func.sum(InvoiceLine.amount), 0))
+                    .select_from(InvoiceLine)
+                    .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
+                    .where(
+                        InvoiceLine.work_order_item_id == int(it.id),
+                        Invoice.status.in_(STATUSES_COUNTING_TOWARD_CUMULATIVES),
                     )
-                    pq = Decimal(str(it.planned_quantity)) if it.planned_quantity is not None else None
-                    rate = Decimal(str(it.resolved_rate))
-                    planned_contract_val = Decimal("0")
-                    if str(it.progress_type) == "quantity" and pq is not None:
+                )
+                pq = Decimal(str(it.planned_quantity)) if it.planned_quantity is not None else None
+                rate = Decimal(str(it.resolved_rate))
+                planned_contract_val = Decimal("0")
+                if str(it.progress_type) == "quantity" and pq is not None:
+                    planned_contract_val = amount_from_snapshot(
+                        quantity=pq, resolved_rate=rate, snapshot=it.pricing_snapshot
+                    )
+                elif str(it.progress_type) == "percentage":
+                    if it.planned_percentage is not None:
                         planned_contract_val = amount_from_snapshot(
-                            quantity=pq, resolved_rate=rate, snapshot=it.pricing_snapshot
+                            quantity=Decimal(str(it.planned_percentage)) / Decimal("100"),
+                            resolved_rate=rate,
+                            snapshot=it.pricing_snapshot,
                         )
-                    elif str(it.progress_type) == "percentage":
-                        if it.planned_percentage is not None:
-                            planned_contract_val = amount_from_snapshot(
-                                quantity=Decimal(str(it.planned_percentage)) / Decimal("100"),
-                                resolved_rate=rate,
-                                snapshot=it.pricing_snapshot,
-                            )
-                        else:
-                            planned_contract_val = amount_from_snapshot(
-                                quantity=Decimal("1"), resolved_rate=rate, snapshot=it.pricing_snapshot
-                            )
-                    perm_val = _q2(planned_contract_val * (Decimal("1") + tol / Decimal("100"))) if planned_contract_val > 0 else Decimal("0")
-                    prev_qty = Decimal(str(prev_qty_raw or 0))
-                    prev_amt = Decimal(str(prev_amt_raw or 0))
-                    remaining_val = perm_val - _q2(prev_amt)
+                    else:
+                        planned_contract_val = amount_from_snapshot(
+                            quantity=Decimal("1"), resolved_rate=rate, snapshot=it.pricing_snapshot
+                        )
+                perm_val = _q2(planned_contract_val * (Decimal("1") + tol / Decimal("100"))) if planned_contract_val > 0 else Decimal("0")
+                prev_qty = Decimal(str(prev_qty_raw or 0))
+                prev_amt = Decimal(str(prev_amt_raw or 0))
+                remaining_val = perm_val - _q2(prev_amt)
 
-                    cq = Decimal(str(proj.get("completed_quantity") or "0"))
-                    aq = pq if pq is not None else cq
-                    rem_qty_based = aq - prev_qty if pq is not None else None
+                cq = Decimal(str(proj.get("completed_quantity") or "0"))
+                aq = pq if pq is not None else cq
+                rem_qty_based = aq - prev_qty if pq is not None else None
 
-                    out_lines.append(
-                        {
-                            "work_order_id": int(wo.id),
-                            "work_order_number": wo.work_order_number,
-                            "work_order_item_id": int(it.id),
-                            "contractor_id": int(contractor_id),
-                            "part_code": (it.pricing_snapshot or {}).get("part_code"),
-                            "part_name": (it.pricing_snapshot or {}).get("part_name"),
-                            "unit_type": (it.pricing_snapshot or {}).get("unit_type"),
-                            "pricing_method": (it.pricing_snapshot or {}).get("pricing_method"),
-                            "progress_type": it.progress_type,
-                            "approved_quantity": proj.get("approved_quantity"),
-                            "approved_percentage": proj.get("approved_percentage"),
-                            "completed_quantity": proj.get("completed_quantity"),
-                            "completed_percentage": proj.get("completed_percentage"),
-                            "remaining_quantity": proj.get("remaining_quantity"),
-                            "previously_invoiced_qty": float(prev_qty),
-                            "remaining_invoiceable_qty_hint": float(rem_qty_based) if rem_qty_based is not None else None,
-                            "approved_rate": float(rate),
-                            "planned_contract_value": float(planned_contract_val),
-                            "permissible_value_with_tolerance": float(perm_val),
-                            "previously_invoiced_value": float(prev_amt),
-                            "remaining_invoiceable_value": float(max(remaining_val, Decimal("0"))) if planned_contract_val > 0 else None,
-                            "completion_vs_billing_pct_hint": round(
-                                (float(prev_amt) / float(perm_val) * 100.0), 2
-                            )
-                            if perm_val > 0
-                            else None,
-                            "near_tolerance_warning": bool(perm_val > 0 and prev_amt > perm_val * Decimal("0.85")),
-                            "tolerance_pct": float(tol),
-                        }
-                    )
+                out_lines.append(
+                    {
+                        "work_order_id": int(wo.id),
+                        "work_order_number": wo.work_order_number,
+                        "work_order_item_id": int(it.id),
+                        "contractor_id": int(contractor_id),
+                        "part_code": (it.pricing_snapshot or {}).get("part_code"),
+                        "part_name": (it.pricing_snapshot or {}).get("part_name"),
+                        "unit_type": (it.pricing_snapshot or {}).get("unit_type"),
+                        "pricing_method": (it.pricing_snapshot or {}).get("pricing_method"),
+                        "progress_type": it.progress_type,
+                        "approved_quantity": proj.get("approved_quantity"),
+                        "approved_percentage": proj.get("approved_percentage"),
+                        "completed_quantity": proj.get("completed_quantity"),
+                        "completed_percentage": proj.get("completed_percentage"),
+                        "remaining_quantity": proj.get("remaining_quantity"),
+                        "previously_invoiced_qty": float(prev_qty),
+                        "remaining_invoiceable_qty_hint": float(rem_qty_based) if rem_qty_based is not None else None,
+                        "approved_rate": float(rate),
+                        "planned_contract_value": float(planned_contract_val),
+                        "permissible_value_with_tolerance": float(perm_val),
+                        "previously_invoiced_value": float(prev_amt),
+                        "remaining_invoiceable_value": float(max(remaining_val, Decimal("0"))) if planned_contract_val > 0 else None,
+                        "completion_vs_billing_pct_hint": round(
+                            (float(prev_amt) / float(perm_val) * 100.0), 2
+                        )
+                        if perm_val > 0
+                        else None,
+                        "near_tolerance_warning": bool(perm_val > 0 and prev_amt > perm_val * Decimal("0.85")),
+                        "tolerance_pct": float(tol),
+                    }
+                )
         return {"tolerance_pct": float(tol), "lines": out_lines}
 
     def update_issue_justification(self, issue_id: int, payload: InvoiceIssueJustificationUpdate, *, actor_user_id: int) -> InvoiceValidationIssue:

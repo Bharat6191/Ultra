@@ -7,14 +7,17 @@ Run from project root:
 
 What this gives you (idempotent — safe to run repeatedly):
 
-* **Part masters**: a mix of active / superseded (history) / future-effective /
-  expired rows across 3 plants and several commercial templates.
+* **Part masters**: **16** curated active rows on the **first plant** (10–20 style
+  catalog) covering hour/day/kg/job commercial templates. With ``--reset``,
+  legacy ``[seed] bulk active item …`` rows from older seeds are pruned first.
 * **Approval workflow** for ``contractor_rates.create`` mapped to a single-step
   workflow whose approver is the seeded ``Procurement Approver`` role
   (created by ``scripts/seed_admin_test_data.py``).
-* **Contractor rates** in every status the UI knows how to render:
-  ``draft``, ``pending_approval``, ``approved``, ``rejected``,
-  plus a rate that has gone through 3 negotiation rounds.
+* **Contractor rates**: one negotiation per catalog part (rotating contractors).
+  **Negotiated rate is always strictly above** the Part Master base; the
+  vendor **opening** (``initial_rate``) is higher still so savings vs opening
+  stay positive. **Some** rows are auto-approved, **some** left pending or draft,
+  plus one **rejected** and one **multi-round approved** showcase.
 * Full audit trail: each create / update / round / approval / activation
   generates rows in ``part_master_audit_logs`` and
   ``contractor_rate_audit_logs`` so the timeline UI is non-empty.
@@ -43,7 +46,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[1] / "backend"
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 import db.models  # noqa: F401 — register all models on Base.metadata
@@ -195,12 +198,12 @@ def _ensure_workflow_for_action(
     else:
         wf.is_active = True
 
-    has_step = db.scalar(
-        select(func.count())
-        .select_from(ApprovalStep)
+    step = db.scalar(
+        select(ApprovalStep)
         .where(ApprovalStep.workflow_id == wf.id)
+        .order_by(ApprovalStep.step_order.asc())
     )
-    if not has_step:
+    if step is None:
         db.add(
             ApprovalStep(
                 workflow_id=wf.id,
@@ -209,6 +212,9 @@ def _ensure_workflow_for_action(
                 required_approvals=1,
             )
         )
+    elif int(step.approver_role_id) != int(approver_role.id):
+        # Keep tasks act-on-able when the DB still points at a retired approver role.
+        step.approver_role_id = int(approver_role.id)
 
     mapping = db.scalar(
         select(ApprovalWorkflowMapping)
@@ -265,6 +271,8 @@ def _find_or_create_part(
     u = unit.strip().upper()
     part_code = f"{j}-{sk}-{u}"[:64]
     unit_type, pricing_method, rate_unit_type, wpp = _map_unit_commercial(unit)
+    if pricing_method == "weight_based" and wpp is None:
+        wpp = Decimal("2.500")
     part_name = f"{job_type.strip()} ({skill_type.replace('_', ' ').strip()})"
     existing = db.scalar(
         select(PartMaster).where(
@@ -341,6 +349,80 @@ def _reset_seeded_rows(db: Session) -> tuple[int, int]:
             requests_deleted += 1
     db.commit()
     return rates_deleted, requests_deleted
+
+
+def _prune_legacy_bulk_seed_parts(db: Session, *, plant_ids: list[int]) -> int:
+    """Remove old multi-plant bulk part masters (notes marker) and their rates."""
+    if not plant_ids:
+        return 0
+    pm_ids = [
+        int(x)
+        for x in db.scalars(
+            select(PartMaster.id).where(
+                PartMaster.org_unit_id.in_([int(p) for p in plant_ids]),
+                PartMaster.notes.like("%[seed] bulk active item%"),
+            )
+        ).all()
+    ]
+    if not pm_ids:
+        return 0
+    db.execute(delete(ContractorRate).where(ContractorRate.part_master_id.in_(pm_ids)))
+    db.execute(delete(PartMaster).where(PartMaster.id.in_(pm_ids)))
+    db.commit()
+    return len(pm_ids)
+
+
+def _opening_and_negotiated_premium_vs_base(base: Decimal) -> tuple[Decimal, Decimal]:
+    """Opening ask and settled negotiated rate; negotiated is strictly above Part Master base."""
+    negotiated = (base * Decimal("1.11")).quantize(Decimal("0.01"))
+    if negotiated <= base:
+        negotiated = (base + Decimal("0.05")).quantize(Decimal("0.01"))
+    initial = (base * Decimal("1.28")).quantize(Decimal("0.01"))
+    if initial <= negotiated:
+        initial = (negotiated + Decimal("1.00")).quantize(Decimal("0.01"))
+    return initial, negotiated
+
+
+def _approve_first_pending_task(
+    db: Session, *, request_id: int, approver_id: int, comment: str
+) -> bool:
+    eng = ApprovalEngineService(db)
+    task = db.scalar(
+        select(ApprovalTask)
+        .where(ApprovalTask.request_id == int(request_id))
+        .where(ApprovalTask.status == "pending")
+        .order_by(ApprovalTask.id.asc())
+    )
+    if task is None:
+        return False
+    eng.act_on_task(
+        task_id=int(task.id),
+        actor_user_id=int(approver_id),
+        action="approve",
+        comment=comment,
+    )
+    return True
+
+
+def _reject_first_pending_task(
+    db: Session, *, request_id: int, approver_id: int, comment: str
+) -> bool:
+    eng = ApprovalEngineService(db)
+    task = db.scalar(
+        select(ApprovalTask)
+        .where(ApprovalTask.request_id == int(request_id))
+        .where(ApprovalTask.status == "pending")
+        .order_by(ApprovalTask.id.asc())
+    )
+    if task is None:
+        return False
+    eng.act_on_task(
+        task_id=int(task.id),
+        actor_user_id=int(approver_id),
+        action="reject",
+        comment=comment,
+    )
+    return True
 
 
 def _seed_contractor_rate(
@@ -463,126 +545,27 @@ def main() -> int:
             (c.contractor_code or ""): c for c in contractors
         }
         c_acme = by_code.get("CTR-ACME-001") or contractors[0]
-        c_zen = by_code.get("CTR-ZEN-002") or contractors[min(1, len(contractors) - 1)]
-        c_orion = by_code.get("CTR-ORION-003") or contractors[min(2, len(contractors) - 1)]
 
         pm_svc = PartMasterService(db)
         rate_svc = ContractorRateService(db)
 
-        # ---- 1. Rate masters ---------------------------------------------------
+        # ---- 1. Part master catalog (16 rows, first plant) ---------------------
 
         today = date.today()
+        plant_c_id = int(plants[2].id) if len(plants) > 2 else plant_b_id
 
-        # Welder · skilled · hour @ Plant A — current active rate.
-        rm_welder_active = _find_or_create_part(
-            db, pm_svc,
-            job_type="Welder",
-            skill_type="skilled",
-            unit="hour",
-            base_rate="120.00",
-            plant_id=plant_id,
-            effective_from=today - timedelta(days=30),
-            effective_to=None,
-            is_active=True,
-            notes="Q2 base rate revision. Use for all welding work orders.",
-            actor_user_id=actor_id,
-        )
-
-        # Welder · skilled · hour @ Plant A — superseded historical row (expired).
-        rm_welder_old = _find_or_create_part(
-            db, pm_svc,
-            job_type="Welder",
-            skill_type="skilled",
-            unit="hour",
-            base_rate="100.00",
-            plant_id=plant_id,
-            effective_from=today - timedelta(days=180),
-            effective_to=today - timedelta(days=31),
-            is_active=False,
-            notes="Q1 rate (history).",
-            actor_user_id=actor_id,
-        )
-        # If create_rate_master saw the active rate first, it would have superseded
-        # this row; re-applying explicit deactivation is a no-op when already false.
-        if rm_welder_old.is_active:
-            pm_svc.update_part_master(
-                int(rm_welder_old.id),
-                PartMasterUpdate(is_active=False),
-                actor_user_id=actor_id,
+        if args.reset:
+            pruned = _prune_legacy_bulk_seed_parts(
+                db,
+                plant_ids=list({plant_id, plant_b_id, plant_c_id}),
             )
+            if pruned:
+                print(
+                    f"--reset: pruned {pruned} legacy bulk-seeded part_master rows "
+                    "(and their contractor_rates)."
+                )
 
-        # Electrician · semi_skilled · day @ Plant A.
-        rm_electrician = _find_or_create_part(
-            db, pm_svc,
-            job_type="Electrician",
-            skill_type="semi_skilled",
-            unit="day",
-            base_rate="850.00",
-            plant_id=plant_id,
-            effective_from=today - timedelta(days=15),
-            is_active=True,
-            notes="Daywage incl. PPE allowance.",
-            actor_user_id=actor_id,
-        )
-
-        # Helper · unskilled · hour @ Plant A.
-        rm_helper = _find_or_create_part(
-            db, pm_svc,
-            job_type="General Helper",
-            skill_type="unskilled",
-            unit="hour",
-            base_rate="60.00",
-            plant_id=plant_id,
-            effective_from=today - timedelta(days=20),
-            is_active=True,
-            actor_user_id=actor_id,
-        )
-
-        # Future-effective row to preview "scheduled" rates in UI.
-        rm_future = _find_or_create_part(
-            db, pm_svc,
-            job_type="Pipefitter",
-            skill_type="skilled",
-            unit="hour",
-            base_rate="135.00",
-            plant_id=plant_id,
-            effective_from=today + timedelta(days=14),
-            is_active=False,  # not yet active
-            notes="Scheduled effective in 2 weeks.",
-            actor_user_id=actor_id,
-        )
-
-        # Plant B — Welder skilled hour, distinct combo by plant.
-        rm_welder_plant_b = _find_or_create_part(
-            db, pm_svc,
-            job_type="Welder",
-            skill_type="skilled",
-            unit="hour",
-            base_rate="115.00",
-            plant_id=plant_b_id,
-            effective_from=today - timedelta(days=10),
-            is_active=True,
-            actor_user_id=actor_id,
-        )
-
-        # Expired row to demonstrate the "expired" warning in the negotiation UI.
-        rm_expired = _find_or_create_part(
-            db, pm_svc,
-            job_type="Crane Operator",
-            skill_type="skilled",
-            unit="day",
-            base_rate="1500.00",
-            plant_id=plant_id,
-            effective_from=today - timedelta(days=400),
-            effective_to=today - timedelta(days=30),
-            is_active=False,
-            notes="Expired — kept for history; cannot be used in new negotiations.",
-            actor_user_id=actor_id,
-        )
-
-        # Bulk active rate masters per plant (for Work Order + Invoice dropdowns).
-        # Goal: 10+ active items per plant, stable & idempotent.
-        templates: list[tuple[str, str, str, str]] = [
+        V2_CATALOG: list[tuple[str, str, str, str]] = [
             ("Welder", "skilled", "hour", "120.00"),
             ("Welder", "semi_skilled", "hour", "95.00"),
             ("Electrician", "skilled", "day", "950.00"),
@@ -597,75 +580,27 @@ def main() -> int:
             ("Store Keeper", "semi_skilled", "day", "700.00"),
             ("Flux Wire", "semi_skilled", "kg", "18.50"),
             ("Welding Rod", "semi_skilled", "kg", "22.00"),
-            ("Consumables", "unskilled", "kg", "12.75"),
             ("Pipeline Repair", "skilled", "job", "4500.00"),
             ("Pump Overhaul", "skilled", "job", "12500.00"),
         ]
 
-        def _rate_bump(base: str, *, plant_index: int) -> str:
-            try:
-                v = Decimal(base)
-            except Exception:
-                return base
-            # Plant A=0%, B=+3%, C=+6% (deterministic, keeps UI interesting)
-            bump = Decimal("1.00") + (Decimal("0.03") * Decimal(str(plant_index)))
-            return str((v * bump).quantize(Decimal("0.01")))
-
-        plant_c = plants[2] if len(plants) > 2 else plant_b
-        plant_c_id = int(plant_c.id)
-
-        all_plants = [plant_id, plant_b_id, plant_c_id]
-        for pi, pid in enumerate(all_plants):
-            for job_type, skill_type, unit, base_rate in templates:
+        catalog_parts: list[PartMaster] = []
+        for job_type, skill_type, unit, base_rate in V2_CATALOG:
+            catalog_parts.append(
                 _find_or_create_part(
                     db,
                     pm_svc,
                     job_type=job_type,
                     skill_type=skill_type,
                     unit=unit,
-                    base_rate=_rate_bump(base_rate, plant_index=pi),
-                    plant_id=int(pid),
+                    base_rate=base_rate,
+                    plant_id=plant_id,
                     effective_from=today - timedelta(days=7),
                     effective_to=None,
                     is_active=True,
-                    notes=f"[seed] bulk active item ({job_type}/{skill_type}/{unit})",
+                    notes=f"[seed] v2 catalog ({job_type}/{skill_type}/{unit})",
                     actor_user_id=actor_id,
                 )
-
-        # Ensure a few negotiated contractor rates for the new units (kg/job),
-        # so they appear in Contractor Rates + can resolve in Work Orders/Invoices.
-        # We anchor on Plant A because demo WOs typically target the first plant.
-        kg_job_pms = list(
-            db.scalars(
-                select(PartMaster)
-                .where(PartMaster.org_unit_id == int(plant_id))
-                .where(PartMaster.is_active.is_(True))
-                .where(
-                    or_(
-                        PartMaster.unit_type == "kg",
-                        PartMaster.part_code.endswith("-JOB"),
-                    )
-                )
-                .order_by(PartMaster.id.asc())
-            ).all()
-        )
-        for pm in kg_job_pms[:6]:
-            # Keep it simple: create a draft rate slightly below base to show savings.
-            try:
-                base = Decimal(str(pm.base_rate))
-            except Exception:
-                base = Decimal("1.00")
-            negotiated = (base * Decimal("0.97")).quantize(Decimal("0.01"))
-            _seed_contractor_rate(
-                db,
-                rate_svc,
-                contractor_id=int(c_acme.id),
-                part_master_id=int(pm.id),
-                negotiated_rate=str(negotiated),
-                initial_rate=str(base),
-                effective_from=today,
-                marker_remarks=f"[seed] kg/job unit demo for {pm.part_code}",
-                actor_user_id=actor_id,
             )
 
         # ---- 2. Approval workflow mapping --------------------------------------
@@ -677,222 +612,116 @@ def main() -> int:
             creator_user_id=actor_id,
         )
 
-        # ---- 3. Contractor rates (multiple statuses) ---------------------------
+        # ---- 3. Contractor rates: negotiate every catalog part -------------------
 
-        # 3a. DRAFT — never submitted yet. Vendor opened at 130, internal
-        # target/draft is 115. Will show "negotiated down by 15" in the UI
-        # even before submission.
-        draft = _seed_contractor_rate(
-            db, rate_svc,
-            contractor_id=int(c_acme.id),
-            part_master_id=int(rm_welder_active.id),
-            negotiated_rate="115.00",
-            initial_rate="130.00",
-            effective_from=today + timedelta(days=1),
-            marker_remarks="[seed] draft offer — initial proposal",
-            actor_user_id=actor_id,
-        )
+        approver_id = int((approver or actor).id)
+        showcase_multi_id: int | None = None
+        showcase_multi_contractor_id: int | None = None
 
-        # Alternate vendor on the same welder base row — rate master “all contractors” grid.
-        zen_welder = _seed_contractor_rate(
-            db, rate_svc,
-            contractor_id=int(c_zen.id),
-            part_master_id=int(rm_welder_active.id),
-            negotiated_rate="118.00",
-            initial_rate="125.00",
-            effective_from=today - timedelta(days=5),
-            marker_remarks="[seed] zen welder — second vendor vs same base job",
-            actor_user_id=actor_id,
-        )
-        if zen_welder.status == "draft":
+        for idx, pm in enumerate(catalog_parts):
+            ctr = contractors[idx % len(contractors)]
             try:
-                rate_svc.submit_for_approval(int(zen_welder.id), actor_user_id=actor_id)
-                zen_welder = rate_svc.get_rate(int(zen_welder.id))
-                if zen_welder.status == "pending_approval" and zen_welder.approval_request_id:
-                    eng = ApprovalEngineService(db)
-                    task = db.scalar(
-                        select(ApprovalTask)
-                        .where(ApprovalTask.request_id == int(zen_welder.approval_request_id))
-                        .where(ApprovalTask.status == "pending")
-                        .order_by(ApprovalTask.id.asc())
-                    )
-                    if task is not None:
-                        approver_id = int((approver or actor).id)
-                        eng.act_on_task(
-                            task_id=int(task.id),
-                            actor_user_id=approver_id,
-                            action="approve",
-                            comment="[seed] auto-approved zen welder rate",
+                base = Decimal(str(pm.base_rate))
+            except Exception:
+                base = Decimal("1.00")
+            initial, negotiated = _opening_and_negotiated_premium_vs_base(base)
+            if negotiated <= base:
+                negotiated = (base + Decimal("0.05")).quantize(Decimal("0.01"))
+                if initial <= negotiated:
+                    initial = (negotiated + Decimal("1.00")).quantize(Decimal("0.01"))
+
+            marker = f"[seed] v2 neg {pm.part_code} ctr{int(ctr.id)}"
+            row = _seed_contractor_rate(
+                db,
+                rate_svc,
+                contractor_id=int(ctr.id),
+                part_master_id=int(pm.id),
+                negotiated_rate=str(negotiated),
+                initial_rate=str(initial),
+                effective_from=today,
+                marker_remarks=marker,
+                actor_user_id=actor_id,
+            )
+
+            try:
+                if idx == 5:
+                    if row.status == "draft" and int(row.current_round or 0) == 0:
+                        open_ask = (base * Decimal("1.32")).quantize(Decimal("0.01"))
+                        mid = (base * Decimal("1.18")).quantize(Decimal("0.01"))
+                        rate_svc.add_negotiation_round(
+                            int(row.id),
+                            NegotiationRoundCreate(
+                                proposed_rate=open_ask,
+                                counter_rate=None,
+                                remarks="[seed] v2 R1: vendor opening ask",
+                                apply_to_negotiated_rate=False,
+                            ),
+                            actor_user_id=actor_id,
                         )
-                        zen_welder = rate_svc.get_rate(int(zen_welder.id))
-            except Exception as exc:  # noqa: BLE001
-                print(f"warn: could not approve seeded zen welder rate: {exc}", file=sys.stderr)
-
-        # 3b. APPROVED — vendor opened well above base, we negotiated some
-        # of it back. Final still lands ABOVE base, so this row contributes
-        # to BOTH "negotiation savings" AND "premium vs base" on the dashboard.
-        approved = _seed_contractor_rate(
-            db, rate_svc,
-            contractor_id=int(c_acme.id),
-            part_master_id=int(rm_electrician.id),
-            negotiated_rate="800.00",
-            initial_rate="900.00",  # vendor opened at 900; we shaved 100 off
-            effective_from=today - timedelta(days=10),
-            marker_remarks="[seed] approved electrician daywage",
-            actor_user_id=actor_id,
-        )
-        if approved.status == "draft":
-            try:
-                rate_svc.submit_for_approval(int(approved.id), actor_user_id=actor_id)
-                approved = rate_svc.get_rate(int(approved.id))
-                if approved.status == "pending_approval" and approved.approval_request_id:
-                    eng = ApprovalEngineService(db)
-                    task = db.scalar(
-                        select(ApprovalTask)
-                        .where(ApprovalTask.request_id == int(approved.approval_request_id))
-                        .where(ApprovalTask.status == "pending")
-                        .order_by(ApprovalTask.id.asc())
-                    )
-                    if task is not None:
-                        approver_id = int((approver or actor).id)
-                        eng.act_on_task(
-                            task_id=int(task.id),
-                            actor_user_id=approver_id,
-                            action="approve",
-                            comment="[seed] auto-approved during seeding",
+                        rate_svc.add_negotiation_round(
+                            int(row.id),
+                            NegotiationRoundCreate(
+                                proposed_rate=None,
+                                counter_rate=mid,
+                                remarks="[seed] v2 R2: procurement counter",
+                                apply_to_negotiated_rate=True,
+                            ),
+                            actor_user_id=actor_id,
                         )
-                        approved = rate_svc.get_rate(int(approved.id))
-            except Exception as exc:  # noqa: BLE001
-                print(f"warn: could not approve seeded electrician rate: {exc}", file=sys.stderr)
-
-        # 3c. PENDING_APPROVAL — submitted, sitting in approver's inbox.
-        # Vendor opened at 65, current proposal is 55 — a clean savings story
-        # that lands BELOW the helper rate's base for variety.
-        pending = _seed_contractor_rate(
-            db, rate_svc,
-            contractor_id=int(c_zen.id),
-            part_master_id=int(rm_helper.id),
-            negotiated_rate="55.00",
-            initial_rate="65.00",
-            effective_from=today + timedelta(days=2),
-            marker_remarks="[seed] pending approval — helper hourly",
-            actor_user_id=actor_id,
-        )
-        if pending.status == "draft":
-            try:
-                rate_svc.submit_for_approval(int(pending.id), actor_user_id=actor_id)
-                pending = rate_svc.get_rate(int(pending.id))
-            except Exception as exc:  # noqa: BLE001
-                print(f"warn: could not submit pending rate: {exc}", file=sys.stderr)
-
-        # 3d. REJECTED — submitted then rejected by approver.
-        rejected = _seed_contractor_rate(
-            db, rate_svc,
-            contractor_id=int(c_orion.id),
-            part_master_id=int(rm_welder_active.id),
-            negotiated_rate="98.00",
-            initial_rate="125.00",  # vendor's opening ask before getting rejected
-            effective_from=today + timedelta(days=3),
-            marker_remarks="[seed] rejected — too low",
-            actor_user_id=actor_id,
-        )
-        if rejected.status == "draft":
-            try:
-                rate_svc.submit_for_approval(int(rejected.id), actor_user_id=actor_id)
-                rejected = rate_svc.get_rate(int(rejected.id))
-                if rejected.status == "pending_approval" and rejected.approval_request_id:
-                    eng = ApprovalEngineService(db)
-                    task = db.scalar(
-                        select(ApprovalTask)
-                        .where(ApprovalTask.request_id == int(rejected.approval_request_id))
-                        .where(ApprovalTask.status == "pending")
-                        .order_by(ApprovalTask.id.asc())
-                    )
-                    if task is not None:
-                        approver_id = int((approver or actor).id)
-                        eng.act_on_task(
-                            task_id=int(task.id),
-                            actor_user_id=approver_id,
-                            action="reject",
-                            comment="[seed] rate below market floor — please revise",
+                        rate_svc.add_negotiation_round(
+                            int(row.id),
+                            NegotiationRoundCreate(
+                                proposed_rate=None,
+                                counter_rate=negotiated,
+                                remarks="[seed] v2 R3: settled above Part Master base",
+                                apply_to_negotiated_rate=True,
+                            ),
+                            actor_user_id=actor_id,
                         )
-                        rejected = rate_svc.get_rate(int(rejected.id))
-            except Exception as exc:  # noqa: BLE001
-                print(f"warn: could not reject seeded rate: {exc}", file=sys.stderr)
-
-        # 3e. MULTI-ROUND negotiation that ends approved. Tells the most
-        # complete story for the timeline: vendor opens HIGH, procurement
-        # counters DOWN, both meet in the middle. Initial ask captured at
-        # create time so the savings figure stays accurate even before round 1.
-        multi = _seed_contractor_rate(
-            db, rate_svc,
-            contractor_id=int(c_zen.id),
-            part_master_id=int(rm_welder_plant_b.id),
-            negotiated_rate="125.00",  # vendor's opening ask
-            initial_rate="125.00",
-            effective_from=today,
-            marker_remarks="[seed] multi-round welder negotiation",
-            actor_user_id=actor_id,
-        )
-        if int(multi.current_round or 0) == 0 and multi.status == "draft":
-            try:
-                rate_svc.add_negotiation_round(
-                    int(multi.id),
-                    NegotiationRoundCreate(
-                        proposed_rate=Decimal("125.00"),
-                        counter_rate=None,
-                        remarks="Round 1: vendor opens at list price (125)",
-                        apply_to_negotiated_rate=False,
-                    ),
-                    actor_user_id=actor_id,
-                )
-                rate_svc.add_negotiation_round(
-                    int(multi.id),
-                    NegotiationRoundCreate(
-                        proposed_rate=None,
-                        counter_rate=Decimal("115.00"),
-                        remarks="Round 2: procurement counters at base (115)",
-                        apply_to_negotiated_rate=True,
-                    ),
-                    actor_user_id=actor_id,
-                )
-                # Final landed rate is intentionally ABOVE base (118 vs base
-                # 115). This is the realistic case the dashboard now models:
-                # we did save 7 from the contractor's opening ask of 125, but
-                # we still ended up paying 3 above the procurement baseline —
-                # which shows up as "Premium vs base" on the dashboard
-                # without cancelling out the negotiation savings.
-                rate_svc.add_negotiation_round(
-                    int(multi.id),
-                    NegotiationRoundCreate(
-                        proposed_rate=None,
-                        counter_rate=Decimal("118.00"),
-                        remarks="Round 3: settled at 118 — slightly above base, both sides accept",
-                        apply_to_negotiated_rate=True,
-                    ),
-                    actor_user_id=actor_id,
-                )
-                rate_svc.submit_for_approval(int(multi.id), actor_user_id=actor_id)
-                multi = rate_svc.get_rate(int(multi.id))
-                if multi.status == "pending_approval" and multi.approval_request_id:
-                    eng = ApprovalEngineService(db)
-                    task = db.scalar(
-                        select(ApprovalTask)
-                        .where(ApprovalTask.request_id == int(multi.approval_request_id))
-                        .where(ApprovalTask.status == "pending")
-                        .order_by(ApprovalTask.id.asc())
-                    )
-                    if task is not None:
-                        approver_id = int((approver or actor).id)
-                        eng.act_on_task(
-                            task_id=int(task.id),
-                            actor_user_id=approver_id,
-                            action="approve",
-                            comment="[seed] approved after 3 rounds",
+                        rate_svc.submit_for_approval(int(row.id), actor_user_id=actor_id)
+                    row = rate_svc.get_rate(int(row.id))
+                    if row.status == "pending_approval" and row.approval_request_id:
+                        _approve_first_pending_task(
+                            db,
+                            request_id=int(row.approval_request_id),
+                            approver_id=approver_id,
+                            comment="[seed] v2 approved after 3 rounds",
                         )
-                multi = rate_svc.get_rate(int(multi.id))
+                    row = rate_svc.get_rate(int(row.id))
+                    showcase_multi_id = int(row.id)
+                    showcase_multi_contractor_id = int(ctr.id)
+                    continue
+
+                if idx == 12:
+                    if row.status == "draft":
+                        rate_svc.submit_for_approval(int(row.id), actor_user_id=actor_id)
+                    row = rate_svc.get_rate(int(row.id))
+                    if row.status == "pending_approval" and row.approval_request_id:
+                        _reject_first_pending_task(
+                            db,
+                            request_id=int(row.approval_request_id),
+                            approver_id=approver_id,
+                            comment="[seed] v2 rejected showcase",
+                        )
+                    continue
+
+                bucket = idx % 3
+                if bucket == 1:
+                    if row.status == "draft":
+                        rate_svc.submit_for_approval(int(row.id), actor_user_id=actor_id)
+                elif bucket == 2:
+                    if row.status == "draft":
+                        rate_svc.submit_for_approval(int(row.id), actor_user_id=actor_id)
+                    row = rate_svc.get_rate(int(row.id))
+                    if row.status == "pending_approval" and row.approval_request_id:
+                        _approve_first_pending_task(
+                            db,
+                            request_id=int(row.approval_request_id),
+                            approver_id=approver_id,
+                            comment=f"[seed] v2 auto-approved {pm.part_code}",
+                        )
             except Exception as exc:  # noqa: BLE001
-                print(f"warn: multi-round seed encountered: {exc}", file=sys.stderr)
+                print(f"warn: rate workflow for {pm.part_code}: {exc}", file=sys.stderr)
 
         # ---- 4. Print summary --------------------------------------------------
 
@@ -928,8 +757,9 @@ def main() -> int:
               f"{'yes (id=' + str(wf.id) + ')' if wf else 'no — skipped (no approver role)'}")
         print()
         print(f"part_master rows                  : {n_part_masters}")
-        print(f"  • new rows added this run       : "
-              f"{len([rm_welder_active, rm_welder_old, rm_electrician, rm_helper, rm_future, rm_welder_plant_b, rm_expired])}")
+        print(
+            f"  • v2 catalog on first plant       : {len(catalog_parts)} active part masters"
+        )
         print(f"contractor_rates rows             : {n_rates}")
         print( "  by status                       :")
         for s in ("draft", "pending_approval", "approved", "rejected", "expired", "cancelled"):
@@ -946,7 +776,11 @@ def main() -> int:
         print("  • /dashboard/part-master       (filter by plant / part / pricing)")
         print("  • /dashboard/negotiated-rates  (workspace KPIs + table)")
         print(f"  • /dashboard/contractors/{c_acme.id}?tab=rates  (per-contractor rates tab)")
-        print(f"  • /dashboard/contractors/{c_zen.id}?tab=rates&focus={multi.id} (deep-link)")
+        if showcase_multi_id is not None and showcase_multi_contractor_id is not None:
+            print(
+                f"  • /dashboard/contractors/{showcase_multi_contractor_id}?tab=rates&focus={showcase_multi_id} "
+                "(multi-round Pipefitter showcase)"
+            )
         print()
     finally:
         db.close()

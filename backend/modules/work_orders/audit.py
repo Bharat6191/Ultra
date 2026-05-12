@@ -32,6 +32,7 @@ ACTION_RATE_OVERRIDE_REJECTED = "RATE_OVERRIDE_REJECTED"
 HEADER_FIELDS: tuple[str, ...] = (
     "work_order_number",
     "org_unit_id",
+    "contractor_id",
     "title",
     "description",
     "work_date",

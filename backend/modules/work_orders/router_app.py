@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from core.auth import CurrentUser, get_current_user
 from core.permissions import require_any_permission, require_permission
 from db.session import get_db
+from modules.contractor.models import Contractor
 from modules.errors import ConflictError, NotFoundError
 from modules.work_orders.models import WorkOrder
 from modules.work_orders.schema import (
@@ -32,10 +33,14 @@ def _svc(db: Session = Depends(get_db)) -> WorkOrderService:
 
 def _to_public(db: Session, row: WorkOrder) -> dict:
     svc = WorkOrderService(db)
+    ctr = db.get(Contractor, int(row.contractor_id))
+    contractor_name = getattr(ctr, "name", None) if ctr is not None else None
     return {
         "id": int(row.id),
         "work_order_number": row.work_order_number,
         "org_unit_id": int(row.org_unit_id),
+        "contractor_id": int(row.contractor_id),
+        "contractor_name": contractor_name,
         "title": row.title,
         "description": row.description,
         "work_date": row.work_date,
@@ -44,37 +49,31 @@ def _to_public(db: Session, row: WorkOrder) -> dict:
         "created_by": row.created_by,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
-        "contractors": [
+        "items": [
             {
-                "id": int(c.id),
-                "contractor_id": int(c.contractor_id),
-                "scope_notes": c.scope_notes,
-                "items": [
-                    {
-                        "id": int(i.id),
-                        "part_master_id": int(i.part_master_id),
-                        "part_code": (i.pricing_snapshot or {}).get("part_code"),
-                        "part_name": (i.pricing_snapshot or {}).get("part_name"),
-                        "unit_type": (i.pricing_snapshot or {}).get("unit_type"),
-                        "pricing_method": (i.pricing_snapshot or {}).get("pricing_method"),
-                        "rate_unit_type": (i.pricing_snapshot or {}).get("rate_unit_type"),
-                        "pricing_snapshot": i.pricing_snapshot,
-                        "progress_type": i.progress_type,
-                        "planned_quantity": i.planned_quantity,
-                        "planned_percentage": i.planned_percentage,
-                        "resolved_rate": i.resolved_rate,
-                        "rate_source": i.rate_source,
-                        "contractor_rate_id": i.contractor_rate_id,
-                        "override_rate": i.override_rate,
-                        "override_reason": i.override_reason,
-                        "override_status": i.override_status,
-                        "notes": i.notes,
-                        "completion": svc.item_completion_projection(i),
-                    }
-                    for i in (c.items or [])
-                ],
+                "id": int(i.id),
+                "part_master_id": int(i.part_master_id),
+                "part_code": (i.pricing_snapshot or {}).get("part_code"),
+                "part_name": (i.pricing_snapshot or {}).get("part_name"),
+                "unit_type": (i.pricing_snapshot or {}).get("unit_type"),
+                "pricing_method": (i.pricing_snapshot or {}).get("pricing_method"),
+                "rate_unit_type": (i.pricing_snapshot or {}).get("rate_unit_type"),
+                "pricing_snapshot": i.pricing_snapshot,
+                "progress_type": i.progress_type,
+                "planned_quantity": i.planned_quantity,
+                "planned_percentage": i.planned_percentage,
+                "weight_per_piece_snapshot": i.weight_per_piece_snapshot,
+                "taxable_value": i.taxable_value,
+                "resolved_rate": i.resolved_rate,
+                "rate_source": i.rate_source,
+                "contractor_rate_id": i.contractor_rate_id,
+                "override_rate": i.override_rate,
+                "override_reason": i.override_reason,
+                "override_status": i.override_status,
+                "notes": i.notes,
+                "completion": svc.item_completion_projection(i),
             }
-            for c in (row.contractors or [])
+            for i in (row.items or [])
         ],
     }
 

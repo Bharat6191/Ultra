@@ -84,24 +84,23 @@ def _seed_completion(db: Session, wo_svc: WorkOrderService, wo: WorkOrder, *, ac
     wo = wo_svc.get(int(wo.id))
     updated = 0
     idx = 0
-    for woc in wo.contractors or []:
-        for it in woc.items or []:
-            pct = PCTS[idx % len(PCTS)]
-            idx += 1
-            try:
-                wo_svc.add_progress(
-                    int(it.id),
-                    WorkOrderItemProgressCreate(
-                        completed_percentage=pct,
-                        completed_quantity=None,
-                        remarks=f"[seed] completion set to {pct}%",
-                    ),
-                    actor_user_id=int(actor_user_id),
-                )
-                updated += 1
-            except Exception:
-                # Keep seeding resilient.
-                continue
+    for it in wo.items or []:
+        pct = PCTS[idx % len(PCTS)]
+        idx += 1
+        try:
+            wo_svc.add_progress(
+                int(it.id),
+                WorkOrderItemProgressCreate(
+                    completed_percentage=pct,
+                    completed_quantity=None,
+                    remarks=f"[seed] completion set to {pct}%",
+                ),
+                actor_user_id=int(actor_user_id),
+            )
+            updated += 1
+        except Exception:
+            # Keep seeding resilient.
+            continue
     return updated
 
 

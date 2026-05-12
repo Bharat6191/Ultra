@@ -4,7 +4,6 @@ import type { ContractorLite, ExecutionDetailRow, OrgUnitLite } from "@/componen
 import {
   WorkOrderExecutionHeader,
   WorkOrderExecutionTable,
-  newDraftLine,
 } from "@/components/work-orders/work-order-execution-ui"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -18,25 +17,26 @@ type WorkOrderPublic = {
   id: number
   work_order_number: string
   org_unit_id: number
+  contractor_id: number
   title: string
   description: string | null
   work_date: string
   status: string
-  contractors?: {
-    contractor_id: number
-    items?: {
-      id: number
-      part_master_id: number
-      part_code?: string | null
-      part_name?: string | null
-      unit_type?: string | null
-      progress_type: string
-      planned_quantity: string | number | null
-      planned_percentage: string | number | null
-      resolved_rate: string | number
-      rate_source: string
-      notes?: string | null
-    }[]
+  items?: {
+    id: number
+    part_master_id: number
+    part_code?: string | null
+    part_name?: string | null
+    unit_type?: string | null
+    pricing_method?: string | null
+    rate_unit_type?: string | null
+    progress_type: string
+    planned_quantity: string | number | null
+    planned_percentage: string | number | null
+    taxable_value?: string | number | null
+    resolved_rate: string | number
+    rate_source: string
+    notes?: string | null
   }[]
 }
 
@@ -52,46 +52,46 @@ function parseNum(v: string | number | null | undefined): number {
 }
 
 function buildDetailRows(row: WorkOrderPublic, contractorName: (id: number) => string): ExecutionDetailRow[] {
-  if (!row.contractors?.length) return []
+  if (!row.items?.length) return []
   let sr = 0
   const out: ExecutionDetailRow[] = []
-  for (const c of row.contractors) {
-    for (const it of c.items ?? []) {
-      sr += 1
-      const qtyDisplay =
-        it.progress_type === "percentage"
-          ? it.planned_percentage != null && String(it.planned_percentage) !== ""
-            ? `${it.planned_percentage}%`
-            : "—"
-          : it.planned_quantity != null && String(it.planned_quantity) !== ""
-            ? String(it.planned_quantity)
-            : "—"
-
-      const rateN = parseNum(it.resolved_rate)
-      const rateDisplay = `${fmtMoney(rateN)} (${it.rate_source})`
-
-      let invoiceDisplay = "—"
-      if (it.progress_type === "quantity") {
-        const q = parseNum(it.planned_quantity)
-        if (Number.isFinite(q) && Number.isFinite(rateN)) invoiceDisplay = fmtMoney(q * rateN)
-      }
-
-      const lineLabel =
-        it.part_code || it.part_name
-          ? `${it.part_code ?? "—"} · ${it.part_name ?? "—"}`
+  for (const it of row.items) {
+    sr += 1
+    const qtyDisplay =
+      it.progress_type === "percentage"
+        ? it.planned_percentage != null && String(it.planned_percentage) !== ""
+          ? `${it.planned_percentage}%`
+          : "—"
+        : it.planned_quantity != null && String(it.planned_quantity) !== ""
+          ? String(it.planned_quantity)
           : "—"
 
-      out.push({
-        sr,
-        contractor_label: contractorName(c.contractor_id),
-        job_label: lineLabel,
-        qty_display: qtyDisplay,
-        unit_display: it.unit_type ?? "—",
-        rate_display: rateDisplay,
-        invoice_display: invoiceDisplay,
-        remarks_display: it.notes?.trim() ? it.notes : "—",
-      })
+    const rateN = parseNum(it.resolved_rate)
+    const pmHint =
+      it.pricing_method && it.rate_unit_type ? `${it.pricing_method} / ${it.rate_unit_type}` : (it.pricing_method ?? it.rate_unit_type ?? "")
+    const rateDisplay = pmHint ? `${fmtMoney(rateN)} (${it.rate_source}) · ${pmHint}` : `${fmtMoney(rateN)} (${it.rate_source})`
+
+    const tv = parseNum(it.taxable_value)
+    let invoiceDisplay = "—"
+    if (Number.isFinite(tv)) invoiceDisplay = fmtMoney(tv)
+    else if (it.progress_type === "quantity") {
+      const q = parseNum(it.planned_quantity)
+      if (Number.isFinite(q) && Number.isFinite(rateN)) invoiceDisplay = fmtMoney(q * rateN)
     }
+
+    const lineLabel =
+      it.part_code || it.part_name ? `${it.part_code ?? "—"} · ${it.part_name ?? "—"}` : "—"
+
+    out.push({
+      sr,
+      contractor_label: contractorName(row.contractor_id),
+      job_label: lineLabel,
+      qty_display: qtyDisplay,
+      unit_display: it.unit_type ?? "—",
+      rate_display: rateDisplay,
+      invoice_display: invoiceDisplay,
+      remarks_display: it.notes?.trim() ? it.notes : "—",
+    })
   }
   return out
 }
@@ -357,7 +357,9 @@ export function WorkOrderApprovalReview(props: {
         org_unit_id={String(row.org_unit_id)}
         contractors={contractors}
         partMasters={[]}
-        lines={[newDraftLine()]}
+        contractorId=""
+        onContractorId={() => {}}
+        lines={[]}
         onLinesChange={() => {}}
         detailRows={detailRows}
       />

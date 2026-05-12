@@ -22,7 +22,6 @@ from modules.work_orders.models import (
     WORK_ORDER_ITEM_PROGRESS_TYPES,
     WORK_ORDER_STATUSES,
     WorkOrder,
-    WorkOrderContractor,
     WorkOrderItem,
     WorkOrderItemProgress,
 )
@@ -30,7 +29,7 @@ from modules.invoices.models import InvoiceLine
 from modules.work_orders.schema import (
     WorkOrderCreate,
     WorkOrderDraftUpdate,
-    WorkOrderContractorCreate,
+    WorkOrderItemCreate,
     WorkOrderItemProgressCreate,
     WorkOrderRateOverrideRequest,
 )
@@ -50,6 +49,10 @@ def _now_utc() -> datetime:
 
 def _q2(x: Decimal) -> Decimal:
     return x.quantize(Decimal("0.01"))
+
+
+def _q6(x: Decimal) -> Decimal:
+    return x.quantize(Decimal("0.000001"))
 
 
 def _q3(x: Decimal) -> Decimal:
@@ -152,9 +155,7 @@ class WorkOrderService:
             select(WorkOrder)
             .where(WorkOrder.id == int(work_order_id))
             .options(
-                selectinload(WorkOrder.contractors)
-                .selectinload(WorkOrderContractor.items)
-                .selectinload(WorkOrderItem.progress)
+                selectinload(WorkOrder.items).selectinload(WorkOrderItem.progress),
             )
         )
         wo = self._db.execute(stmt, execution_options={"populate_existing": True}).scalars().first()
@@ -163,7 +164,7 @@ class WorkOrderService:
         return wo
 
     def list(self, *, org_unit_id: int | None = None, status: str | None = None, limit: int = 100) -> list[WorkOrder]:
-        stmt = select(WorkOrder).options(selectinload(WorkOrder.contractors)).order_by(WorkOrder.id.desc())
+        stmt = select(WorkOrder).options(selectinload(WorkOrder.items)).order_by(WorkOrder.id.desc())
         # Default: hide archived/inactive work orders.
         stmt = stmt.where(WorkOrder.is_active.is_(True))
         if org_unit_id is not None:
@@ -202,18 +203,12 @@ class WorkOrderService:
         """
         wo = self.get(work_order_id)
 
-        item_ids = (
-            self._db.execute(
-                select(WorkOrderItem.id)
-                .join(
-                    WorkOrderContractor,
-                    WorkOrderContractor.id == WorkOrderItem.work_order_contractor_id,
-                )
-                .where(WorkOrderContractor.work_order_id == int(wo.id))
-            )
-            .scalars()
-            .all()
-        )
+        item_ids = [
+            int(x)
+            for x in self._db.scalars(
+                select(WorkOrderItem.id).where(WorkOrderItem.work_order_id == int(work_order_id))
+            ).all()
+        ]
         if item_ids:
             inv_cnt = int(
                 self._db.scalar(
@@ -240,69 +235,186 @@ class WorkOrderService:
         self._db.delete(wo)
         self._db.commit()
 
-    def _attach_contractors_from_payload(
+    @staticmethod
+    def _taxable_qty_from_create(it: WorkOrderItemCreate) -> Decimal:
+        pt = it.progress_type.strip().lower()
+        if pt == "quantity" and it.planned_quantity is not None:
+            return _dec(it.planned_quantity)
+        if pt == "percentage":
+            if it.planned_percentage is not None:
+                return _dec(it.planned_percentage) / Decimal("100")
+            return Decimal("1")
+        return Decimal("0")
+
+    @staticmethod
+    def _taxable_qty_from_item(item: WorkOrderItem) -> Decimal:
+        pt = str(item.progress_type).strip().lower()
+        if pt == "quantity" and item.planned_quantity is not None:
+            return _dec(item.planned_quantity)
+        if pt == "percentage":
+            if item.planned_percentage is not None:
+                return _dec(item.planned_percentage) / Decimal("100")
+            return Decimal("1")
+        return Decimal("0")
+
+    def _build_item_from_create(
         self,
         wo: WorkOrder,
-        contractors: list[WorkOrderContractorCreate],
         *,
+        contractor_id: int,
+        it: WorkOrderItemCreate,
+        work_date: date,
+    ) -> WorkOrderItem:
+        rm = self._ensure_part_master(int(it.part_master_id))
+        rate, src, cr_id = self._resolve_rate_for(
+            contractor_id=int(contractor_id),
+            part_master_id=int(rm.id),
+            work_date=work_date,
+        )
+        pt = it.progress_type.strip().lower()
+        if pt not in WORK_ORDER_ITEM_PROGRESS_TYPES:
+            raise ConflictError(f"Invalid progress_type '{pt}'.")
+
+        pm = str(rm.pricing_method or "").strip().lower()
+        ru = str(rm.rate_unit_type or "").strip().lower()
+        w_eff: Decimal | None = None
+        if it.weight_per_piece is not None:
+            w_eff = _q6(Decimal(str(it.weight_per_piece)))
+        elif rm.weight_per_piece is not None:
+            w_eff = _q6(Decimal(str(rm.weight_per_piece)))
+
+        if pm == "weight_based" and ru == "per_kg":
+            if w_eff is None or w_eff <= 0:
+                raise ConflictError(
+                    "Weight per piece is required for weight-based parts (per kg). "
+                    "Set it on the Part Master or enter it on the line."
+                )
+
+        snap: dict[str, Any] = dict(commercial_snapshot_from_part_row(rm))
+        if w_eff is not None:
+            snap["weight_per_piece"] = str(w_eff)
+
+        qty_basis = WorkOrderService._taxable_qty_from_create(it)
+        try:
+            taxable = amount_from_snapshot(
+                quantity=qty_basis,
+                resolved_rate=_q2(Decimal(rate)),
+                snapshot=snap,
+            )
+        except ValueError as exc:
+            raise ConflictError(str(exc)) from exc
+
+        snap["calculation_breakdown"] = {
+            "formula": "qty × weight_per_piece × rate_per_kg"
+            if pm == "weight_based" and ru == "per_kg"
+            else "qty × unit_rate",
+            "quantity": str(qty_basis),
+            "weight_per_piece": str(w_eff) if w_eff is not None else None,
+            "resolved_rate": str(_q2(Decimal(rate))),
+            "taxable_value": str(taxable),
+        }
+
+        return WorkOrderItem(
+            work_order_id=int(wo.id),
+            part_master_id=int(rm.id),
+            pricing_snapshot=snap,
+            progress_type=pt,
+            planned_quantity=it.planned_quantity,
+            planned_percentage=it.planned_percentage,
+            resolved_rate=_q2(Decimal(rate)),
+            rate_source=src,
+            contractor_rate_id=cr_id,
+            weight_per_piece_snapshot=w_eff,
+            taxable_value=taxable,
+            notes=it.notes or None,
+        )
+
+    def _replace_line_items(
+        self,
+        wo: WorkOrder,
+        *,
+        contractor_id: int,
+        items: list[WorkOrderItemCreate],
         work_date: date,
     ) -> None:
-        if not contractors:
-            raise ConflictError("At least one contractor is required.")
-        for c in contractors:
-            self._ensure_contractor(int(c.contractor_id))
-            woc = WorkOrderContractor(
-                work_order_id=int(wo.id),
-                contractor_id=int(c.contractor_id),
-                scope_notes=c.scope_notes or None,
+        if not items:
+            raise ConflictError("At least one line item is required.")
+        self._ensure_contractor(int(contractor_id))
+        for row in list(wo.items or []):
+            self._db.delete(row)
+        self._db.flush()
+        for it in items:
+            self._db.add(
+                self._build_item_from_create(
+                    wo, contractor_id=int(contractor_id), it=it, work_date=work_date
+                )
             )
-            self._db.add(woc)
-            self._db.flush()
-            if not c.items:
-                raise ConflictError("Each contractor must have at least one assigned item.")
-            for it in c.items:
-                rm = self._ensure_part_master(int(it.part_master_id))
-                rate, src, contractor_rate_id = self._resolve_rate_for(
-                    contractor_id=int(c.contractor_id),
-                    part_master_id=int(rm.id),
-                    work_date=work_date,
-                )
-                pt = it.progress_type.strip().lower()
-                if pt not in WORK_ORDER_ITEM_PROGRESS_TYPES:
-                    raise ConflictError(f"Invalid progress_type '{pt}'.")
-                snap = commercial_snapshot_from_part_row(rm)
-                row = WorkOrderItem(
-                    work_order_contractor_id=int(woc.id),
-                    part_master_id=int(rm.id),
-                    pricing_snapshot=snap,
-                    progress_type=pt,
-                    planned_quantity=it.planned_quantity,
-                    planned_percentage=it.planned_percentage,
-                    resolved_rate=_q2(Decimal(rate)),
-                    rate_source=src,
-                    contractor_rate_id=contractor_rate_id,
-                    notes=it.notes or None,
-                )
-                self._db.add(row)
+
+    def _recompute_taxable_for_item(self, item: WorkOrderItem) -> Decimal:
+        qty_basis = WorkOrderService._taxable_qty_from_item(item)
+        try:
+            taxable = amount_from_snapshot(
+                quantity=qty_basis,
+                resolved_rate=_dec(item.resolved_rate),
+                snapshot=item.pricing_snapshot,
+            )
+        except ValueError as exc:
+            raise ConflictError(str(exc)) from exc
+        item.taxable_value = taxable
+        ps = dict(item.pricing_snapshot or {})
+        bd = dict(ps.get("calculation_breakdown") or {})
+        bd["quantity"] = str(qty_basis)
+        bd["taxable_value"] = str(taxable)
+        bd["resolved_rate"] = str(item.resolved_rate)
+        ps["calculation_breakdown"] = bd
+        item.pricing_snapshot = ps
+        return taxable
 
     def _work_order_item_ids(self, work_order_id: int) -> list[int]:
         return [
             int(x)
             for x in self._db.scalars(
-                select(WorkOrderItem.id).join(
-                    WorkOrderContractor,
-                    WorkOrderContractor.id == WorkOrderItem.work_order_contractor_id,
-                ).where(WorkOrderContractor.work_order_id == int(work_order_id))
+                select(WorkOrderItem.id).where(WorkOrderItem.work_order_id == int(work_order_id))
             ).all()
         ]
 
+    def _invoice_line_count_for_work_order(self, work_order_id: int) -> int:
+        item_ids = self._work_order_item_ids(int(work_order_id))
+        if not item_ids:
+            return 0
+        return int(
+            self._db.scalar(
+                select(func.count())
+                .select_from(InvoiceLine)
+                .where(InvoiceLine.work_order_item_id.in_(item_ids))
+            )
+            or 0
+        )
+
+    def _reprice_items_after_contractor_change(self, wo: WorkOrder, *, work_date: date) -> None:
+        """Re-resolve negotiated/master rates for each line after header contractor changes."""
+        self._ensure_contractor(int(wo.contractor_id))
+        for item in list(wo.items or []):
+            rate, src, cr_id = self._resolve_rate_for(
+                contractor_id=int(wo.contractor_id),
+                part_master_id=int(item.part_master_id),
+                work_date=work_date,
+            )
+            item.resolved_rate = _q2(Decimal(rate))
+            item.rate_source = src
+            item.contractor_rate_id = cr_id
+            self._recompute_taxable_for_item(item)
+
     def create(self, payload: WorkOrderCreate, *, actor_user_id: int) -> WorkOrder:
         self._ensure_plant(int(payload.org_unit_id))
+        if not payload.items:
+            raise ConflictError("At least one line item is required.")
 
         number = self._next_number(org_unit_id=int(payload.org_unit_id))
         wo = WorkOrder(
             work_order_number=number,
             org_unit_id=int(payload.org_unit_id),
+            contractor_id=int(payload.contractor_id),
             title=payload.title.strip(),
             description=(payload.description or None),
             work_date=payload.work_date,
@@ -312,7 +424,12 @@ class WorkOrderService:
         self._db.add(wo)
         self._db.flush()
 
-        self._attach_contractors_from_payload(wo, payload.contractors, work_date=payload.work_date)
+        self._replace_line_items(
+            wo,
+            contractor_id=int(payload.contractor_id),
+            items=list(payload.items),
+            work_date=payload.work_date,
+        )
 
         audit_helpers.write_audit(
             self._db,
@@ -328,49 +445,38 @@ class WorkOrderService:
         """Structured snapshot for approvals / inbox (JSON-serializable)."""
         org = self._db.get(OrgUnit, int(wo.org_unit_id))
         org_unit_name = getattr(org, "name", None) if org is not None else None
+        ctr = self._db.get(Contractor, int(wo.contractor_id))
+        contractor_name = getattr(ctr, "name", None) if ctr is not None else None
         lines_out: list[dict[str, Any]] = []
-        for woc in list(wo.contractors or []):
-            ctr = self._db.get(Contractor, int(woc.contractor_id))
-            contractor_name = getattr(ctr, "name", None) if ctr is not None else None
-            for it in list(woc.items or []):
-                inv_est: str | None = None
-                try:
-                    if str(it.progress_type) == "quantity" and it.planned_quantity is not None:
-                        inv_est = str(
-                            amount_from_snapshot(
-                                quantity=Decimal(str(it.planned_quantity)),
-                                resolved_rate=Decimal(str(it.resolved_rate)),
-                                snapshot=it.pricing_snapshot,
-                            )
-                        )
-                    else:
-                        inv_est = None
-                except Exception:
-                    inv_est = None
-                rm_row = self._db.get(PartMaster, int(it.part_master_id))
-                master_rate_s = str(rm_row.base_rate) if rm_row is not None else None
-                ps = it.pricing_snapshot or {}
-                lines_out.append(
-                    {
-                        "contractor_id": int(woc.contractor_id),
-                        "contractor_name": contractor_name,
-                        "part_master_id": int(it.part_master_id),
-                        "part_code": ps.get("part_code"),
-                        "part_name": ps.get("part_name"),
-                        "pricing_method": ps.get("pricing_method"),
-                        "rate_unit_type": ps.get("rate_unit_type"),
-                        "unit_type": ps.get("unit_type"),
-                        "pricing_snapshot": it.pricing_snapshot,
-                        "progress_type": str(it.progress_type),
-                        "planned_quantity": _json_decimal(it.planned_quantity),
-                        "planned_percentage": _json_decimal(it.planned_percentage),
-                        "resolved_rate": str(it.resolved_rate),
-                        "master_rate": master_rate_s,
-                        "rate_source": str(it.rate_source),
-                        "notes": it.notes,
-                        "invoice_value_est": inv_est,
-                    }
-                )
+        for it in list(wo.items or []):
+            rm_row = self._db.get(PartMaster, int(it.part_master_id))
+            master_rate_s = str(rm_row.base_rate) if rm_row is not None else None
+            ps = it.pricing_snapshot or {}
+            lines_out.append(
+                {
+                    "contractor_id": int(wo.contractor_id),
+                    "contractor_name": contractor_name,
+                    "part_master_id": int(it.part_master_id),
+                    "part_code": ps.get("part_code"),
+                    "part_name": ps.get("part_name"),
+                    "pricing_method": ps.get("pricing_method"),
+                    "rate_unit_type": ps.get("rate_unit_type"),
+                    "unit_type": ps.get("unit_type"),
+                    "pricing_snapshot": it.pricing_snapshot,
+                    "progress_type": str(it.progress_type),
+                    "planned_quantity": _json_decimal(it.planned_quantity),
+                    "planned_percentage": _json_decimal(it.planned_percentage),
+                    "weight_per_piece_snapshot": str(it.weight_per_piece_snapshot)
+                    if it.weight_per_piece_snapshot is not None
+                    else None,
+                    "taxable_value": str(it.taxable_value),
+                    "resolved_rate": str(it.resolved_rate),
+                    "master_rate": master_rate_s,
+                    "rate_source": str(it.rate_source),
+                    "notes": it.notes,
+                    "invoice_value_est": str(it.taxable_value),
+                }
+            )
 
         return {
             "action_code": ACTION_CODE_CREATE,
@@ -378,6 +484,8 @@ class WorkOrderService:
             "work_order_number": wo.work_order_number,
             "org_unit_id": int(wo.org_unit_id),
             "org_unit_name": org_unit_name,
+            "contractor_id": int(wo.contractor_id),
+            "contractor_name": contractor_name,
             "title": wo.title,
             "description": wo.description,
             "work_date": wo.work_date.isoformat(),
@@ -417,30 +525,29 @@ class WorkOrderService:
                 wo.org_unit_id = int(ou.id)
                 wo.work_order_number = self._next_number(org_unit_id=int(wo.org_unit_id))
 
-        if "contractors" in incoming:
-            if payload.contractors is None:
-                raise ConflictError("Provide a contractors list when updating assignments.")
-            existing_item_ids = self._work_order_item_ids(int(wo.id))
-            if existing_item_ids:
-                inv_cnt = int(
-                    self._db.scalar(
-                        select(func.count())
-                        .select_from(InvoiceLine)
-                        .where(InvoiceLine.work_order_item_id.in_(existing_item_ids))
+        if "contractor_id" in incoming and payload.contractor_id is not None:
+            if int(payload.contractor_id) != int(wo.contractor_id):
+                if self._invoice_line_count_for_work_order(int(wo.id)) > 0:
+                    raise ConflictError(
+                        "Cannot change contractor while invoices exist against this work order."
                     )
-                    or 0
-                )
-                if inv_cnt > 0:
-                    raise ConflictError("Cannot edit lines while invoices exist against this work order.")
-            for woc in list(wo.contractors):
-                self._db.delete(woc)
-            self._db.flush()
+                self._ensure_contractor(int(payload.contractor_id))
+                wo.contractor_id = int(payload.contractor_id)
+                if "items" not in incoming:
+                    self._reprice_items_after_contractor_change(wo, work_date=wo.work_date)
+                    self._db.flush()
 
-            contractors_list = list(payload.contractors)
-            if not contractors_list:
-                raise ConflictError("At least one contractor is required when replacing lines.")
-
-            self._attach_contractors_from_payload(wo, contractors_list, work_date=wo.work_date)
+        if "items" in incoming:
+            if payload.items is None:
+                raise ConflictError("Provide an items list when updating line items.")
+            if self._invoice_line_count_for_work_order(int(wo.id)) > 0:
+                raise ConflictError("Cannot edit lines while invoices exist against this work order.")
+            self._replace_line_items(
+                wo,
+                contractor_id=int(wo.contractor_id),
+                items=list(payload.items),
+                work_date=wo.work_date,
+            )
 
         audit_helpers.write_audit(
             self._db,
@@ -458,6 +565,8 @@ class WorkOrderService:
         wo = self.get(work_order_id)
         if wo.status not in ("draft", "rejected"):
             raise ConflictError("Only draft/rejected work orders can be submitted for approval.")
+        if not list(wo.items or []):
+            raise ConflictError("Work order must have at least one line item before submission.")
 
         wf = get_workflow_for_action(self._db, ACTION_CODE_CREATE)
         if wf is None:
@@ -724,8 +833,7 @@ class WorkOrderService:
         item = self._db.get(WorkOrderItem, int(work_order_item_id))
         if item is None:
             raise NotFoundError("WorkOrderItem", work_order_item_id)
-        woc = self._db.get(WorkOrderContractor, int(item.work_order_contractor_id))
-        wo = self._db.get(WorkOrder, int(woc.work_order_id)) if woc is not None else None
+        wo = self._db.get(WorkOrder, int(item.work_order_id))
         if wo is None:
             raise ConflictError("Work order not found for this line item.")
         if str(wo.status) != "active":
@@ -785,16 +893,15 @@ class WorkOrderService:
         item.override_reason = payload.override_reason.strip()
         item.override_status = "pending" if wf is not None else "approved"
 
-        woc = self._db.get(WorkOrderContractor, int(item.work_order_contractor_id))
-        wo = self._db.get(WorkOrder, int(woc.work_order_id)) if woc is not None else None
-        wo_id = int(wo.id) if wo is not None else None
+        wo = self._db.get(WorkOrder, int(item.work_order_id))
+        if wo is None:
+            raise ConflictError("Work order not found for this line item.")
+        wo_id = int(wo.id)
 
         if wf is not None:
             org = self._db.get(OrgUnit, int(wo.org_unit_id)) if wo is not None else None
             org_unit_name = getattr(org, "name", None) if org is not None else None
-            ctr_body = None
-            if woc is not None:
-                ctr_body = self._db.get(Contractor, int(woc.contractor_id))
+            ctr_body = self._db.get(Contractor, int(wo.contractor_id)) if wo is not None else None
             contractor_name = getattr(ctr_body, "name", None) if ctr_body is not None else None
 
             ov_payload = {
@@ -806,7 +913,7 @@ class WorkOrderService:
                 "org_unit_id": int(wo.org_unit_id) if wo is not None else None,
                 "org_unit_name": org_unit_name,
                 "work_date": wo.work_date.isoformat() if wo is not None else None,
-                "contractor_id": int(woc.contractor_id) if woc is not None else None,
+                "contractor_id": int(wo.contractor_id) if wo is not None else None,
                 "contractor_name": contractor_name,
                 "line": {
                     "part_master_id": int(item.part_master_id),
@@ -832,6 +939,7 @@ class WorkOrderService:
             # Auto-approve override when no workflow exists, but still auditable.
             item.rate_source = "override"
             item.resolved_rate = _q2(Decimal(item.override_rate or item.resolved_rate))
+            self._recompute_taxable_for_item(item)
 
         if wo_id is not None:
             audit_helpers.write_audit(
@@ -862,8 +970,8 @@ class WorkOrderService:
         if item.override_rate is not None:
             item.rate_source = "override"
             item.resolved_rate = _q2(Decimal(item.override_rate))
-        woc = self._db.get(WorkOrderContractor, int(item.work_order_contractor_id))
-        wo_id = int(woc.work_order_id) if woc is not None else None
+            self._recompute_taxable_for_item(item)
+        wo_id = int(item.work_order_id)
         if wo_id is not None:
             audit_helpers.write_audit(
                 self._db,
@@ -873,6 +981,7 @@ class WorkOrderService:
                 new_value={
                     "work_order_item_id": int(item.id),
                     "override_rate": str(item.override_rate) if item.override_rate is not None else None,
+                    "taxable_value": str(item.taxable_value),
                     "approval_request_id": item.override_approval_request_id,
                 },
             )
@@ -888,8 +997,7 @@ class WorkOrderService:
             return item
         item.override_status = "rejected"
         item.override_approval_request_id = approval_request_id or item.override_approval_request_id
-        woc = self._db.get(WorkOrderContractor, int(item.work_order_contractor_id))
-        wo_id = int(woc.work_order_id) if woc is not None else None
+        wo_id = int(item.work_order_id)
         if wo_id is not None:
             audit_helpers.write_audit(
                 self._db,

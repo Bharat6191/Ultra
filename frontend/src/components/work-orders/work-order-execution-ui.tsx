@@ -23,10 +23,11 @@ export type PartMasterLite = {
 
 export type ExecutionDraftLine = {
   key: string
-  contractor_id: string
   part_master_id: string
   progress_type: "quantity" | "percentage"
   qty: string
+  /** Line override for weight-based per-kg; falls back to Part Master when blank */
+  weight_per_piece: string
   remarks: string
 }
 
@@ -44,50 +45,51 @@ export type ExecutionDetailRow = {
 }
 
 export type WorkOrderLikeForLines = {
-  contractors?: {
-    contractor_id: number
-    items?: {
-      id: number
-      part_master_id: number
-      progress_type: string
-      planned_quantity: string | number | null
-      planned_percentage: string | number | null
-      notes?: string | null
-    }[]
+  contractor_id?: number
+  items?: {
+    id: number
+    part_master_id: number
+    progress_type: string
+    planned_quantity: string | number | null
+    planned_percentage: string | number | null
+    weight_per_piece_snapshot?: string | number | null
+    taxable_value?: string | number | null
+    notes?: string | null
   }[]
 }
 
 export function flattenWorkOrderToDraftLines(row: WorkOrderLikeForLines): ExecutionDraftLine[] {
-  const out: ExecutionDraftLine[] = []
-  for (const c of row.contractors ?? []) {
-    for (const it of c.items ?? []) {
-      const pct = it.progress_type === "percentage"
-      out.push({
-        key: `i-${it.id}`,
-        contractor_id: String(c.contractor_id),
-        part_master_id: String(it.part_master_id),
-        progress_type: pct ? "percentage" : "quantity",
-        qty: pct
-          ? it.planned_percentage != null && String(it.planned_percentage) !== ""
-            ? String(it.planned_percentage)
-            : ""
-          : it.planned_quantity != null && String(it.planned_quantity) !== ""
-            ? String(it.planned_quantity)
-            : "",
-        remarks: it.notes?.trim() ? it.notes.trim() : "",
-      })
+  const items = row.items
+  if (!items?.length) return [newDraftLine()]
+  return items.map((it) => {
+    const pct = it.progress_type === "percentage"
+    return {
+      key: `i-${it.id}`,
+      part_master_id: String(it.part_master_id),
+      progress_type: pct ? "percentage" : "quantity",
+      qty: pct
+        ? it.planned_percentage != null && String(it.planned_percentage) !== ""
+          ? String(it.planned_percentage)
+          : ""
+        : it.planned_quantity != null && String(it.planned_quantity) !== ""
+          ? String(it.planned_quantity)
+          : "",
+      weight_per_piece:
+        it.weight_per_piece_snapshot != null && String(it.weight_per_piece_snapshot) !== ""
+          ? String(it.weight_per_piece_snapshot)
+          : "",
+      remarks: it.notes?.trim() ? it.notes.trim() : "",
     }
-  }
-  return out.length > 0 ? out : [newDraftLine()]
+  })
 }
 
 export function newDraftLine(): ExecutionDraftLine {
   return {
     key: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random()),
-    contractor_id: "",
     part_master_id: "",
     progress_type: "quantity",
     qty: "",
+    weight_per_piece: "",
     remarks: "",
   }
 }
@@ -187,20 +189,44 @@ export function WorkOrderExecutionHeader(props: {
   )
 }
 
+function needsWeightPerPiece(pm: PartMasterLite | undefined): boolean {
+  if (!pm) return false
+  return String(pm.pricing_method ?? "").toLowerCase() === "weight_based" && String(pm.rate_unit_type ?? "").toLowerCase() === "per_kg"
+}
+
+function estimateLineAmount(line: ExecutionDraftLine, pm: PartMasterLite | undefined): number {
+  if (!pm || line.progress_type !== "quantity") return NaN
+  const qtyN = parseDecimal(line.qty)
+  const rateN = parseDecimal(pm.base_rate)
+  if (!Number.isFinite(qtyN) || !Number.isFinite(rateN)) return NaN
+  if (needsWeightPerPiece(pm)) {
+    const wstr =
+      line.weight_per_piece.trim() ||
+      (pm.weight_per_piece != null && String(pm.weight_per_piece).trim() !== "" ? String(pm.weight_per_piece) : "")
+    const wN = parseDecimal(wstr)
+    if (!Number.isFinite(wN)) return NaN
+    return qtyN * wN * rateN
+  }
+  return qtyN * rateN
+}
+
 export function WorkOrderExecutionTable(props: {
   mode: "edit" | "view"
   loading: boolean
   org_unit_id: string
   contractors: ContractorLite[]
   partMasters: PartMasterLite[]
+  contractorId: string
+  onContractorId: (v: string) => void
   lines: ExecutionDraftLine[]
   onLinesChange: (lines: ExecutionDraftLine[]) => void
   detailRows?: ExecutionDetailRow[]
 }) {
-  const { mode, loading, org_unit_id, contractors, partMasters, lines, onLinesChange, detailRows } = props
+  const { mode, loading, org_unit_id, contractors, partMasters, contractorId, onContractorId, lines, onLinesChange, detailRows } = props
   const pms = filteredPartMasters(partMasters, org_unit_id)
   const isEdit = mode === "edit"
   const hasCompletion = !isEdit && (detailRows ?? []).some((r) => Boolean(r.completionCell))
+  const viewColCount = hasCompletion ? 9 : 8
 
   function updateLine(key: string, patch: Partial<ExecutionDraftLine>) {
     onLinesChange(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -217,7 +243,10 @@ export function WorkOrderExecutionTable(props: {
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0 pb-4">
         <div className="space-y-1">
           <CardTitle className="text-base font-semibold tracking-tight">Execution sheet</CardTitle>
-          <CardDescription>Contractor + part + qty. Unit and governed rates auto-resolve from approved setup.</CardDescription>
+          <CardDescription>
+            One contractor per work order. Lines are Part Master parts; unit rate and taxable value resolve from negotiated
+            rates (or Part Master base). Weight is required only for weight-based per-kg pricing.
+          </CardDescription>
         </div>
         {isEdit ? (
           <Button
@@ -232,16 +261,35 @@ export function WorkOrderExecutionTable(props: {
         ) : null}
       </CardHeader>
       <CardContent className="overflow-x-auto p-0 px-px pb-4 sm:p-6 sm:pt-0">
-        <table className="w-full min-w-[840px] border-collapse text-sm">
+        {isEdit ? (
+          <div className="grid max-w-md gap-1.5 border-b px-4 py-4 sm:px-6">
+            <Label>Contractor</Label>
+            <select
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+              value={contractorId}
+              onChange={(e) => onContractorId(e.target.value)}
+              disabled={loading || !org_unit_id}
+            >
+              <option value="">Select contractor…</option>
+              {contractors.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+        <table className="w-full min-w-[920px] border-collapse text-sm">
           <thead>
             <tr className="border-b">
               <th className={th}>SR</th>
-              <th className={th}>Contractor</th>
+              {isEdit ? null : <th className={th}>Contractor</th>}
               <th className={th}>Part</th>
               <th className={cn(th, "w-20")}>Qty</th>
+              {isEdit ? <th className={cn(th, "w-24")}>Wt / pc</th> : null}
               <th className={cn(th, "w-24")}>Unit</th>
               <th className={cn(th, "w-28 text-right tabular-nums")}>Unit rate</th>
-              <th className={cn(th, "w-32 text-right tabular-nums")}>Invoice value</th>
+              <th className={cn(th, "w-32 text-right tabular-nums")}>Taxable (est.)</th>
               {hasCompletion ? <th className={cn(th, "min-w-[360px]")}>Completion</th> : null}
               <th className={th}>Remarks</th>
               {isEdit ? <th className={cn(th, "w-20 text-right")} /> : null}
@@ -250,7 +298,7 @@ export function WorkOrderExecutionTable(props: {
           <tbody>
             {!isEdit && (detailRows?.length ?? 0) === 0 ? (
               <tr className="border-b border-border/60">
-                <td colSpan={hasCompletion ? 9 : 8} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={viewColCount} className="px-3 py-10 text-center text-sm text-muted-foreground">
                   No execution lines on this work order.
                 </td>
               </tr>
@@ -258,37 +306,19 @@ export function WorkOrderExecutionTable(props: {
             {isEdit
               ? lines.map((line, idx) => {
                   const pm = pickPartMaster(pms, line.part_master_id)
-                  const qtyN = parseDecimal(line.qty)
-                  const rateN = pm ? parseDecimal(pm.base_rate) : NaN
-                  const invoice =
-                    line.progress_type === "quantity" && Number.isFinite(qtyN) && Number.isFinite(rateN)
-                      ? qtyN * rateN
-                      : NaN
+                  const showWt = needsWeightPerPiece(pm)
+                  const invN = estimateLineAmount(line, pm)
+                  const invShown = Number.isFinite(invN) ? fmtMoney(invN) : "—"
                   const unitShown = pm?.unit_type ?? "—"
+                  const rateN = pm ? parseDecimal(pm.base_rate) : NaN
                   const rateShown = pm ? fmtMoney(rateN) : "—"
-                  const invShown = Number.isFinite(invoice) ? fmtMoney(invoice) : "—"
 
                   return (
                     <tr key={line.key} className="border-b border-border/60">
                       <td className="px-2 py-2 align-middle tabular-nums text-muted-foreground">{idx + 1}</td>
-                      <td className="min-w-[140px] px-2 py-2 align-middle">
-                        <select
-                          className="h-9 w-full max-w-[200px] rounded-md border border-input bg-background px-2 text-xs outline-none"
-                          value={line.contractor_id}
-                          onChange={(e) => updateLine(line.key, { contractor_id: e.target.value })}
-                          disabled={loading || !org_unit_id}
-                        >
-                          <option value="">Select…</option>
-                          {contractors.map((c) => (
-                            <option key={c.id} value={String(c.id)}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
                       <td className="min-w-[180px] px-2 py-2 align-middle">
                         <select
-                          className="h-9 w-full max-w-[260px] rounded-md border border-input bg-background px-2 text-xs outline-none"
+                          className="h-9 w-full max-w-[280px] rounded-md border border-input bg-background px-2 text-xs outline-none"
                           value={line.part_master_id}
                           onChange={(e) => updateLine(line.key, { part_master_id: e.target.value })}
                           disabled={loading || !org_unit_id}
@@ -310,6 +340,20 @@ export function WorkOrderExecutionTable(props: {
                           onChange={(e) => updateLine(line.key, { qty: e.target.value })}
                           disabled={loading}
                         />
+                      </td>
+                      <td className="px-2 py-2 align-middle">
+                        {showWt ? (
+                          <Input
+                            className="h-9 tabular-nums"
+                            inputMode="decimal"
+                            placeholder={pm?.weight_per_piece != null ? String(pm.weight_per_piece) : "kg/pc"}
+                            value={line.weight_per_piece}
+                            onChange={(e) => updateLine(line.key, { weight_per_piece: e.target.value })}
+                            disabled={loading}
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="px-2 py-2 align-middle tabular-nums text-muted-foreground">{unitShown}</td>
                       <td className="px-2 py-2 align-middle text-right tabular-nums text-muted-foreground">{rateShown}</td>
@@ -375,7 +419,7 @@ export function WorkOrderExecutionFooter(props: {
     showSubmit,
     submitLabel = "Submit for approval",
     saveLabel = "Save",
-    tip = "Tip: pick contractor + item/job first — unit and governed rate will auto-load.",
+    tip = "Tip: choose the contractor once, then add part lines. Taxable value uses negotiated rate when approved, else Part Master base.",
     onCancel,
     onSave,
     onSubmitApproval,
@@ -405,40 +449,46 @@ export function WorkOrderExecutionFooter(props: {
   )
 }
 
-export function draftLinesToContractors(
+export type WorkOrderItemApiPayload = {
+  part_master_id: number
+  progress_type: "quantity" | "percentage"
+  planned_quantity: string | null
+  planned_percentage: string | null
+  weight_per_piece?: string
+  notes: string | null
+}
+
+export function buildWorkOrderLinesForApi(
+  contractorId: string,
   lines: ExecutionDraftLine[],
-): {
-  contractor_id: number
-  scope_notes: null
-  items: {
-    part_master_id: number
-    progress_type: "quantity" | "percentage"
-    planned_quantity: string | null
-    planned_percentage: string | null
-    notes: string | null
-  }[]
-}[] {
-  const byContractor = new Map<number, typeof lines>()
-  for (const line of lines) {
-    if (!line.contractor_id.trim() || !line.part_master_id.trim()) continue
-    const cid = Number(line.contractor_id)
-    if (!Number.isFinite(cid)) continue
-    const bucket = byContractor.get(cid) ?? []
-    bucket.push(line)
-    byContractor.set(cid, bucket)
+  partMasters: PartMasterLite[],
+): { ok: true; contractor_id: number; items: WorkOrderItemApiPayload[] } | { ok: false; error: string } {
+  if (!contractorId.trim()) return { ok: false, error: "Contractor is required." }
+  const cid = Number(contractorId)
+  if (!Number.isFinite(cid) || cid <= 0) return { ok: false, error: "Select a valid contractor." }
+
+  const usable = lines.filter((l) => l.part_master_id.trim())
+  if (usable.length === 0) return { ok: false, error: "Add at least one line with a part selected." }
+
+  const items: WorkOrderItemApiPayload[] = []
+  for (const x of usable) {
+    const pt = x.progress_type === "percentage" ? "percentage" : "quantity"
+    const pm = pickPartMaster(partMasters, x.part_master_id)
+    const row: WorkOrderItemApiPayload = {
+      part_master_id: Number(x.part_master_id),
+      progress_type: pt,
+      planned_quantity: pt === "quantity" ? (x.qty.trim() ? x.qty : null) : null,
+      planned_percentage: pt === "percentage" ? (x.qty.trim() ? x.qty : null) : null,
+      notes: x.remarks.trim() || null,
+    }
+    if (needsWeightPerPiece(pm)) {
+      const w =
+        x.weight_per_piece.trim() ||
+        (pm?.weight_per_piece != null && String(pm.weight_per_piece).trim() !== "" ? String(pm.weight_per_piece).trim() : "")
+      if (!w) return { ok: false, error: "Weight per piece is required for weight-based (per kg) parts." }
+      row.weight_per_piece = w
+    }
+    items.push(row)
   }
-  return [...byContractor.entries()].map(([contractor_id, ls]) => ({
-    contractor_id,
-    scope_notes: null,
-    items: ls.map((x) => {
-      const pt = x.progress_type === "percentage" ? "percentage" : "quantity"
-      return {
-        part_master_id: Number(x.part_master_id),
-        progress_type: pt as "quantity" | "percentage",
-        planned_quantity: pt === "quantity" ? (x.qty.trim() ? x.qty : null) : null,
-        planned_percentage: pt === "percentage" ? (x.qty.trim() ? x.qty : null) : null,
-        notes: x.remarks.trim() || null,
-      }
-    }),
-  }))
+  return { ok: true, contractor_id: cid, items }
 }

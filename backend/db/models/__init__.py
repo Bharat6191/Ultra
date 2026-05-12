@@ -39,7 +39,6 @@ from modules.notifications.model import NotificationDedupKey, NotificationSettin
 from modules.work_orders.models import (
     WorkOrder,
     WorkOrderAuditLog,
-    WorkOrderContractor,
     WorkOrderItem,
     WorkOrderItemProgress,
 )
@@ -90,7 +89,6 @@ __all__ = [
     "MfaSetupToken",
     "role_permission",
     "WorkOrder",
-    "WorkOrderContractor",
     "WorkOrderItem",
     "WorkOrderItemProgress",
     "WorkOrderAuditLog",

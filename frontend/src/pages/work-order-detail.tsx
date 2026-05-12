@@ -10,7 +10,7 @@ import type {
   PartMasterLite,
 } from "@/components/work-orders/work-order-execution-ui"
 import {
-  draftLinesToContractors,
+  buildWorkOrderLinesForApi,
   flattenWorkOrderToDraftLines,
   newDraftLine,
   WorkOrderExecutionFooter,
@@ -44,28 +44,30 @@ type WorkOrder = {
   id: number
   work_order_number: string
   org_unit_id: number
+  contractor_id: number
   title: string
   description: string | null
   work_date: string
   status: string
   updated_at?: string | null
-  contractors?: {
-    contractor_id: number
-    items?: {
-      id: number
-      part_master_id: number
-      part_code?: string | null
-      part_name?: string | null
-      unit_type?: string | null
-      pricing_method?: string | null
-      progress_type: string
-      planned_quantity: string | number | null
-      planned_percentage: string | number | null
-      resolved_rate: string | number
-      rate_source: string
-      notes?: string | null
-      completion?: LineCompletionPayload
-    }[]
+  items?: {
+    id: number
+    part_master_id: number
+    part_code?: string | null
+    part_name?: string | null
+    unit_type?: string | null
+    pricing_method?: string | null
+    rate_unit_type?: string | null
+    progress_type: string
+    planned_quantity: string | number | null
+    planned_percentage: string | number | null
+    weight_per_piece_snapshot?: string | number | null
+    taxable_value?: string | number | null
+    resolved_rate: string | number
+    rate_source: string
+    notes?: string | null
+    pricing_snapshot?: { calculation_breakdown?: Record<string, unknown> } | null
+    completion?: LineCompletionPayload
   }[]
 }
 
@@ -92,9 +94,7 @@ function parseNum(v: string | number | null | undefined): number {
   return n
 }
 
-function fallbackLineCompletion(
-  it: NonNullable<NonNullable<WorkOrder["contractors"]>[number]["items"]>[number],
-): LineCompletionPayload {
+function fallbackLineCompletion(it: NonNullable<WorkOrder["items"]>[number]): LineCompletionPayload {
   const aq = parseNum(it.planned_quantity)
   const apPct = parseNum(it.planned_percentage)
   return {
@@ -131,6 +131,7 @@ export function WorkOrderDetailPage() {
   const [editTitle, setEditTitle] = React.useState("")
   const [editReference, setEditReference] = React.useState("")
   const [editOrgUnit, setEditOrgUnit] = React.useState("")
+  const [editContractorId, setEditContractorId] = React.useState("")
   const [draftLines, setDraftLines] = React.useState<ExecutionDraftLine[]>(() => [newDraftLine()])
 
   const canSubmit = hasPermission("work_orders.create")
@@ -190,6 +191,7 @@ export function WorkOrderDetailPage() {
     setEditTitle(row.title)
     setEditReference(row.description ?? "")
     setEditOrgUnit(String(row.org_unit_id))
+    setEditContractorId(String(row.contractor_id ?? ""))
     setDraftLines(flattenWorkOrderToDraftLines(row))
   }, [row, editableDraft])
 
@@ -240,67 +242,76 @@ export function WorkOrderDetailPage() {
   }
 
   const detailRows = React.useMemo(() => {
-    if (!row?.contractors) return []
+    if (!row?.items?.length) return []
     let sr = 0
     const out: ExecutionDetailRow[] = []
+    const headCid = row.contractor_id
 
-    for (const c of row.contractors) {
-      for (const it of c.items ?? []) {
-        sr += 1
-        const qtyDisplay =
-          it.progress_type === "percentage"
-            ? it.planned_percentage != null && String(it.planned_percentage) !== ""
-              ? `${it.planned_percentage}%`
-              : "—"
-            : it.planned_quantity != null && String(it.planned_quantity) !== ""
-              ? String(it.planned_quantity)
-              : "—"
-
-        const rateN = parseNum(it.resolved_rate)
-        const rateDisplay = `${fmtMoney(rateN)} (${it.rate_source})`
-
-        let invoiceDisplay = "—"
-        if (it.progress_type === "quantity") {
-          const q = parseNum(it.planned_quantity)
-          if (Number.isFinite(q) && Number.isFinite(rateN)) invoiceDisplay = fmtMoney(q * rateN)
-        }
-
-        const completionItem: LineWithCompletion = {
-          id: it.id,
-          part_code: it.part_code ?? null,
-          part_name: it.part_name ?? null,
-          unit_type: it.completion?.unit_type ?? it.unit_type ?? "",
-          progress_type: it.progress_type,
-          planned_quantity: it.planned_quantity,
-          planned_percentage: it.planned_percentage,
-          completion: it.completion ?? fallbackLineCompletion(it),
-        }
-
-        const lineLabel =
-          it.part_code || it.part_name
-            ? `${it.part_code ?? "—"} · ${it.part_name ?? "—"}`
+    for (const it of row.items) {
+      sr += 1
+      const qtyDisplay =
+        it.progress_type === "percentage"
+          ? it.planned_percentage != null && String(it.planned_percentage) !== ""
+            ? `${it.planned_percentage}%`
+            : "—"
+          : it.planned_quantity != null && String(it.planned_quantity) !== ""
+            ? String(it.planned_quantity)
             : "—"
 
-        out.push({
-          sr,
-          contractor_label: contractorName(c.contractor_id),
-          job_label: lineLabel,
-          qty_display: qtyDisplay,
-          unit_display: it.unit_type ?? "—",
-          rate_display: rateDisplay,
-          invoice_display: invoiceDisplay,
-          remarks_display: it.notes?.trim() ? it.notes : "—",
-          completionCell:
-            row.status === "active" && canManageCompletion && !editableDraft ? (
-              <WorkOrderLineCompletionInline
-                item={completionItem}
-                contractorLabel={contractorName(c.contractor_id)}
-                lineSr={sr}
-                onSaved={() => void load()}
-              />
-            ) : null,
-        })
+      const rateN = parseNum(it.resolved_rate)
+      const pmHint =
+        it.pricing_method && it.rate_unit_type ? `${it.pricing_method} / ${it.rate_unit_type}` : (it.pricing_method ?? it.rate_unit_type ?? "")
+      const rateDisplay = pmHint ? `${fmtMoney(rateN)} (${it.rate_source}) · ${pmHint}` : `${fmtMoney(rateN)} (${it.rate_source})`
+
+      const tv = parseNum(it.taxable_value)
+      let invoiceDisplay = "—"
+      if (Number.isFinite(tv)) invoiceDisplay = fmtMoney(tv)
+      else if (it.progress_type === "quantity") {
+        const q = parseNum(it.planned_quantity)
+        if (Number.isFinite(q) && Number.isFinite(rateN)) invoiceDisplay = fmtMoney(q * rateN)
       }
+
+      const completionItem: LineWithCompletion = {
+        id: it.id,
+        part_code: it.part_code ?? null,
+        part_name: it.part_name ?? null,
+        unit_type: it.completion?.unit_type ?? it.unit_type ?? "",
+        progress_type: it.progress_type,
+        planned_quantity: it.planned_quantity,
+        planned_percentage: it.planned_percentage,
+        completion: it.completion ?? fallbackLineCompletion(it),
+      }
+
+      const lineLabel =
+        it.part_code || it.part_name
+          ? `${it.part_code ?? "—"} · ${it.part_name ?? "—"}`
+          : "—"
+
+      const bd = it.pricing_snapshot?.calculation_breakdown
+      const breakdownHint =
+        bd && typeof bd === "object" && "formula" in bd
+          ? ` (${String((bd as { formula?: string }).formula ?? "")})`
+          : ""
+
+      out.push({
+        sr,
+        contractor_label: contractorName(headCid),
+        job_label: `${lineLabel}${breakdownHint}`.trim(),
+        qty_display: qtyDisplay,
+        unit_display: it.unit_type ?? "—",
+        rate_display: rateDisplay,
+        invoice_display: invoiceDisplay,
+        remarks_display: it.notes?.trim() ? it.notes : "—",
+        completionCell:
+          row.status === "active" && canManageCompletion && !editableDraft ? (
+            <WorkOrderLineCompletionInline
+              item={completionItem}
+              contractorLabel={contractorName(headCid)}
+              lineSr={sr}
+              onSaved={() => void load()}
+            />
+          ) : null,
+      })
     }
     return out
   }, [
@@ -315,9 +326,8 @@ export function WorkOrderDetailPage() {
     if (!row || !editableDraft) return
     if (!editOrgUnit) return toast.error("Plant is required.")
     if (!editTitle.trim()) return toast.error("Title is required.")
-    const contractorsPayload = draftLinesToContractors(draftLines)
-    const itemCount = contractorsPayload.reduce((n, c) => n + c.items.length, 0)
-    if (itemCount === 0) return toast.error("Add at least one line with contractor and part.")
+    const built = buildWorkOrderLinesForApi(editContractorId, draftLines, partMasters)
+    if (!built.ok) return toast.error(built.error)
 
     setSaveDraftBusy(true)
     try {
@@ -326,7 +336,8 @@ export function WorkOrderDetailPage() {
         description: editReference.trim() || null,
         work_date: row.work_date,
         org_unit_id: Number(editOrgUnit),
-        contractors: contractorsPayload,
+        contractor_id: built.contractor_id,
+        items: built.items,
       })
       toast.success("Work order saved")
       await load()
@@ -393,6 +404,8 @@ export function WorkOrderDetailPage() {
         org_unit_id={editableDraft ? editOrgUnit : String(row.org_unit_id)}
         contractors={contractors}
         partMasters={editableDraft ? partMasters : []}
+        contractorId={editableDraft ? editContractorId : ""}
+        onContractorId={editableDraft ? setEditContractorId : () => {}}
         lines={editableDraft ? draftLines : []}
         onLinesChange={editableDraft ? setDraftLines : () => {}}
         detailRows={editableDraft ? undefined : detailRows}
@@ -404,7 +417,7 @@ export function WorkOrderDetailPage() {
         showSubmit={showSubmitButton}
         tip={
           editableDraft
-            ? "Tip: pick contractor + part first — unit type and governed rate will auto-load."
+            ? "Tip: choose the contractor once, then edit part lines. Saved taxable values use negotiated rates when approved."
             : showCompletionEngine
               ? "Active work order: update completion per line — invoice lines cannot exceed the latest saved completion."
               : "Rates shown are governed (negotiated where applicable)."

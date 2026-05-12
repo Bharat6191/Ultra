@@ -4,7 +4,7 @@ import { toast } from "sonner"
 
 import type { ContractorLite, ExecutionDraftLine, OrgUnitLite, PartMasterLite } from "@/components/work-orders/work-order-execution-ui"
 import {
-  draftLinesToContractors,
+  buildWorkOrderLinesForApi,
   newDraftLine,
   WorkOrderExecutionFooter,
   WorkOrderExecutionHeader,
@@ -31,6 +31,7 @@ export function WorkOrderCreatePage() {
   const [reference, setReference] = React.useState("")
   const [org_unit_id, setOrgUnitId] = React.useState("")
   const [workDate] = React.useState(() => new Date().toISOString().slice(0, 10))
+  const [contractorId, setContractorId] = React.useState("")
   const [lines, setLines] = React.useState<ExecutionDraftLine[]>(() => [newDraftLine()])
 
   React.useEffect(() => {
@@ -63,17 +64,16 @@ export function WorkOrderCreatePage() {
   function validatePayload() {
     if (!org_unit_id) return { error: "Plant is required." as const }
     if (!title.trim()) return { error: "Title is required." as const }
-    const contractorsPayload = draftLinesToContractors(lines)
-    const itemCount = contractorsPayload.reduce((n, c) => n + c.items.length, 0)
-    if (itemCount === 0) return { error: "Add at least one line with contractor and item/job." as const }
+    const built = buildWorkOrderLinesForApi(contractorId, lines, partMasters)
+    if (!built.ok) return { error: built.error }
     return {
-      contractorsPayload,
       body: {
         org_unit_id: Number(org_unit_id),
+        contractor_id: built.contractor_id,
         title: title.trim(),
         description: reference.trim() || null,
         work_date: workDate,
-        contractors: contractorsPayload,
+        items: built.items,
       },
     }
   }
@@ -155,6 +155,8 @@ export function WorkOrderCreatePage() {
         org_unit_id={org_unit_id}
         contractors={contractors}
         partMasters={partMasters}
+        contractorId={contractorId}
+        onContractorId={setContractorId}
         lines={lines}
         onLinesChange={setLines}
       />

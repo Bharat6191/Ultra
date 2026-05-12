@@ -37,7 +37,6 @@ from modules.notifications.model import NotificationSetting, NotificationDedupKe
 from modules.work_orders.models import (  # noqa: F401
     WorkOrder,
     WorkOrderAuditLog,
-    WorkOrderContractor,
     WorkOrderItem,
     WorkOrderItemProgress,
 )

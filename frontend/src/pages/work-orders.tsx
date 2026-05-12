@@ -61,7 +61,7 @@ export function WorkOrdersPage() {
         <div className="min-w-0">
           <h2 className="text-base font-medium">Work orders</h2>
           <p className="text-sm text-muted-foreground">
-            Assign operational work to one or more contractors, track completion, and govern downstream invoicing.
+            Assign operational work to a contractor with Part Master lines, track completion, and govern downstream invoicing.
           </p>
         </div>
         {canCreate ? (

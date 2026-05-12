@@ -11,7 +11,7 @@ from modules.contractor_rates.models import ContractorRate
 from modules.part_master.pricing import amount_from_snapshot
 from modules.invoices.models import Invoice, InvoiceLine, InvoiceValidationIssue
 from modules.settings.lookup import get_setting
-from modules.work_orders.models import WorkOrderItem, WorkOrderItemProgress, WorkOrderContractor, WorkOrder
+from modules.work_orders.models import WorkOrderItem, WorkOrderItemProgress, WorkOrder
 
 
 def _q2(x: Decimal) -> Decimal:
@@ -135,8 +135,7 @@ class InvoiceValidationEngine:
                 )
                 continue
 
-            woc = self._db.get(WorkOrderContractor, int(item.work_order_contractor_id))
-            wo = self._db.get(WorkOrder, int(woc.work_order_id)) if woc is not None else None
+            wo = self._db.get(WorkOrder, int(item.work_order_id))
 
             if wo is None or wo.status not in ("active", "approved"):
                 add_issue(
@@ -148,13 +147,13 @@ class InvoiceValidationEngine:
                     requires_justification=True,
                     requires_attachments=True,
                 )
-            # Contractor mismatch (invoice must match the work order contractor assignment).
-            if woc is not None and int(woc.contractor_id) != int(invoice.contractor_id):
+            # Contractor mismatch (invoice must match the work order contractor).
+            if wo is not None and int(wo.contractor_id) != int(invoice.contractor_id):
                 add_issue(
                     line_id=int(line.id),
                     code="CONTRACTOR_MISMATCH",
                     severity="blocker",
-                    message="Invoice contractor does not match the work order contractor assignment.",
+                    message="Invoice contractor does not match the work order contractor.",
                     requires_justification=True,
                     requires_attachments=True,
                 )

@@ -158,7 +158,6 @@ def clear_database(session) -> None:
 
     _exec(session, "DELETE FROM work_order_item_progress")
     _exec(session, "DELETE FROM work_order_items")
-    _exec(session, "DELETE FROM work_order_contractors")
     _exec(session, "DELETE FROM work_order_audit_logs")
     _exec(session, "DELETE FROM work_orders")
 

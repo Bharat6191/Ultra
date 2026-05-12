@@ -44,9 +44,12 @@ def commercial_line_amount(
     w = _dec(weight_per_piece) if weight_per_piece is not None else None
 
     if pm == "weight_based" and ru == "per_kg":
-        if w is not None and w > 0:
-            return q2(q * w * r)
-        return q2(q * r)
+        if w is None or w <= 0:
+            raise ValueError(
+                "Weight per piece is required for weight-based parts billed per kg "
+                "(commercial amount = quantity × weight per piece × rate per kg)."
+            )
+        return q2(q * w * r)
 
     if pm in ("piece_based", "weight_based") and ru in ("per_piece", "per_unit", "per_box", "per_nos"):
         return q2(q * r)
@@ -85,10 +88,14 @@ def amount_from_snapshot(*, quantity: Decimal, resolved_rate: Decimal, snapshot:
         return q2(_dec(quantity) * _dec(resolved_rate))
     w_raw = snapshot.get("weight_per_piece")
     w = _dec(w_raw) if w_raw not in (None, "") else None
-    return commercial_line_amount(
-        quantity=_dec(quantity),
-        resolved_rate=_dec(resolved_rate),
-        pricing_method=str(snapshot.get("pricing_method") or "piece_based"),
-        rate_unit_type=str(snapshot.get("rate_unit_type") or "per_piece"),
-        weight_per_piece=w,
-    )
+    try:
+        return commercial_line_amount(
+            quantity=_dec(quantity),
+            resolved_rate=_dec(resolved_rate),
+            pricing_method=str(snapshot.get("pricing_method") or "piece_based"),
+            rate_unit_type=str(snapshot.get("rate_unit_type") or "per_piece"),
+            weight_per_piece=w,
+        )
+    except ValueError as exc:
+        # Preserve message for API / validation layers.
+        raise ValueError(str(exc)) from exc

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -15,7 +15,6 @@ from modules.org_units.model import OrgUnit
 from modules.users.model import User
 from modules.work_orders.schema import (
     WorkOrderCreate,
-    WorkOrderContractorCreate,
     WorkOrderDraftUpdate,
     WorkOrderItemCreate,
     WorkOrderItemProgressCreate,
@@ -71,22 +70,18 @@ def test_work_order_create_and_invoice_validate(db):
     wo = WorkOrderService(db).create(
         WorkOrderCreate(
             org_unit_id=int(org.id),
+            contractor_id=int(contractor.id),
             title="Test WO",
             description=None,
             work_date=date.today(),
-            contractors=[
-                WorkOrderContractorCreate(
-                    contractor_id=int(contractor.id),
-                    scope_notes=None,
-                    items=[
-                        WorkOrderItemCreate(
-                            part_master_id=int(pm.id),
-                            progress_type="quantity",
-                            planned_quantity=Decimal("10"),
-                            planned_percentage=None,
-                            notes=None,
-                        )
-                    ],
+            items=[
+                WorkOrderItemCreate(
+                    part_master_id=int(pm.id),
+                    progress_type="quantity",
+                    planned_quantity=Decimal("10"),
+                    planned_percentage=None,
+                    weight_per_piece=Decimal("1"),
+                    notes=None,
                 )
             ],
         ),
@@ -98,7 +93,7 @@ def test_work_order_create_and_invoice_validate(db):
     if str(wo2.status) == "pending_approval":
         wo2 = svc_w.finalize_approval(int(wo2.id), approver_user_id=actor, approval_request_id=wo2.approval_request_id)
     assert str(wo2.status) == "active"
-    item_id = int(wo2.contractors[0].items[0].id)
+    item_id = int(wo2.items[0].id)
 
     # Snapshot completion (eligible invoice qty follows latest cumulative snapshot).
     WorkOrderService(db).add_progress(
@@ -136,62 +131,52 @@ def test_work_order_draft_update_replaces_lines(db):
     wo = svc.create(
         WorkOrderCreate(
             org_unit_id=int(org.id),
+            contractor_id=int(contractor.id),
             title="Draft lines",
             description="ref1",
             work_date=date.today(),
-            contractors=[
-                WorkOrderContractorCreate(
-                    contractor_id=int(contractor.id),
-                    scope_notes=None,
-                    items=[
-                        WorkOrderItemCreate(
-                            part_master_id=int(pm.id),
-                            progress_type="quantity",
-                            planned_quantity=Decimal("1"),
-                            planned_percentage=None,
-                            notes=None,
-                        )
-                    ],
+            items=[
+                WorkOrderItemCreate(
+                    part_master_id=int(pm.id),
+                    progress_type="quantity",
+                    planned_quantity=Decimal("1"),
+                    planned_percentage=None,
+                    weight_per_piece=Decimal("1"),
+                    notes=None,
                 )
             ],
         ),
         actor_user_id=actor,
     )
-    assert len(wo.contractors[0].items) == 1
+    assert len(wo.items) == 1
 
     updated = svc.update_draft(
         int(wo.id),
         WorkOrderDraftUpdate(
             title="Draft lines 2",
             description="ref2",
-            contractors=[
-                WorkOrderContractorCreate(
-                    contractor_id=int(contractor.id),
-                    scope_notes=None,
-                    items=[
-                        WorkOrderItemCreate(
-                            part_master_id=int(pm.id),
-                            progress_type="quantity",
-                            planned_quantity=Decimal("3"),
-                            planned_percentage=None,
-                            notes="note a",
-                        ),
-                        WorkOrderItemCreate(
-                            part_master_id=int(pm.id),
-                            progress_type="quantity",
-                            planned_quantity=Decimal("5"),
-                            planned_percentage=None,
-                            notes="note b",
-                        ),
-                    ],
-                )
+            items=[
+                WorkOrderItemCreate(
+                    part_master_id=int(pm.id),
+                    progress_type="quantity",
+                    planned_quantity=Decimal("3"),
+                    planned_percentage=None,
+                    weight_per_piece=Decimal("1"),
+                    notes="note a",
+                ),
+                WorkOrderItemCreate(
+                    part_master_id=int(pm.id),
+                    progress_type="quantity",
+                    planned_quantity=Decimal("5"),
+                    planned_percentage=None,
+                    weight_per_piece=Decimal("1"),
+                    notes="note b",
+                ),
             ],
         ),
         actor_user_id=actor,
     )
     assert updated.title == "Draft lines 2"
     assert updated.description == "ref2"
-    assert len(updated.contractors) == 1
-    assert len(updated.contractors[0].items) == 2
-    assert updated.contractors[0].items[0].notes == "note a"
-
+    assert len(updated.items) == 2
+    assert updated.items[0].notes == "note a"

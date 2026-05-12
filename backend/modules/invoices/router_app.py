@@ -23,7 +23,7 @@ from modules.invoices.service import InvoiceService
 from modules.invoices.models import InvoiceAttachment
 from modules.invoices.storage import save_invoice_attachment
 from modules.part_master.pricing import amount_from_snapshot
-from modules.work_orders.models import WorkOrder, WorkOrderContractor, WorkOrderItem
+from modules.work_orders.models import WorkOrder, WorkOrderItem
 
 
 router = APIRouter(tags=["app", "invoices"])
@@ -65,11 +65,9 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
             )
             ps = wit.pricing_snapshot or {}
             job_desc = f"{ps.get('part_code') or ''} — {ps.get('part_name') or ''}".strip(" —")
-            woc = db.get(WorkOrderContractor, int(wit.work_order_contractor_id))
-            if woc is not None:
-                wo = db.get(WorkOrder, int(woc.work_order_id))
-                if wo is not None:
-                    wo_no = wo.work_order_number
+            wo = db.get(WorkOrder, int(wit.work_order_id))
+            if wo is not None:
+                wo_no = wo.work_order_number
         else:
             base_expect = _q2(qty * rate_dec)
         amt = Decimal(str(l.amount))

@@ -12,21 +12,18 @@ class WorkOrderItemCreate(BaseModel):
     progress_type: str = Field(default="quantity", pattern="^(quantity|percentage)$")
     planned_quantity: Decimal | None = None
     planned_percentage: Decimal | None = None
+    """For weight_based + per_kg parts, overrides Part Master weight when set."""
+    weight_per_piece: Decimal | None = Field(default=None, gt=Decimal("0"))
     notes: str | None = None
-
-
-class WorkOrderContractorCreate(BaseModel):
-    contractor_id: int
-    scope_notes: str | None = None
-    items: list[WorkOrderItemCreate] = Field(default_factory=list)
 
 
 class WorkOrderCreate(BaseModel):
     org_unit_id: int
+    contractor_id: int
     title: str
     description: str | None = None
     work_date: date
-    contractors: list[WorkOrderContractorCreate] = Field(default_factory=list)
+    items: list[WorkOrderItemCreate] = Field(default_factory=list)
 
 
 class WorkOrderDraftUpdate(BaseModel):
@@ -36,7 +33,8 @@ class WorkOrderDraftUpdate(BaseModel):
     description: str | None = None
     work_date: date | None = None
     org_unit_id: int | None = None
-    contractors: list[WorkOrderContractorCreate] | None = None
+    contractor_id: int | None = None
+    items: list[WorkOrderItemCreate] | None = None
 
 
 class WorkOrderItemProgressCreate(BaseModel):
@@ -93,6 +91,8 @@ class WorkOrderItemPublic(BaseModel):
     progress_type: str
     planned_quantity: Decimal | None
     planned_percentage: Decimal | None
+    weight_per_piece_snapshot: Decimal | None = None
+    taxable_value: Decimal
     resolved_rate: Decimal
     rate_source: str
     contractor_rate_id: int | None
@@ -103,17 +103,12 @@ class WorkOrderItemPublic(BaseModel):
     completion: WorkOrderLineCompletionSummary | None = None
 
 
-class WorkOrderContractorPublic(BaseModel):
-    id: int
-    contractor_id: int
-    scope_notes: str | None
-    items: list[WorkOrderItemPublic]
-
-
 class WorkOrderPublic(BaseModel):
     id: int
     work_order_number: str
     org_unit_id: int
+    contractor_id: int
+    contractor_name: str | None = None
     title: str
     description: str | None
     work_date: date
@@ -122,7 +117,7 @@ class WorkOrderPublic(BaseModel):
     created_by: int | None
     created_at: datetime | None = None
     updated_at: datetime | None = None
-    contractors: list[WorkOrderContractorPublic]
+    items: list[WorkOrderItemPublic]
 
 
 class WorkOrderAuditEntry(BaseModel):
@@ -140,4 +135,3 @@ class WorkOrderAuditEntry(BaseModel):
 class WorkOrderRateOverrideRequest(BaseModel):
     override_rate: Decimal
     override_reason: str
-

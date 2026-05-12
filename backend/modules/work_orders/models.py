@@ -4,7 +4,7 @@ Design goals:
 - Portable across SQLite/Postgres (use JSON not JSONB).
 - Auditability: dedicated audit log table with old/new/metadata.
 - Approval gating: ``approval_request_id`` stored on the WorkOrder header.
-- Execution granularity: a single work order can target multiple contractors, each with multiple items.
+- **One work order → one contractor**; line items reference Part Master parts.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
-    UniqueConstraint,
     func,
     true,
 )
@@ -54,6 +53,10 @@ class WorkOrder(Base):
     org_unit_id: Mapped[int] = mapped_column(
         ForeignKey("org_units.id", ondelete="RESTRICT"), nullable=False, index=True
     )
+    contractor_id: Mapped[int] = mapped_column(
+        ForeignKey("contractors.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     work_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -73,11 +76,11 @@ class WorkOrder(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    contractors = relationship(
-        "WorkOrderContractor",
+    items = relationship(
+        "WorkOrderItem",
         back_populates="work_order",
         cascade="all, delete-orphan",
-        order_by="WorkOrderContractor.id.asc()",
+        order_by="WorkOrderItem.id.asc()",
         lazy="selectin",
     )
     audit_logs = relationship(
@@ -89,46 +92,12 @@ class WorkOrder(Base):
     )
 
 
-class WorkOrderContractor(Base):
-    __tablename__ = "work_order_contractors"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    work_order_id: Mapped[int] = mapped_column(
-        ForeignKey("work_orders.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    contractor_id: Mapped[int] = mapped_column(
-        ForeignKey("contractors.id", ondelete="RESTRICT"), nullable=False, index=True
-    )
-
-    scope_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())
-
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-    work_order = relationship("WorkOrder", back_populates="contractors")
-    items = relationship(
-        "WorkOrderItem",
-        back_populates="work_order_contractor",
-        cascade="all, delete-orphan",
-        order_by="WorkOrderItem.id.asc()",
-        lazy="selectin",
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "work_order_id",
-            "contractor_id",
-            name="uq_work_order_contractors_wo_contractor",
-        ),
-    )
-
-
 class WorkOrderItem(Base):
     __tablename__ = "work_order_items"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    work_order_contractor_id: Mapped[int] = mapped_column(
-        ForeignKey("work_order_contractors.id", ondelete="CASCADE"), nullable=False, index=True
+    work_order_id: Mapped[int] = mapped_column(
+        ForeignKey("work_orders.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     part_master_id: Mapped[int] = mapped_column(
@@ -146,6 +115,11 @@ class WorkOrderItem(Base):
         ForeignKey("contractor_rates.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
+    # Snapshot of kg-per-piece (or similar) used for commercial math at WO creation; required for weight_based per_kg.
+    weight_per_piece_snapshot: Mapped[Decimal | None] = mapped_column(Numeric(14, 6), nullable=True)
+    # quantity × (weight × rate or rate) at creation / repricing — preserved for audit and invoice caps.
+    taxable_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, server_default="0")
+
     # Governance: if an override was requested, it is stored separately and only takes effect once approved.
     override_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     override_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -154,7 +128,7 @@ class WorkOrderItem(Base):
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    work_order_contractor = relationship("WorkOrderContractor", back_populates="items")
+    work_order = relationship("WorkOrder", back_populates="items")
     progress = relationship(
         "WorkOrderItemProgress",
         back_populates="item",
@@ -203,4 +177,3 @@ class WorkOrderAuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     work_order = relationship("WorkOrder", back_populates="audit_logs")
-
