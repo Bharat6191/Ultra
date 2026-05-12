@@ -126,6 +126,15 @@ ROLES: dict[str, dict] = {
             "approval.act",
         ],
     },
+    "Work Order Approver (L2)": {
+        "description": "Second-level approver after L1 (e.g. plant head / finance) for work order activation.",
+        "perms": [
+            "work_orders.view",
+            "work_orders.approve",
+            "approval.view",
+            "approval.act",
+        ],
+    },
     "Approval Workflow Manager": {
         "description": "Owns approval workflow definitions + can act on any task.",
         "perms": [
@@ -175,6 +184,7 @@ USERS: list[tuple[str, str, str, str, list[str]]] = [
     ("rate_approver", "rate.approver@demo.test", "Aaron Approver",    "+15550200006",
      ["Procurement Approver", "Work Order Approver (L1)"]),
     ("wo_approver1", "wo.approver1@demo.test", "Owen WO Approver", "+15550200011", ["Work Order Approver (L1)"]),
+    ("wo_approver2", "wo.approver2@demo.test", "Olivia WO L2", "+15550200012", ["Work Order Approver (L2)"]),
     ("wf_manager",    "wf.manager@demo.test",    "Wendy Workflow",    "+15550200007", ["Approval Workflow Manager"]),
     ("task_operator", "task.operator@demo.test", "Tara Tasks",        "+15550200008", ["Task Operator"]),
     ("notif_admin",   "notif.admin@demo.test",   "Nikhil Notify",     "+15550200009", ["Notifications Admin"]),
@@ -419,14 +429,22 @@ def main() -> int:
                 permission_codes=list(cfg["perms"]),
             )
 
-        if ensure_work_orders_create_workflow(
-            db, approver_role=created_roles["Work Order Approver (L1)"]
-        ):
-            print(
-                "Approval mapping: work_orders.create → single-step workflow "
-                '(role "Work Order Approver (L1)" → e.g. wo.approver1@demo.test). '
-                "Other mappings for that action were deactivated."
-            )
+        wo_l1 = created_roles["Work Order Approver (L1)"]
+        wo_l2 = created_roles.get("Work Order Approver (L2)")
+        if ensure_work_orders_create_workflow(db, approver_role_l1=wo_l1, approver_role_l2=wo_l2):
+            if wo_l2 is not None:
+                print(
+                    "Approval mapping: work_orders.create → two-step workflow "
+                    '(L1: "Work Order Approver (L1)" → wo.approver1@demo.test; '
+                    'L2: "Work Order Approver (L2)" → wo.approver2@demo.test). '
+                    "Other mappings for that action were deactivated."
+                )
+            else:
+                print(
+                    "Approval mapping: work_orders.create → single-step workflow "
+                    '(role "Work Order Approver (L1)" → e.g. wo.approver1@demo.test). '
+                    "Other mappings for that action were deactivated."
+                )
         else:
             print(
                 "warning: could not map work_orders.create (missing permission?) — "

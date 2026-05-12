@@ -10,13 +10,13 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission, isSuperuser } from "@/lib/permissions"
+import type { ContractorRateStatus } from "@/components/contractors/rateStatus"
 import {
-  CONTRACTOR_RATE_STATUS_OPTIONS,
   formatMoney,
   formatPercent,
   rateStatusLabel,
@@ -68,6 +68,16 @@ type Summary = {
 
 type OrgUnitLite = { id: number; name: string; type: string; parent_id: number | null }
 
+type RateStatusTab = "all" | ContractorRateStatus
+
+const RATE_STATUS_TABS: { id: RateStatusTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "draft", label: "Draft" },
+  { id: "pending_approval", label: "Pending approval" },
+  { id: "approved", label: "Approved" },
+  { id: "rejected", label: "Rejected" },
+]
+
 /** Client-side mirror of cluster → plant expansion for table filters. */
 function plantIdsUnderScope(rows: OrgUnitLite[], scopeId: number): number[] {
   const root = rows.find((r) => r.id === scopeId)
@@ -99,7 +109,7 @@ export function NegotiatedRatesPage() {
   const [error, setError] = React.useState<string | null>(null)
 
   const [search, setSearch] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<string>("all")
+  const [statusTab, setStatusTab] = React.useState<RateStatusTab>("all")
   const [plantFilter, setPlantFilter] = React.useState<string>("all")
 
   const canView = hasPermission("contractor_rates.view") || isSuperuser()
@@ -139,11 +149,21 @@ export function NegotiatedRatesPage() {
     }
   }
 
+  const statusCounts = React.useMemo(() => {
+    const m = new Map<string, number>()
+    if (!rows) return m
+    for (const r of rows) {
+      const k = String(r.status ?? "")
+      m.set(k, (m.get(k) ?? 0) + 1)
+    }
+    return m
+  }, [rows])
+
   const filtered = React.useMemo(() => {
     if (!rows) return []
     const q = search.trim().toLowerCase()
     return rows.filter((r) => {
-      if (statusFilter !== "all" && r.status !== statusFilter) return false
+      if (statusTab !== "all" && r.status !== statusTab) return false
       if (plantFilter !== "all") {
         const sid = Number(plantFilter)
         const allowed = new Set(plantIdsUnderScope(orgScopes, sid))
@@ -163,7 +183,7 @@ export function NegotiatedRatesPage() {
       }
       return true
     })
-  }, [rows, search, statusFilter, plantFilter, orgScopes])
+  }, [rows, search, statusTab, plantFilter, orgScopes])
 
   if (!canView) {
     return (
@@ -256,12 +276,12 @@ export function NegotiatedRatesPage() {
         </Alert>
       ) : null}
 
-      {/* Filters */}
+      {/* Refine by plant / text (lifecycle uses tabs on the table card). */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Filters</CardTitle>
+          <CardTitle className="text-sm font-medium">Refine list</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
+        <CardContent className="grid gap-3 md:grid-cols-2">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -271,18 +291,6 @@ export function NegotiatedRatesPage() {
               className="pl-8"
             />
           </div>
-          <select
-            className={SELECT_CLASS}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">All statuses</option>
-            {CONTRACTOR_RATE_STATUS_OPTIONS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
           <select
             className={SELECT_CLASS}
             value={plantFilter}
@@ -315,7 +323,39 @@ export function NegotiatedRatesPage() {
 
       {/* Table */}
       <Card>
-        <CardContent className="p-0">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">Negotiations</CardTitle>
+          <CardDescription>
+            Pick a lifecycle tab to focus the table; search and plant filters still apply on top of the tab.
+          </CardDescription>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {RATE_STATUS_TABS.map((t) => {
+              const n = t.id === "all" ? (rows?.length ?? 0) : (statusCounts.get(t.id) ?? 0)
+              return (
+                <Button
+                  key={t.id}
+                  type="button"
+                  size="sm"
+                  variant={statusTab === t.id ? "default" : "outline"}
+                  className="h-8"
+                  onClick={() => setStatusTab(t.id)}
+                >
+                  {t.label}
+                  <span
+                    className={
+                      statusTab === t.id
+                        ? "ml-1.5 tabular-nums text-primary-foreground/85"
+                        : "ml-1.5 tabular-nums text-muted-foreground"
+                    }
+                  >
+                    ({n})
+                  </span>
+                </Button>
+              )
+            })}
+          </div>
+        </CardHeader>
+        <CardContent className="p-0 border-t">
           <Table>
             <TableHeader>
               <TableRow>

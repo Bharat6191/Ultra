@@ -3,9 +3,13 @@
 
 Prerequisites (typical TiM demo DB):
 
-- ``scripts/seed_demo_users.py`` — negotiator permissions + WO approval mapping
+- ``scripts/seed_demo_users.py`` — negotiator permissions + two-step WO approval (L1 → L2) when role (L2) exists
 - ``scripts/seed_manual_test_contractors.py`` — contractors mapped to plants
 - ``scripts/seed_manual_test_rates.py`` — part masters per plant
+
+For a **wiped DB + scripted approve/reject/resubmit** walkthrough, use instead::
+
+    ./backend/venv/bin/python scripts/seed_demo_work_order_two_level_scenario.py --yes
 
 Run from project root:
 
@@ -117,18 +121,25 @@ def _work_order_l1_role(db: Session) -> Role | None:
     return db.scalar(select(Role).where(Role.name == "Work Order Approver (L1)"))
 
 
+def _work_order_l2_role(db: Session) -> Role | None:
+    return db.scalar(select(Role).where(Role.name == "Work Order Approver (L2)"))
+
+
 def main() -> int:
     db = SessionLocal()
     try:
         sync_all_modules_to_db(db)
-        approver_role = _work_order_l1_role(db)
-        if approver_role is None:
+        approver_l1 = _work_order_l1_role(db)
+        approver_l2 = _work_order_l2_role(db)
+        if approver_l1 is None:
             print(
                 'error: role "Work Order Approver (L1)" not found. Run scripts/seed_demo_users.py.',
                 file=sys.stderr,
             )
             return 3
-        if not ensure_work_orders_create_workflow(db, approver_role=approver_role):
+        if not ensure_work_orders_create_workflow(
+            db, approver_role_l1=approver_l1, approver_role_l2=approver_l2
+        ):
             print(
                 "error: work_orders.create permission missing. Run migrations + scripts/sync_modules.py.",
                 file=sys.stderr,
@@ -285,7 +296,7 @@ def main() -> int:
 
         print()
         print(f"Done. New work orders: {created}; submitted: {submitted}.")
-        print("Log in as wo.approver1@demo.test or rate.approver@demo.test → Tasks inbox (WO approvals).")
+        print("Log in as wo.approver1@demo.test (L1) and wo.approver2@demo.test (L2) → Tasks inbox (WO approvals).")
         return 0
     finally:
         db.close()

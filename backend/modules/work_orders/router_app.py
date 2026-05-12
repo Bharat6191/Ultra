@@ -15,7 +15,7 @@ from modules.invoices.validation import (
     prior_invoiced_ex_vat_for_work_order,
     work_order_ex_vat_cap,
 )
-from modules.work_orders.models import WorkOrder
+from modules.work_orders.models import WORK_ORDER_STATUSES, WorkOrder
 from modules.work_orders.schema import (
     WorkOrderCreate,
     WorkOrderDraftUpdate,
@@ -104,9 +104,27 @@ def list_work_orders(
     db: Session = Depends(get_db),
     org_unit_id: int | None = Query(None),
     status_filter: str | None = Query(None, alias="status"),
+    statuses: list[str] | None = Query(
+        None,
+        description="Repeat query param to filter by several statuses, e.g. ?statuses=draft&statuses=rejected",
+    ),
     limit: int = Query(100, ge=1, le=200),
 ) -> list[WorkOrderPublic]:
-    rows = svc.list(org_unit_id=org_unit_id, status=status_filter, limit=limit)
+    allowed = set(WORK_ORDER_STATUSES)
+    if statuses is not None:
+        cleaned = [s.strip().lower() for s in statuses if s and str(s).strip()]
+        if cleaned:
+            bad = [s for s in cleaned if s not in allowed]
+            if bad:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid status value(s): {bad}. Allowed: {sorted(allowed)}",
+                )
+            rows = svc.list(org_unit_id=org_unit_id, statuses=cleaned, limit=limit)
+        else:
+            rows = svc.list(org_unit_id=org_unit_id, status=status_filter, limit=limit)
+    else:
+        rows = svc.list(org_unit_id=org_unit_id, status=status_filter, limit=limit)
     return [WorkOrderPublic.model_validate(_to_public(db, r)) for r in rows]
 
 

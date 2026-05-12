@@ -186,7 +186,14 @@ class WorkOrderService:
         stmt = select(Invoice).where(Invoice.id.in_(subq)).order_by(Invoice.id.desc())
         return list(self._db.scalars(stmt).unique().all())
 
-    def list(self, *, org_unit_id: int | None = None, status: str | None = None, limit: int = 100) -> list[WorkOrder]:
+    def list(
+        self,
+        *,
+        org_unit_id: int | None = None,
+        status: str | None = None,
+        statuses: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[WorkOrder]:
         stmt = select(WorkOrder).options(selectinload(WorkOrder.items)).order_by(WorkOrder.id.desc())
         # Default: hide archived/inactive work orders.
         stmt = stmt.where(WorkOrder.is_active.is_(True))
@@ -195,7 +202,11 @@ class WorkOrderService:
             if not plant_ids:
                 return []
             stmt = stmt.where(WorkOrder.org_unit_id.in_(plant_ids))
-        if status:
+        if statuses:
+            normalized = [s.strip().lower() for s in statuses if s and str(s).strip()]
+            if normalized:
+                stmt = stmt.where(WorkOrder.status.in_(normalized))
+        elif status:
             stmt = stmt.where(WorkOrder.status == status.strip().lower())
         stmt = stmt.limit(int(limit))
         return list(self._db.scalars(stmt).unique().all())

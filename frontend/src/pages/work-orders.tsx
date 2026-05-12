@@ -11,10 +11,53 @@ import { getJson } from "@/lib/api"
 import { workOrderStatusBadgeVariant } from "@/lib/work-order-status-badge"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
+type WoTab = "all" | "draft" | "approval" | "operating" | "completed"
+
+const WO_TABS: { id: WoTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "draft", label: "Draft" },
+  { id: "approval", label: "In approval" },
+  { id: "operating", label: "Active" },
+  { id: "completed", label: "Completed" },
+]
+
+function workOrdersListPath(tab: WoTab): string {
+  const q = new URLSearchParams({ limit: "100" })
+  if (tab === "draft") {
+    q.append("statuses", "draft")
+    q.append("statuses", "rejected")
+  } else if (tab === "approval") {
+    q.set("status", "pending_approval")
+  } else if (tab === "operating") {
+    q.append("statuses", "active")
+    q.append("statuses", "approved")
+  } else if (tab === "completed") {
+    q.set("status", "closed")
+  }
+  return `/work-orders?${q.toString()}`
+}
+
+/** Friendly label in lists; raw `status` still drives badges and routing. */
+function workOrderStatusLabel(status: string): string {
+  switch (String(status || "").toLowerCase()) {
+    case "closed":
+      return "Completed"
+    case "pending_approval":
+      return "In approval"
+    case "draft":
+      return "Draft"
+    case "rejected":
+      return "Returned"
+    default:
+      return status
+  }
+}
+
 export function WorkOrdersPage() {
   const canCreate = hasPermission("work_orders.create")
   const canView = hasPermission("work_orders.view")
 
+  const [tab, setTab] = React.useState<WoTab>("all")
   const [rows, setRows] = React.useState<any[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [plants, setPlants] = React.useState<{ id: number; name: string }[]>([])
@@ -23,13 +66,13 @@ export function WorkOrdersPage() {
     if (!canView) return
     setError(null)
     try {
-      const list = await getJson<any[]>("/work-orders?limit=100")
+      const list = await getJson<any[]>(workOrdersListPath(tab))
       setRows(list)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load work orders")
       setRows([])
     }
-  }, [canView])
+  }, [canView, tab])
 
   React.useEffect(() => {
     void load()
@@ -53,7 +96,6 @@ export function WorkOrdersPage() {
     (orgUnitId: number) => plants.find((p) => p.id === orgUnitId)?.name ?? `#${orgUnitId}`,
     [plants],
   )
-
 
   return (
     <div className="space-y-4">
@@ -84,8 +126,23 @@ export function WorkOrdersPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Work orders</CardTitle>
           <CardDescription>
-            Drafts can be submitted for approval; approved work orders become operationally active.
+            <strong>Draft</strong> means not yet live (including returned edits)—not the same as <strong>In approval</strong>, which
+            is waiting on approvers in <strong>My tasks</strong>. <strong>Completed</strong> lists closed work orders.
           </CardDescription>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {WO_TABS.map((t) => (
+              <Button
+                key={t.id}
+                type="button"
+                size="sm"
+                variant={tab === t.id ? "default" : "outline"}
+                className="h-8"
+                onClick={() => setTab(t.id)}
+              >
+                {t.label}
+              </Button>
+            ))}
+          </div>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
@@ -109,7 +166,7 @@ export function WorkOrdersPage() {
               ) : rows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
-                    No work orders yet.
+                    No work orders in this view.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -120,7 +177,7 @@ export function WorkOrdersPage() {
                     <TableCell className="text-muted-foreground">{plantName(Number(r.org_unit_id))}</TableCell>
                     <TableCell className="text-xs tabular-nums">{r.work_date}</TableCell>
                     <TableCell>
-                      <Badge variant={workOrderStatusBadgeVariant(r.status)}>{r.status}</Badge>
+                      <Badge variant={workOrderStatusBadgeVariant(r.status)}>{workOrderStatusLabel(r.status)}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button asChild size="sm" variant="ghost">
@@ -139,4 +196,3 @@ export function WorkOrdersPage() {
 }
 
 export default WorkOrdersPage
-
