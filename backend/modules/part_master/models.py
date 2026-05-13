@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
     true,
 )
@@ -25,6 +26,7 @@ from db.base import Base
 
 PRICING_METHODS: tuple[str, ...] = ("weight_based", "piece_based")
 RATE_UNIT_TYPES: tuple[str, ...] = ("per_kg", "per_piece", "per_unit", "per_box", "per_nos")
+BILLING_BASIS: tuple[str, ...] = ("WEIGHT", "PCS", "MANUAL")
 PART_STATUSES: tuple[str, ...] = ("draft", "active", "inactive", "superseded")
 
 
@@ -38,6 +40,8 @@ class PartMaster(Base):
 
     unit_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     pricing_method: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    billing_basis: Mapped[str] = mapped_column(String(16), nullable=False, server_default="PCS")
+    allow_manual_amount_override: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
     weight_per_piece: Mapped[Decimal | None] = mapped_column(Numeric(14, 6), nullable=True)
 
     labour_headcount: Mapped[int | None] = mapped_column(Integer, nullable=True)

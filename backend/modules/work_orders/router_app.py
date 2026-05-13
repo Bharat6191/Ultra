@@ -11,6 +11,7 @@ from core.permissions import require_any_permission, require_permission
 from db.session import get_db
 from modules.contractor.models import Contractor
 from modules.errors import ConflictError, NotFoundError
+from modules.invoices.service import InvoiceService
 from modules.invoices.validation import (
     prior_invoiced_ex_vat_for_work_order,
     work_order_ex_vat_cap,
@@ -35,6 +36,10 @@ router = APIRouter(tags=["app", "work_orders"])
 
 def _svc(db: Session = Depends(get_db)) -> WorkOrderService:
     return WorkOrderService(db)
+
+
+def _inv_svc(db: Session = Depends(get_db)) -> InvoiceService:
+    return InvoiceService(db)
 
 
 def _to_public(db: Session, row: WorkOrder) -> dict:
@@ -164,6 +169,21 @@ def get_work_order(
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return WorkOrderPublic.model_validate(_to_public(db, row))
+
+
+@router.get(
+    "/work-orders/{work_order_id:int}/remaining-balance",
+    dependencies=[Depends(require_any_permission("work_orders.view", "work_orders.approve"))],
+)
+def work_order_remaining_balance(
+    work_order_id: int,
+    inv_svc: Annotated[InvoiceService, Depends(_inv_svc)],
+) -> dict:
+    """Cumulative invoice commitment vs approved WO cap, plus per-line preflight rows for this work order."""
+    try:
+        return inv_svc.work_order_invoice_balance(work_order_id=int(work_order_id))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get(

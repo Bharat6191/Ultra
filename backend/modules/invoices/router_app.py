@@ -19,10 +19,12 @@ from modules.invoices.schema import (
     InvoiceIssueJustificationUpdate,
     InvoiceAuditEntry,
 )
-from modules.invoices.service import InvoiceService
+from modules.invoices.commercial_amount import invoice_line_ex_vat_amount
 from modules.invoices.models import InvoiceAttachment
 from modules.invoices.line_format import rate_basis_label, unit_label_from_type
 from modules.invoices.storage import save_invoice_attachment
+from modules.invoices.service import InvoiceService
+from modules.work_orders.schema import WorkOrderPublic
 from modules.work_orders.service import WorkOrderService
 from modules.work_orders.models import WorkOrder, WorkOrderItem
 
@@ -32,6 +34,10 @@ router = APIRouter(tags=["app", "invoices"])
 
 def _svc(db: Session = Depends(get_db)) -> InvoiceService:
     return InvoiceService(db)
+
+
+def _wo_svc(db: Session = Depends(get_db)) -> WorkOrderService:
+    return WorkOrderService(db)
 
 
 def _q2(x: Decimal) -> Decimal:
@@ -63,7 +69,11 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
         ps = (wit.pricing_snapshot or {}) if wit is not None else {}
         if wit is not None:
             try:
-                base_expect = WorkOrderService.ex_tax_for_invoice_qty(item=wit, invoice_quantity=qty)
+                base_expect = invoice_line_ex_vat_amount(
+                    item=wit,
+                    invoice_quantity=qty,
+                    resolved_rate=rate_dec,
+                )
             except ValueError:
                 base_expect = _q2(qty * rate_dec)
             job_desc = f"{ps.get('part_code') or ''} — {ps.get('part_name') or ''}".strip(" —")
@@ -221,13 +231,13 @@ def invoice_audit_logs(
     ],
 )
 def invoice_preflight(
-    svc: Annotated[InvoiceService, Depends(_svc)],
     contractor_id: int = Query(..., ge=1),
     org_unit_id: int = Query(..., ge=1),
     work_order_ids: str | None = Query(
         None,
         description="Comma-separated work order ids to scope prefilled billable rows (omit for all active WOs in plant).",
     ),
+    svc: InvoiceService = Depends(_svc),
 ) -> InvoicePreflightResponse:
     wo_ids: list[int] | None = None
     if work_order_ids:
@@ -243,6 +253,36 @@ def invoice_preflight(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get(
+    "/invoices/work-orders/eligible",
+    response_model=list[WorkOrderPublic],
+    dependencies=[
+        Depends(
+            require_any_permission(
+                "invoices.create",
+                "invoices.view",
+            ),
+        ),
+    ],
+)
+def invoice_eligible_work_orders(
+    contractor_id: int = Query(..., ge=1),
+    org_unit_id: int = Query(..., ge=1),
+    wo_svc: WorkOrderService = Depends(_wo_svc),
+    db: Session = Depends(get_db),
+) -> list[WorkOrderPublic]:
+    """Approved (operational ``active``) work orders for a contractor + plant — invoice creation scope."""
+    from modules.work_orders.router_app import _to_public as wo_to_public
+
+    rows = wo_svc.list(
+        org_unit_id=int(org_unit_id),
+        contractor_id=int(contractor_id),
+        statuses=["active"],
+        limit=200,
+    )
+    return [WorkOrderPublic.model_validate(wo_to_public(db, r)) for r in rows]
 
 
 @router.get(

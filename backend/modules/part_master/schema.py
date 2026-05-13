@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from modules.part_master.models import PART_STATUSES, PRICING_METHODS, RATE_UNIT_TYPES
+from modules.part_master.models import BILLING_BASIS, PART_STATUSES, PRICING_METHODS, RATE_UNIT_TYPES
 
 
 class PartMasterCreate(BaseModel):
@@ -15,6 +15,12 @@ class PartMasterCreate(BaseModel):
     description: str | None = None
     unit_type: str = Field(min_length=1, max_length=32)
     pricing_method: str = Field(min_length=1, max_length=32)
+    billing_basis: str | None = Field(
+        default=None,
+        max_length=16,
+        description="WEIGHT | PCS | MANUAL; defaults from pricing_method when omitted.",
+    )
+    allow_manual_amount_override: bool = False
     weight_per_piece: Decimal | None = Field(default=None, ge=Decimal("0"))
     labour_headcount: int | None = Field(default=None, ge=0)
     standard_man_hours: Decimal | None = Field(default=None, ge=Decimal("0"))
@@ -66,12 +72,29 @@ class PartMasterCreate(BaseModel):
             raise ValueError(f"status must be one of {PART_STATUSES}")
         return s
 
+    @field_validator("billing_basis")
+    @classmethod
+    def _bb(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = v.strip().upper()
+        if s not in BILLING_BASIS:
+            raise ValueError(f"billing_basis must be one of {BILLING_BASIS}")
+        return s
+
     @model_validator(mode="after")
     def _commercial_consistency(self) -> PartMasterCreate:
         if self.pricing_method == "weight_based" and self.rate_unit_type != "per_kg":
             raise ValueError("weight_based parts must use rate_unit_type=per_kg (rate per kg).")
         if self.pricing_method == "piece_based" and self.rate_unit_type == "per_kg":
             raise ValueError("piece_based parts cannot use rate_unit_type=per_kg; use per_piece or another unit.")
+        bb = self.billing_basis
+        if bb == "WEIGHT" and self.pricing_method != "weight_based":
+            raise ValueError("billing_basis WEIGHT requires pricing_method weight_based.")
+        if bb == "PCS" and self.pricing_method != "piece_based":
+            raise ValueError("billing_basis PCS requires pricing_method piece_based.")
+        if bb == "MANUAL" and self.pricing_method != "piece_based":
+            raise ValueError("billing_basis MANUAL requires pricing_method piece_based.")
         return self
 
 
@@ -82,6 +105,8 @@ class PartMasterUpdate(BaseModel):
     description: str | None = None
     unit_type: str | None = Field(default=None, min_length=1, max_length=32)
     pricing_method: str | None = None
+    billing_basis: str | None = Field(default=None, max_length=16)
+    allow_manual_amount_override: bool | None = None
     weight_per_piece: Decimal | None = None
     labour_headcount: int | None = Field(default=None, ge=0)
     standard_man_hours: Decimal | None = Field(default=None, ge=Decimal("0"))
@@ -144,6 +169,16 @@ class PartMasterUpdate(BaseModel):
             raise ValueError(f"status must be one of {PART_STATUSES}")
         return s
 
+    @field_validator("billing_basis")
+    @classmethod
+    def _bb_u(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = v.strip().upper()
+        if s not in BILLING_BASIS:
+            raise ValueError(f"billing_basis must be one of {BILLING_BASIS}")
+        return s
+
     @model_validator(mode="after")
     def _commercial_consistency_u(self) -> PartMasterUpdate:
         d = self.model_dump(exclude_unset=True)
@@ -154,6 +189,14 @@ class PartMasterUpdate(BaseModel):
                 raise ValueError("weight_based parts must use rate_unit_type=per_kg (rate per kg).")
             if pm == "piece_based" and ru == "per_kg":
                 raise ValueError("piece_based parts cannot use rate_unit_type=per_kg; use per_piece or another unit.")
+        bb = d.get("billing_basis")
+        if bb is not None and pm is not None:
+            if bb == "WEIGHT" and pm != "weight_based":
+                raise ValueError("billing_basis WEIGHT requires pricing_method weight_based.")
+            if bb == "PCS" and pm != "piece_based":
+                raise ValueError("billing_basis PCS requires pricing_method piece_based.")
+            if bb == "MANUAL" and pm != "piece_based":
+                raise ValueError("billing_basis MANUAL requires pricing_method piece_based.")
         return self
 
 
@@ -166,6 +209,8 @@ class PartMasterPublic(BaseModel):
     description: str | None = None
     unit_type: str
     pricing_method: str
+    billing_basis: str
+    allow_manual_amount_override: bool
     weight_per_piece: Decimal | None = None
     labour_headcount: int | None = None
     standard_man_hours: Decimal | None = None

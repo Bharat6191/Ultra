@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from modules.errors import ConflictError
 from modules.invoices.models import Invoice, InvoiceLine, InvoiceValidationIssue
-from modules.work_orders.service import WorkOrderService
+from modules.invoices.commercial_amount import invoice_line_ex_vat_amount
 from modules.settings.lookup import get_setting
 from modules.work_orders.models import WorkOrderItem, WorkOrderItemProgress, WorkOrder
 
@@ -367,9 +367,14 @@ class InvoiceValidationEngine:
                         metadata={"previous_invoiced_qty": str(prev_qty_dec)},
                     )
 
-            # Amount guardrail: stored line amount vs work-order-line proration.
+            # Amount guardrail: stored line amount vs commercial rule (weight: qty × kg × rate/kg).
             try:
-                calc = WorkOrderService.ex_tax_for_invoice_qty(item=item, invoice_quantity=_dec(line.quantity))
+                r = _dec(line.rate) if line.rate is not None else _dec(item.resolved_rate)
+                calc = invoice_line_ex_vat_amount(
+                    item=item,
+                    invoice_quantity=_dec(line.quantity),
+                    resolved_rate=r,
+                )
             except ValueError:
                 calc = None
             if calc is not None and _q2(_dec(line.amount)) != _q2(calc):
@@ -377,7 +382,7 @@ class InvoiceValidationEngine:
                     line_id=int(line.id),
                     code="AMOUNT_MISMATCH",
                     severity="warning",
-                    message="Line amount does not match the work order line (prorated from approved taxable value).",
+                    message="Line amount does not match the expected commercial amount (weight: qty × kg × rate/kg; otherwise WO proration).",
                     allowed_value=_q2(calc),
                     actual_value=_q2(_dec(line.amount)),
                 )

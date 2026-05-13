@@ -22,6 +22,8 @@ type BillableLine = {
   part_name?: string | null
   unit_type?: string | null
   pricing_method?: string | null
+  billing_basis?: string | null
+  allow_manual_amount_override?: boolean
   rate_unit_type?: string | null
   rate_basis_label?: string | null
   weight_per_piece?: number | null
@@ -37,7 +39,10 @@ type BillableLine = {
   previously_invoiced_qty: number
   remaining_invoiceable_qty_hint: number | null
   approved_rate: number
+  /** Same commercial cap as approved_line_taxable_ex_vat; echoed from API. */
+  planned_contract_value?: number
   permissible_value_with_tolerance: number
+  previously_invoiced_value?: number
   remaining_invoiceable_value: number | null
   completion_vs_billing_pct_hint: number | null
   near_tolerance_warning: boolean
@@ -65,7 +70,59 @@ function q2Money(n: number): number {
   return sign * (Math.round(x * 100 + 1e-10) / 100)
 }
 
-/** Ex-tax line total from work order line: ``invoice_qty × (approved_line_taxable_ex_vat / approved_line_qty_basis)``. */
+/** Aligns with Part Master / preflight ``billing_basis`` (falls back from ``pricing_method``). */
+function effectiveBillingBasis(ln: BillableLine): "WEIGHT" | "PCS" | "MANUAL" {
+  const raw = (ln.billing_basis ?? "").toString().trim().toUpperCase()
+  if (raw === "WEIGHT" || raw === "PCS" || raw === "MANUAL") return raw
+  const pm = (ln.pricing_method ?? "").toLowerCase()
+  if (pm === "weight_based") return "WEIGHT"
+  return "PCS"
+}
+
+function approvedWoTaxableExVat(ln: BillableLine): number {
+  const v = ln.approved_line_taxable_ex_vat
+  if (Number.isFinite(v)) return v
+  const p = ln.planned_contract_value
+  return Number.isFinite(p ?? NaN) ? (p as number) : 0
+}
+
+/** Total billable kg for this invoice line when qty is in **pieces** (WO UOM). */
+function calculatedTotalWeightKg(ln: BillableLine, invoiceQtyPieces: number): number | null {
+  const w = ln.weight_per_piece
+  if (w == null || !Number.isFinite(w) || w <= 0) return null
+  if (!Number.isFinite(invoiceQtyPieces) || invoiceQtyPieces <= 0) return null
+  return q2Money(invoiceQtyPieces * w)
+}
+
+/** For WEIGHT billing: billable **piece** qty comes from the work order (no manual invoice qty). Prefer remaining billable qty, then approved line qty / basis. */
+function autoWoDerivedBillQtyPieces(ln: BillableLine): number | null {
+  const rem = ln.remaining_invoiceable_qty_hint
+  if (rem != null && Number.isFinite(rem) && rem > 0) return rem
+  const aq = ln.approved_quantity
+  if (aq != null && Number.isFinite(aq) && aq > 0) return aq
+  const basis = ln.approved_line_qty_basis
+  if (basis != null && Number.isFinite(basis) && basis > 0) return basis
+  return null
+}
+
+function autoWoDerivedBillQtyString(ln: BillableLine): string {
+  const n = autoWoDerivedBillQtyPieces(ln)
+  return n != null ? String(n) : ""
+}
+
+/** Quantity (WO UOM, e.g. pieces) used for commercial math on this screen / submit. */
+function billQtyPiecesForLine(ln: BillableLine, inp: DraftLineQty | undefined): number | null {
+  if (effectiveBillingBasis(ln) === "WEIGHT") {
+    return autoWoDerivedBillQtyPieces(ln)
+  }
+  const qRaw = inp?.qty?.trim() ?? ""
+  if (!qRaw) return null
+  const q = Number(qRaw.replace(/,/g, ""))
+  if (!Number.isFinite(q) || q <= 0) return null
+  return q
+}
+
+/** Ex-tax from WO proration (non-weight or fallback when weight snapshot missing). */
 function lineExTax(ln: BillableLine, invoiceQty: number): number | null {
   const basis = ln.approved_line_qty_basis
   const tv = ln.approved_line_taxable_ex_vat
@@ -73,6 +130,19 @@ function lineExTax(ln: BillableLine, invoiceQty: number): number | null {
   if (basis == null || !Number.isFinite(basis) || basis <= 0) return null
   if (!Number.isFinite(tv) || tv < 0) return null
   return q2Money(invoiceQty * (tv / basis))
+}
+
+/** Taxable ex-VAT: weight billing uses ``qty × weight_per_unit × rate_per_kg`` (X × qty × rate). */
+function lineTaxableExVat(ln: BillableLine, invoiceQty: number): number | null {
+  if (effectiveBillingBasis(ln) === "WEIGHT") {
+    const x = ln.weight_per_piece
+    const rate = ln.approved_rate
+    if (x != null && Number.isFinite(x) && x > 0 && Number.isFinite(rate) && rate >= 0) {
+      if (!Number.isFinite(invoiceQty) || invoiceQty <= 0) return null
+      return q2Money(invoiceQty * x * rate)
+    }
+  }
+  return lineExTax(ln, invoiceQty)
 }
 
 export function InvoiceCreatePage() {
@@ -158,6 +228,28 @@ export function InvoiceCreatePage() {
     return () => clearTimeout(t)
   }, [form.contractor_id, form.org_unit_id, loadPreflight])
 
+  const selectedLineIdsKey = React.useMemo(() => [...selectedLineIds].sort((a, b) => a - b).join(","), [selectedLineIds])
+
+  /** Keep WEIGHT lines’ stored qty in sync with work order (preflight) — no manual invoice qty. */
+  React.useEffect(() => {
+    if (!preflight) return
+    setLineInputs((prev) => {
+      const next = { ...prev }
+      let changed = false
+      for (const ln of preflight.lines) {
+        if (effectiveBillingBasis(ln) !== "WEIGHT") continue
+        if (!selectedLineIds.has(ln.work_order_item_id)) continue
+        const auto = autoWoDerivedBillQtyString(ln)
+        const cur = next[ln.work_order_item_id] ?? { qty: "", tax_pct: "", notes: "" }
+        if (auto && cur.qty !== auto) {
+          next[ln.work_order_item_id] = { ...cur, qty: auto }
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [preflight, selectedLineIdsKey])
+
   const workOrdersInScope = React.useMemo(() => {
     if (!preflight) return []
     const map = new Map<number, { id: number; work_order_number: string }>()
@@ -217,9 +309,10 @@ export function InvoiceCreatePage() {
     setLineInputs((m) => {
       const next = { ...m }
       const cur = next[ln.work_order_item_id] ?? { qty: "", tax_pct: "", notes: "" }
-      if (!cur.qty.trim()) {
-        const def = defaultInvoiceQtyFromCompletion(ln)
-        next[ln.work_order_item_id] = { ...cur, qty: def }
+      if (effectiveBillingBasis(ln) === "WEIGHT") {
+        next[ln.work_order_item_id] = { ...cur, qty: autoWoDerivedBillQtyString(ln) }
+      } else if (!cur.qty.trim()) {
+        next[ln.work_order_item_id] = { ...cur, qty: defaultInvoiceQtyFromCompletion(ln) }
       } else {
         next[ln.work_order_item_id] = cur
       }
@@ -234,12 +327,10 @@ export function InvoiceCreatePage() {
     let count = 0
     for (const ln of selectedInvoiceLines) {
       const inp = lineInputs[ln.work_order_item_id]
-      const qRaw = inp?.qty?.trim() ?? ""
-      if (!qRaw) continue
-      const q = Number(qRaw.replace(",", ""))
-      if (!Number.isFinite(q) || q <= 0) continue
+      const q = billQtyPiecesForLine(ln, inp)
+      if (q == null || q <= 0) continue
       count += 1
-      const base = lineExTax(ln, q)
+      const base = lineTaxableExVat(ln, q)
       if (base === null) continue
       const taxRaw = inp?.tax_pct?.trim() ?? ""
       const tp = taxRaw === "" ? 0 : Number(taxRaw.replace(",", ""))
@@ -250,6 +341,12 @@ export function InvoiceCreatePage() {
   }
 
   const { count: draftLineCount, gross: draftGross } = totalsPreview()
+
+  const showWeightColumns = React.useMemo(
+    () => selectedInvoiceLines.some((l) => effectiveBillingBasis(l) === "WEIGHT"),
+    [selectedInvoiceLines],
+  )
+  const lineDetailColSpan = 11 + (showWeightColumns ? 2 : 0)
 
   const contractorName = React.useMemo(() => {
     const id = Number(form.contractor_id)
@@ -266,11 +363,9 @@ export function InvoiceCreatePage() {
     const out: InvoiceDisplayLine[] = []
     for (const ln of selectedInvoiceLines) {
       const inp = lineInputs[ln.work_order_item_id]
-      const qRaw = inp?.qty?.trim() ?? ""
-      if (!qRaw) continue
-      const qty = Number(qRaw.replace(/,/g, ""))
-      if (!Number.isFinite(qty) || qty <= 0) continue
-      const ex = lineExTax(ln, qty)
+      const qty = billQtyPiecesForLine(ln, inp)
+      if (qty == null || qty <= 0) continue
+      const ex = lineTaxableExVat(ln, qty)
       if (ex === null) continue
       const unitPrice = ln.approved_rate
       const taxable = ex
@@ -324,14 +419,12 @@ export function InvoiceCreatePage() {
     const lines: { work_order_item_id: number; quantity: string; tax_pct: number | null; notes?: string | null }[] = []
     for (const ln of selectedInvoiceLines) {
       const inp = lineInputs[ln.work_order_item_id]
-      const qRaw = inp?.qty?.trim() ?? ""
-      if (!qRaw) continue
-      const q = Number(qRaw.replace(",", ""))
-      if (!Number.isFinite(q) || q <= 0) continue
+      const q = billQtyPiecesForLine(ln, inp)
+      if (q == null || q <= 0) continue
       const taxRaw = inp?.tax_pct?.trim()
       lines.push({
         work_order_item_id: ln.work_order_item_id,
-        quantity: qRaw,
+        quantity: String(q),
         tax_pct:
           taxRaw === undefined || taxRaw === ""
             ? null
@@ -342,7 +435,10 @@ export function InvoiceCreatePage() {
         notes: inp?.notes?.trim() ? inp.notes.trim() : null,
       })
     }
-    if (!lines.length) return toast.error("Enter quantities for at least one line.")
+    if (!lines.length)
+      return toast.error(
+        "No billable quantities: for WEIGHT lines the work order must have remaining billable qty (or approved qty). For PCS lines, enter invoice qty.",
+      )
 
     setCreating(true)
     try {
@@ -528,9 +624,10 @@ export function InvoiceCreatePage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium">Step 3 · Invoice line items</CardTitle>
                   <CardDescription>
-                    Edit invoice qty and tax %; taxable value is prorated from the work order line&apos;s approved
-                    taxable amount (same basis as the execution sheet). Cumulative invoice amounts (ex. tax) per work
-                    order cannot exceed the approved work order value.
+                    <span className="font-medium">WEIGHT</span> lines: bill quantity is taken from the work order
+                    (remaining billable pieces when available, otherwise approved line qty). Taxable ex-VAT = that qty ×
+                    weight per unit × rate/kg — no separate invoice quantity. <span className="font-medium">PCS</span>{" "}
+                    lines: enter invoice qty; taxable = qty × unit rate (within the approved line cap).
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -540,124 +637,290 @@ export function InvoiceCreatePage() {
                     <div className="border-t">
                       <div className="w-full overflow-x-auto">
                         <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead className="w-[120px]">Work order</TableHead>
-                            <TableHead>Line item</TableHead>
-                            <TableHead className="w-[56px]">Unit</TableHead>
-                            <TableHead className="w-[88px] text-right">WT / PC</TableHead>
-                            <TableHead className="w-[72px] text-right">Rate basis</TableHead>
-                            <TableHead className="text-right">Unit rate</TableHead>
-                            <TableHead className="w-[100px] text-right">Invoice qty</TableHead>
-                            <TableHead className="w-[72px] text-right">Tax %</TableHead>
-                            <TableHead className="text-right">Taxable</TableHead>
-                            <TableHead className="text-right">Incl. tax</TableHead>
-                            <TableHead className="w-[180px]">Note</TableHead>
-                            <TableHead className="w-[50px]" />
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {selectedInvoiceLines.map((ln) => {
-                            const inp = lineInputs[ln.work_order_item_id] ?? { qty: "", tax_pct: "", notes: "" }
-                            const q = Number((inp.qty || "").replace(/,/g, ""))
-                            const baseEx =
-                              Number.isFinite(q) && q > 0 ? lineExTax(ln, q) : null
-                            const base = baseEx ?? 0
-                            const tp = inp.tax_pct?.trim() ? Number(inp.tax_pct.replace(/,/g, "")) : 0
-                            const taxAmt =
-                              baseEx !== null && Number.isFinite(tp) && tp > 0 ? baseEx * (tp / 100) : 0
-                            const gross = base + taxAmt
-                            const wtPc =
-                              ln.weight_per_piece != null && Number.isFinite(ln.weight_per_piece)
-                                ? money(ln.weight_per_piece)
-                                : "—"
-                            return (
-                              <TableRow key={ln.work_order_item_id}>
-                                <TableCell className="text-xs font-mono">{ln.work_order_number}</TableCell>
-                                <TableCell className="text-xs">
-                                  <div className="font-medium">{ln.part_code ?? ln.job_type ?? "—"}</div>
-                                  <div className="text-[11px] text-muted-foreground">
-                                    {ln.part_name ?? "—"} ·{" "}
-                                    <span className="uppercase tracking-wide">{ln.progress_type}</span>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="w-[120px]">Work order</TableHead>
+                              <TableHead>Line item</TableHead>
+                              <TableHead className="w-[56px]">Unit</TableHead>
+                              {showWeightColumns ? (
+                                <>
+                                  <TableHead className="w-[100px] text-right">Wt / unit (kg)</TableHead>
+                                  <TableHead className="w-[88px] text-right">Total kg</TableHead>
+                                </>
+                              ) : null}
+                              <TableHead className="w-[72px] text-right">Rate basis</TableHead>
+                              <TableHead className="min-w-[88px] text-right">Unit rate</TableHead>
+                              <TableHead className="w-[112px] text-right">Qty (WO)</TableHead>
+                              <TableHead className="w-[72px] text-right">Tax %</TableHead>
+                              <TableHead className="text-right">Taxable</TableHead>
+                              <TableHead className="text-right">Incl. tax</TableHead>
+                              <TableHead className="w-[180px]">Note</TableHead>
+                              <TableHead className="w-[50px]" />
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {selectedInvoiceLines.map((ln) => {
+                              const bb = effectiveBillingBasis(ln)
+                              const isWeight = bb === "WEIGHT"
+                              const inp = lineInputs[ln.work_order_item_id] ?? { qty: "", tax_pct: "", notes: "" }
+                              const billQ = billQtyPiecesForLine(ln, inp)
+                              const baseEx = billQ != null && billQ > 0 ? lineTaxableExVat(ln, billQ) : null
+                              const base = baseEx ?? 0
+                              const tp = inp.tax_pct?.trim() ? Number(inp.tax_pct.replace(/,/g, "")) : 0
+                              const taxAmt = baseEx !== null && Number.isFinite(tp) && tp > 0 ? baseEx * (tp / 100) : 0
+                              const gross = base + taxAmt
+                              const wpu =
+                                ln.weight_per_piece != null && Number.isFinite(ln.weight_per_piece)
+                                  ? ln.weight_per_piece
+                                  : null
+                              const totalKg =
+                                isWeight && billQ != null && billQ > 0 ? calculatedTotalWeightKg(ln, billQ) : null
+                              const wtCell =
+                                showWeightColumns &&
+                                (isWeight && wpu != null ? (
+                                  <span className="tabular-nums text-muted-foreground" title="From Part Master / work order snapshot (read-only)">
+                                    {money(wpu)}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                ))
+                              const totalKgCell =
+                                showWeightColumns &&
+                                (isWeight && totalKg != null ? (
+                                  <span className="tabular-nums">{money(totalKg)}</span>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                ))
+                              const rateLabel =
+                                isWeight ? (
+                                  <div className="text-right">
+                                    <div className="text-xs tabular-nums">{money(ln.approved_rate)}</div>
+                                    <div className="text-[10px] text-muted-foreground">per kg</div>
                                   </div>
-                                </TableCell>
-                                <TableCell className="text-xs text-muted-foreground">{ln.unit_type ?? ln.unit ?? "—"}</TableCell>
-                                <TableCell className="text-right text-xs tabular-nums text-muted-foreground">{wtPc}</TableCell>
-                                <TableCell className="text-right text-[11px] text-muted-foreground">
-                                  {ln.rate_basis_label ?? "—"}
-                                </TableCell>
-                                <TableCell className="text-right text-xs tabular-nums">{money(ln.approved_rate)}</TableCell>
-                                <TableCell>
-                                  <Input
-                                    className="h-8 text-xs tabular-nums text-right"
-                                    value={inp.qty}
-                                    onChange={(e) =>
-                                      setLineInputs((m) => ({
-                                        ...m,
-                                        [ln.work_order_item_id]: { ...inp, qty: e.target.value },
-                                      }))
-                                    }
-                                    placeholder="0"
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  <Input
-                                    className="h-8 text-xs tabular-nums text-right"
-                                    value={inp.tax_pct}
-                                    onChange={(e) =>
-                                      setLineInputs((m) => ({
-                                        ...m,
-                                        [ln.work_order_item_id]: { ...inp, tax_pct: e.target.value },
-                                      }))
-                                    }
-                                    placeholder="—"
-                                  />
-                                </TableCell>
-                                <TableCell className="text-right text-xs tabular-nums">
-                                  {baseEx === null && Number.isFinite(q) && q > 0 ? "—" : money(base)}
-                                </TableCell>
-                                <TableCell className="text-right text-xs tabular-nums">
-                                  {baseEx === null && Number.isFinite(q) && q > 0 ? "—" : money(gross)}
-                                </TableCell>
-                                <TableCell>
-                                  <Input
-                                    className="h-8 text-xs"
-                                    value={inp.notes}
-                                    onChange={(e) =>
-                                      setLineInputs((m) => ({
-                                        ...m,
-                                        [ln.work_order_item_id]: { ...inp, notes: e.target.value },
-                                      }))
-                                    }
-                                    placeholder="Optional note for approval…"
-                                  />
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <button
-                                    type="button"
-                                    className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                                    onClick={() => {
-                                      setSelectedLineIds((prev) => {
-                                        const n = new Set(prev)
-                                        n.delete(ln.work_order_item_id)
-                                        return n
-                                      })
-                                      setLineInputs((m) => ({
-                                        ...m,
-                                        [ln.work_order_item_id]: {
-                                          ...(m[ln.work_order_item_id] ?? { qty: "", tax_pct: "", notes: "" }),
-                                          qty: "",
-                                        },
-                                      }))
-                                    }}
-                                  >
-                                    Remove
-                                  </button>
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
-                        </TableBody>
+                                ) : (
+                                  <div className="text-right">
+                                    <div className="text-xs tabular-nums">{money(ln.approved_rate)}</div>
+                                    <div className="text-[10px] text-muted-foreground">per unit</div>
+                                  </div>
+                                )
+                              const aq = ln.approved_quantity
+                              const iq = ln.previously_invoiced_qty
+                              const rq = ln.remaining_invoiceable_qty_hint
+                              const fmtQty = (n: number | null | undefined) =>
+                                n != null && Number.isFinite(n)
+                                  ? n.toLocaleString(undefined, { maximumFractionDigits: 3 })
+                                  : "—"
+                              const appTax = approvedWoTaxableExVat(ln)
+                              const remBill = ln.remaining_invoiceable_value
+
+                              return (
+                                <React.Fragment key={ln.work_order_item_id}>
+                                  <TableRow>
+                                    <TableCell className="text-xs font-mono">{ln.work_order_number}</TableCell>
+                                    <TableCell className="text-xs">
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="font-medium">{ln.part_code ?? ln.job_type ?? "—"}</span>
+                                        <span
+                                          className={
+                                            "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase " +
+                                            (isWeight
+                                              ? "bg-sky-500/15 text-sky-800 dark:text-sky-200"
+                                              : "bg-muted text-muted-foreground")
+                                          }
+                                        >
+                                          {bb}
+                                        </span>
+                                      </div>
+                                      <div className="text-[11px] text-muted-foreground">
+                                        {ln.part_name ?? "—"} ·{" "}
+                                        <span className="uppercase tracking-wide">{ln.progress_type}</span>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">
+                                      {ln.unit_type ?? ln.unit ?? "—"}
+                                    </TableCell>
+                                    {showWeightColumns ? (
+                                      <>
+                                        <TableCell className="text-right text-xs tabular-nums">{wtCell}</TableCell>
+                                        <TableCell className="text-right text-xs tabular-nums">{totalKgCell}</TableCell>
+                                      </>
+                                    ) : null}
+                                    <TableCell className="text-right text-[11px] text-muted-foreground">
+                                      {ln.rate_basis_label ?? "—"}
+                                    </TableCell>
+                                    <TableCell>{rateLabel}</TableCell>
+                                    <TableCell>
+                                      {isWeight ? (
+                                        <div className="text-right">
+                                          <div className="text-xs tabular-nums font-medium text-foreground">
+                                            {billQ != null && billQ > 0
+                                              ? billQ.toLocaleString(undefined, { maximumFractionDigits: 3 })
+                                              : "—"}
+                                          </div>
+                                          <div className="text-[10px] text-muted-foreground leading-tight">
+                                            Work order · read-only
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <Input
+                                          className="h-8 text-xs tabular-nums text-right"
+                                          value={inp.qty}
+                                          onChange={(e) =>
+                                            setLineInputs((m) => ({
+                                              ...m,
+                                              [ln.work_order_item_id]: { ...inp, qty: e.target.value },
+                                            }))
+                                          }
+                                          placeholder="0"
+                                        />
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Input
+                                        className="h-8 text-xs tabular-nums text-right"
+                                        value={inp.tax_pct}
+                                        onChange={(e) =>
+                                          setLineInputs((m) => ({
+                                            ...m,
+                                            [ln.work_order_item_id]: { ...inp, tax_pct: e.target.value },
+                                          }))
+                                        }
+                                        placeholder="—"
+                                      />
+                                    </TableCell>
+                                    <TableCell className="text-right text-xs tabular-nums">
+                                      {baseEx === null && billQ != null && billQ > 0 ? "—" : money(base)}
+                                    </TableCell>
+                                    <TableCell className="text-right text-xs tabular-nums">
+                                      {baseEx === null && billQ != null && billQ > 0 ? "—" : money(gross)}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Input
+                                        className="h-8 text-xs"
+                                        value={inp.notes}
+                                        onChange={(e) =>
+                                          setLineInputs((m) => ({
+                                            ...m,
+                                            [ln.work_order_item_id]: { ...inp, notes: e.target.value },
+                                          }))
+                                        }
+                                        placeholder="Optional note for approval…"
+                                      />
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <button
+                                        type="button"
+                                        className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                                        onClick={() => {
+                                          setSelectedLineIds((prev) => {
+                                            const n = new Set(prev)
+                                            n.delete(ln.work_order_item_id)
+                                            return n
+                                          })
+                                          setLineInputs((m) => ({
+                                            ...m,
+                                            [ln.work_order_item_id]: {
+                                              ...(m[ln.work_order_item_id] ?? { qty: "", tax_pct: "", notes: "" }),
+                                              qty: "",
+                                            },
+                                          }))
+                                        }}
+                                      >
+                                        Remove
+                                      </button>
+                                    </TableCell>
+                                  </TableRow>
+                                  <TableRow className="border-b bg-muted/25 hover:bg-muted/25">
+                                    <TableCell colSpan={lineDetailColSpan} className="py-2.5 align-top">
+                                      <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                                        <div className="space-y-0.5 rounded-md border border-border/60 bg-background/80 px-2.5 py-2">
+                                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                            Quantities (work order)
+                                          </div>
+                                          <div className="tabular-nums leading-relaxed">
+                                            <span className="text-muted-foreground">Approved qty:</span> {fmtQty(aq)}
+                                            <br />
+                                            <span className="text-muted-foreground">Invoiced qty (to date):</span>{" "}
+                                            {fmtQty(iq)}
+                                            <br />
+                                            <span className="text-muted-foreground">Remaining qty:</span> {fmtQty(rq)}
+                                          </div>
+                                        </div>
+                                        {isWeight ? (
+                                          <div className="space-y-1 rounded-md border border-border/60 bg-background/80 px-2.5 py-2 sm:col-span-2 lg:col-span-2">
+                                            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                              Weight billing (read-only weight from Part Master)
+                                            </div>
+                                            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
+                                              <div>
+                                                <span className="text-muted-foreground">Bill qty (pieces, WO):</span>{" "}
+                                                <span className="font-medium tabular-nums">
+                                                  {billQ != null && billQ > 0
+                                                    ? billQ.toLocaleString(undefined, { maximumFractionDigits: 3 })
+                                                    : "—"}
+                                                </span>
+                                              </div>
+                                              <div>
+                                                <span className="text-muted-foreground">Weight / unit:</span>{" "}
+                                                <span className="font-medium tabular-nums">
+                                                  {wpu != null ? `${money(wpu)} kg` : "—"}
+                                                </span>
+                                              </div>
+                                              <div>
+                                                <span className="text-muted-foreground">Rate / kg:</span>{" "}
+                                                <span className="font-medium tabular-nums">₹{money(ln.approved_rate)}</span>
+                                              </div>
+                                              <div>
+                                                <span className="text-muted-foreground">Total weight (this line):</span>{" "}
+                                                <span className="font-medium tabular-nums">
+                                                  {totalKg != null ? `${money(totalKg)} kg` : "—"}
+                                                </span>
+                                              </div>
+                                              <div>
+                                                <span className="text-muted-foreground">Invoice taxable (ex VAT):</span>{" "}
+                                                <span className="font-medium tabular-nums">
+                                                  {baseEx != null ? money(baseEx) : "—"}
+                                                </span>
+                                              </div>
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground">
+                                              Taxable (ex VAT) = weight per unit (X) × bill qty × rate per kg.
+                                            </p>
+                                          </div>
+                                        ) : (
+                                          <div className="space-y-1 rounded-md border border-border/60 bg-background/80 px-2.5 py-2">
+                                            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                              PCS billing
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground">
+                                              Invoice taxable (ex VAT) = invoice qty × unit rate (prorated to approved
+                                              line cap when applicable).
+                                            </p>
+                                            <div className="tabular-nums">
+                                              <span className="text-muted-foreground">Invoice taxable (ex VAT):</span>{" "}
+                                              <span className="font-medium">{baseEx != null ? money(baseEx) : "—"}</span>
+                                            </div>
+                                          </div>
+                                        )}
+                                        <div className="space-y-0.5 rounded-md border border-border/60 bg-background/80 px-2.5 py-2">
+                                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                            Work order commercial cap (ex VAT)
+                                          </div>
+                                          <div className="tabular-nums leading-relaxed">
+                                            <span className="text-muted-foreground">Approved line taxable:</span>{" "}
+                                            {money(appTax)}
+                                            <br />
+                                            <span className="text-muted-foreground">Remaining billable:</span>{" "}
+                                            {remBill != null && Number.isFinite(remBill) ? money(remBill) : "—"}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                </React.Fragment>
+                              )
+                            })}
+                          </TableBody>
                         </Table>
                       </div>
                     </div>

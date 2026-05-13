@@ -22,6 +22,8 @@ export type PartMasterPublic = {
   description: string | null
   unit_type: string
   pricing_method: string
+  billing_basis: string
+  allow_manual_amount_override: boolean
   weight_per_piece: string | number | null
   labour_headcount: number | null
   standard_man_hours: string | number | null

@@ -60,11 +60,18 @@ def commercial_line_amount(
 
 def commercial_snapshot_from_part_row(row: Any) -> dict[str, Any]:
     """JSON-friendly pricing snapshot for work order / invoice lines."""
+    bb = getattr(row, "billing_basis", None) or None
+    if bb is None:
+        pm = str(getattr(row, "pricing_method", "") or "").strip().lower()
+        bb = "WEIGHT" if pm == "weight_based" else "PCS"
+    amo = bool(getattr(row, "allow_manual_amount_override", False))
     return {
         "part_master_id": int(row.id),
         "part_code": str(row.part_code),
         "part_name": str(row.part_name),
         "pricing_method": str(row.pricing_method),
+        "billing_basis": str(bb).strip().upper(),
+        "allow_manual_amount_override": amo,
         "rate_unit_type": str(row.rate_unit_type),
         "weight_per_piece": str(row.weight_per_piece) if row.weight_per_piece is not None else None,
         "unit_type": str(row.unit_type),
@@ -72,11 +79,18 @@ def commercial_snapshot_from_part_row(row: Any) -> dict[str, Any]:
 
 
 def snapshot_from_mapping(m: Mapping[str, Any]) -> dict[str, Any]:
+    pm = str(m.get("pricing_method") or "piece_based").strip().lower()
+    bb_raw = m.get("billing_basis")
+    bb = str(bb_raw).strip().upper() if bb_raw not in (None, "") else ("WEIGHT" if pm == "weight_based" else "PCS")
+    amo = m.get("allow_manual_amount_override")
+    amo_b = bool(amo) if amo is not None else False
     return {
         "part_master_id": int(m["part_master_id"]),
         "part_code": str(m.get("part_code") or ""),
         "part_name": str(m.get("part_name") or ""),
-        "pricing_method": str(m.get("pricing_method") or "piece_based"),
+        "pricing_method": pm,
+        "billing_basis": bb,
+        "allow_manual_amount_override": amo_b,
         "rate_unit_type": str(m.get("rate_unit_type") or "per_piece"),
         "weight_per_piece": m.get("weight_per_piece"),
         "unit_type": str(m.get("unit_type") or ""),

@@ -19,14 +19,22 @@ from modules.invoices.models import (
     InvoiceLine,
     InvoiceValidationIssue,
 )
-from modules.invoices.schema import InvoiceCreate, InvoiceIssueJustificationUpdate
+from modules.invoices.commercial_amount import invoice_line_ex_vat_amount
 from modules.invoices.validation import (
     InvoiceValidationEngine,
-    STATUSES_COUNTING_TOWARD_CUMULATIVES,
+    STATUSES_COUNTING_TOWARD_WO_VALUE_CAP,
     invoice_tolerance_percentage,
+    prior_invoiced_ex_vat_for_work_order,
     raise_if_new_invoice_breaches_work_order_caps,
+    work_order_ex_vat_cap,
+)
+from modules.invoices.wo_invoice_policy import (
+    allow_manual_amount_override_from_snapshot,
+    effective_billing_basis,
+    is_work_order_invoiceable,
 )
 from modules.org_units.model import OrgUnit
+from modules.part_master.models import PartMaster
 from modules.part_master.pricing import pricing_snapshot_for_item
 from modules.work_orders.models import WorkOrder, WorkOrderItem
 from modules.work_orders.service import WorkOrderService
@@ -139,7 +147,11 @@ class InvoiceService:
 
             rate = _dec(ln.rate) if ln.rate is not None else _dec(item.resolved_rate)
             try:
-                amount = WorkOrderService.ex_tax_for_invoice_qty(item=item, invoice_quantity=_dec(ln.quantity))
+                amount = invoice_line_ex_vat_amount(
+                    item=item,
+                    invoice_quantity=_dec(ln.quantity),
+                    resolved_rate=rate,
+                )
             except ValueError as exc:
                 raise ConflictError(str(exc)) from exc
             tax_pct = _dec(ln.tax_pct) if ln.tax_pct is not None else Decimal("0")
@@ -318,8 +330,15 @@ class InvoiceService:
         if work_order_ids:
             stmt = stmt.where(WorkOrder.id.in_(tuple({int(x) for x in work_order_ids if int(x) > 0})))
         wos = list(self._db.scalars(stmt).unique().all())
+        part_ids = {int(it.part_master_id) for wo in wos for it in (wo.items or [])}
+        pm_by_id: dict[int, PartMaster] = {}
+        if part_ids:
+            pm_rows = list(self._db.scalars(select(PartMaster).where(PartMaster.id.in_(tuple(part_ids)))).all())
+            pm_by_id = {int(r.id): r for r in pm_rows}
         out_lines: list[dict[str, Any]] = []
         for wo in wos:
+            if not is_work_order_invoiceable(status=wo.status, is_active=wo.is_active):
+                continue
             for it in wo.items or []:
                 snap = it.pricing_snapshot or {}
                 rut_raw = snap.get("rate_unit_type")
@@ -331,7 +350,7 @@ class InvoiceService:
                     .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
                     .where(
                         InvoiceLine.work_order_item_id == int(it.id),
-                        Invoice.status.in_(STATUSES_COUNTING_TOWARD_CUMULATIVES),
+                        Invoice.status.in_(STATUSES_COUNTING_TOWARD_WO_VALUE_CAP),
                     )
                 )
                 prev_amt_raw = self._db.scalar(
@@ -340,7 +359,7 @@ class InvoiceService:
                     .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
                     .where(
                         InvoiceLine.work_order_item_id == int(it.id),
-                        Invoice.status.in_(STATUSES_COUNTING_TOWARD_CUMULATIVES),
+                        Invoice.status.in_(STATUSES_COUNTING_TOWARD_WO_VALUE_CAP),
                     )
                 )
                 pq = Decimal(str(it.planned_quantity)) if it.planned_quantity is not None else None
@@ -358,11 +377,26 @@ class InvoiceService:
                 rem_qty_based = aq - prev_qty if pq is not None else None
 
                 eff_snap = pricing_snapshot_for_item(it)
+                _raw_bb = eff_snap.get("billing_basis") or snap.get("billing_basis")
+                bb = effective_billing_basis(
+                    pricing_method=str(eff_snap.get("pricing_method") or snap.get("pricing_method") or ""),
+                    billing_basis=str(_raw_bb).strip() if _raw_bb not in (None, "") else None,
+                )
                 w_raw = eff_snap.get("weight_per_piece")
                 try:
                     w_float = float(_dec(w_raw)) if w_raw not in (None, "") else None
                 except Exception:
                     w_float = None
+                if (w_float is None or w_float <= 0) and bb == "WEIGHT":
+                    pm_row = pm_by_id.get(int(it.part_master_id))
+                    if pm_row is not None and pm_row.weight_per_piece is not None:
+                        try:
+                            wf = float(pm_row.weight_per_piece)
+                            if wf > 0:
+                                w_float = wf
+                        except Exception:
+                            pass
+                amo = allow_manual_amount_override_from_snapshot(eff_snap)
 
                 out_lines.append(
                     {
@@ -374,12 +408,14 @@ class InvoiceService:
                         "part_name": snap.get("part_name"),
                         "unit_type": snap.get("unit_type"),
                         "pricing_method": snap.get("pricing_method"),
+                        "billing_basis": bb,
+                        "allow_manual_amount_override": amo,
                         "rate_unit_type": rut,
                         "rate_basis_label": rate_basis_label(rut),
                         "weight_per_piece": w_float,
                         "approved_line_taxable_ex_vat": float(planned_contract_val),
                         "approved_line_qty_basis": basis_float,
-                        "progress_type": it.progress_type,
+                        "progress_type": str(it.progress_type or "quantity"),
                         "approved_quantity": proj.get("approved_quantity"),
                         "approved_percentage": proj.get("approved_percentage"),
                         "completed_quantity": proj.get("completed_quantity"),
@@ -402,6 +438,39 @@ class InvoiceService:
                     }
                 )
         return {"tolerance_pct": float(tol), "lines": out_lines}
+
+    def work_order_invoice_balance(self, *, work_order_id: int) -> dict[str, Any]:
+        wo = self._db.get(WorkOrder, int(work_order_id))
+        if wo is None:
+            raise NotFoundError("WorkOrder", work_order_id)
+        cap = work_order_ex_vat_cap(self._db, wo)
+        prev = prior_invoiced_ex_vat_for_work_order(
+            self._db, work_order_id=int(wo.id), exclude_invoice_id=None
+        )
+        rem = _q2(cap - prev)
+        if rem < Decimal("0"):
+            rem = Decimal("0")
+        util: float | None
+        if cap > 0:
+            util = float(_q2((prev / cap) * Decimal("100")))
+        else:
+            util = None
+        pre = self.preflight_billables(
+            contractor_id=int(wo.contractor_id),
+            org_unit_id=int(wo.org_unit_id),
+            work_order_ids=[int(wo.id)],
+        )
+        return {
+            "work_order_id": int(wo.id),
+            "work_order_number": wo.work_order_number,
+            "status": wo.status,
+            "eligible_for_new_invoice": is_work_order_invoiceable(status=wo.status, is_active=wo.is_active),
+            "approved_ex_vat_cap": float(cap),
+            "committed_invoice_ex_vat": float(prev),
+            "remaining_ex_vat": float(rem),
+            "utilization_pct": round(util, 2) if util is not None else None,
+            "preflight": pre,
+        }
 
     def update_issue_justification(self, issue_id: int, payload: InvoiceIssueJustificationUpdate, *, actor_user_id: int) -> InvoiceValidationIssue:
         issue = self._db.get(InvoiceValidationIssue, int(issue_id))

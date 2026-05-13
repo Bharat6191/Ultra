@@ -353,7 +353,21 @@ export function WorkOrderExecutionTable(props: {
                         <select
                           className="h-9 w-full max-w-[280px] rounded-md border border-input bg-background px-2 text-xs outline-none"
                           value={line.part_master_id}
-                          onChange={(e) => updateLine(line.key, { part_master_id: e.target.value })}
+                          onChange={(e) => {
+                            const v = e.target.value
+                            const nextPm = pickPartMaster(pms, v)
+                            const nextNeedsWt = needsWeightPerPiece(nextPm)
+                            const wFromPm =
+                              nextPm &&
+                              nextPm.weight_per_piece != null &&
+                              String(nextPm.weight_per_piece).trim() !== ""
+                                ? String(nextPm.weight_per_piece).trim()
+                                : ""
+                            updateLine(line.key, {
+                              part_master_id: v,
+                              weight_per_piece: nextNeedsWt ? wFromPm : "",
+                            })
+                          }}
                           disabled={loading || !org_unit_id}
                         >
                           <option value="">Select…</option>

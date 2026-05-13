@@ -118,6 +118,8 @@ class BillableWOLinePublic(BaseModel):
     part_name: str | None = None
     unit_type: str | None = None
     pricing_method: str | None = None
+    billing_basis: str = "PCS"
+    allow_manual_amount_override: bool = False
     rate_unit_type: str | None = None
     rate_basis_label: str | None = None
     weight_per_piece: float | None = None

@@ -75,6 +75,8 @@ class PartMasterService:
             "description": row.description,
             "unit_type": row.unit_type,
             "pricing_method": row.pricing_method,
+            "billing_basis": str(row.billing_basis or "PCS").upper(),
+            "allow_manual_amount_override": bool(row.allow_manual_amount_override),
             "weight_per_piece": Decimal(row.weight_per_piece) if row.weight_per_piece is not None else None,
             "labour_headcount": int(row.labour_headcount) if row.labour_headcount is not None else None,
             "standard_man_hours": Decimal(row.standard_man_hours) if row.standard_man_hours is not None else None,
@@ -197,6 +199,10 @@ class PartMasterService:
             description=(payload.description or None),
             unit_type=payload.unit_type.strip().lower(),
             pricing_method=payload.pricing_method,
+            billing_basis=(
+                (payload.billing_basis or ("WEIGHT" if payload.pricing_method == "weight_based" else "PCS")).strip().upper()
+            ),
+            allow_manual_amount_override=bool(payload.allow_manual_amount_override),
             weight_per_piece=Decimal(payload.weight_per_piece) if payload.weight_per_piece is not None else None,
             labour_headcount=int(payload.labour_headcount) if payload.labour_headcount is not None else None,
             standard_man_hours=Decimal(payload.standard_man_hours)
@@ -288,6 +294,12 @@ class PartMasterService:
             row.base_rate = Decimal(str(upd["base_rate"]))
         if "rate_unit_type" in upd and upd["rate_unit_type"] is not None:
             row.rate_unit_type = str(upd["rate_unit_type"]).strip().lower()
+        if "billing_basis" in upd and upd["billing_basis"] is not None:
+            row.billing_basis = str(upd["billing_basis"]).strip().upper()
+        elif "pricing_method" in upd and upd["pricing_method"] is not None:
+            row.billing_basis = "WEIGHT" if row.pricing_method == "weight_based" else "PCS"
+        if "allow_manual_amount_override" in upd and upd["allow_manual_amount_override"] is not None:
+            row.allow_manual_amount_override = bool(upd["allow_manual_amount_override"])
         if "effective_from" in upd and upd["effective_from"] is not None:
             row.effective_from = upd["effective_from"]
         if "effective_to" in upd:
@@ -300,6 +312,12 @@ class PartMasterService:
             raise ConflictError("weight_based parts must use rate_unit_type per_kg (rate per kg).")
         if row.pricing_method == "piece_based" and row.rate_unit_type == "per_kg":
             raise ConflictError("piece_based parts cannot use per_kg; use weight_based or a different rate unit.")
+        if row.billing_basis == "WEIGHT" and row.pricing_method != "weight_based":
+            raise ConflictError("billing_basis WEIGHT requires pricing_method weight_based.")
+        if row.billing_basis == "PCS" and row.pricing_method != "piece_based":
+            raise ConflictError("billing_basis PCS requires pricing_method piece_based.")
+        if row.billing_basis == "MANUAL" and row.pricing_method != "piece_based":
+            raise ConflictError("billing_basis MANUAL requires pricing_method piece_based.")
 
         if "is_active" in upd and upd["is_active"] is not None:
             new_active = bool(upd["is_active"])

@@ -200,6 +200,7 @@ class WorkOrderService:
         self,
         *,
         org_unit_id: int | None = None,
+        contractor_id: int | None = None,
         status: str | None = None,
         statuses: list[str] | None = None,
         limit: int = 100,
@@ -212,6 +213,8 @@ class WorkOrderService:
             if not plant_ids:
                 return []
             stmt = stmt.where(WorkOrder.org_unit_id.in_(plant_ids))
+        if contractor_id is not None:
+            stmt = stmt.where(WorkOrder.contractor_id == int(contractor_id))
         if statuses:
             normalized = [s.strip().lower() for s in statuses if s and str(s).strip()]
             if normalized:

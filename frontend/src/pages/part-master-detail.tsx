@@ -49,6 +49,8 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
   description: "Description",
   unit_type: "Billing unit (UOM)",
   pricing_method: "Pricing method",
+  billing_basis: "Billing basis",
+  allow_manual_amount_override: "Allow manual amount override",
   weight_per_piece: "Weight per unit",
   labour_headcount: "Labour count",
   standard_man_hours: "Standard man-hours",
@@ -131,6 +133,8 @@ function emptyEditForm(): {
   description: string
   unit_type: string
   pricing_method: string
+  billing_basis: string
+  allow_manual_amount_override: boolean
   weight_per_piece: string
   base_rate: string
   rate_unit_type: string
@@ -149,6 +153,8 @@ function emptyEditForm(): {
     description: "",
     unit_type: "pcs",
     pricing_method: "piece_based",
+    billing_basis: "PCS",
+    allow_manual_amount_override: false,
     weight_per_piece: "",
     base_rate: "",
     rate_unit_type: "per_piece",
@@ -170,6 +176,8 @@ function hydrateFormFromRow(r: PartMasterPublic) {
     description: r.description ?? "",
     unit_type: r.unit_type,
     pricing_method: r.pricing_method,
+    billing_basis: r.billing_basis ?? (r.pricing_method === "weight_based" ? "WEIGHT" : "PCS"),
+    allow_manual_amount_override: Boolean(r.allow_manual_amount_override),
     weight_per_piece: sanitizeDecimalString(r.weight_per_piece != null ? String(r.weight_per_piece) : ""),
     base_rate: sanitizeDecimalString(String(r.base_rate)),
     rate_unit_type: r.rate_unit_type,
@@ -315,6 +323,8 @@ export function PartMasterDetailPage() {
         description: form.description.trim() || null,
         unit_type: form.unit_type.trim(),
         pricing_method: form.pricing_method,
+        billing_basis: form.billing_basis,
+        allow_manual_amount_override: form.allow_manual_amount_override,
         weight_per_piece: w ? Number(w) : null,
         base_rate: br,
         rate_unit_type: form.rate_unit_type,
@@ -508,12 +518,18 @@ export function PartMasterDetailPage() {
                             return {
                               ...f,
                               pricing_method: pm,
+                              billing_basis: "WEIGHT",
                               rate_unit_type: "per_kg",
                               unit_type: f.unit_type.toLowerCase() === "pcs" ? "kg" : f.unit_type,
                             }
                           }
                           const ru = f.rate_unit_type === "per_kg" ? "per_piece" : f.rate_unit_type
-                          return { ...f, pricing_method: pm, rate_unit_type: ru }
+                          return {
+                            ...f,
+                            pricing_method: pm,
+                            billing_basis: f.billing_basis === "MANUAL" ? "MANUAL" : "PCS",
+                            rate_unit_type: ru,
+                          }
                         })
                       }}
                       disabled={!canUpdate}
@@ -531,6 +547,57 @@ export function PartMasterDetailPage() {
                       disabled={!canUpdate}
                       className="rounded-xl border-border/60"
                     />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="grid min-w-0 gap-1.5">
+                    <Label>Billing basis</Label>
+                    <select
+                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none disabled:opacity-60"
+                      value={form.billing_basis}
+                      onChange={(e) => {
+                        const bb = e.target.value
+                        if (bb === "WEIGHT") {
+                          setForm((f) => ({
+                            ...f,
+                            billing_basis: bb,
+                            pricing_method: "weight_based",
+                            rate_unit_type: "per_kg",
+                            unit_type: f.unit_type.toLowerCase() === "pcs" ? "kg" : f.unit_type,
+                          }))
+                          return
+                        }
+                        if (bb === "PCS") {
+                          setForm((f) => {
+                            const ru = f.rate_unit_type === "per_kg" ? "per_piece" : f.rate_unit_type
+                            return { ...f, billing_basis: bb, pricing_method: "piece_based", rate_unit_type: ru }
+                          })
+                          return
+                        }
+                        setForm((f) => {
+                          const ru = f.rate_unit_type === "per_kg" ? "per_piece" : f.rate_unit_type
+                          return { ...f, billing_basis: "MANUAL", pricing_method: "piece_based", rate_unit_type: ru }
+                        })
+                      }}
+                      disabled={!canUpdate}
+                    >
+                      <option value="WEIGHT">Weight (WO max = qty × kg × rate/kg)</option>
+                      <option value="PCS">Pieces / units (WO max = qty × rate)</option>
+                      <option value="MANUAL">Manual (piece-based; optional line amount override)</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col justify-end gap-2 pb-0.5">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="pm-manual-amt"
+                        checked={form.allow_manual_amount_override}
+                        onCheckedChange={(v) => setForm((f) => ({ ...f, allow_manual_amount_override: Boolean(v) }))}
+                        disabled={!canUpdate}
+                      />
+                      <Label htmlFor="pm-manual-amt" className="cursor-pointer font-normal leading-snug">
+                        Allow manual amount override on invoice lines (when part policy allows)
+                      </Label>
+                    </div>
                   </div>
                 </div>
                 {weightBased ? (
