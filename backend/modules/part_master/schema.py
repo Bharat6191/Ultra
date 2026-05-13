@@ -76,7 +76,9 @@ class PartMasterCreate(BaseModel):
 
 
 class PartMasterUpdate(BaseModel):
+    part_code: str | None = Field(default=None, min_length=1, max_length=64)
     part_name: str | None = Field(default=None, min_length=1, max_length=255)
+    org_unit_id: int | None = Field(default=None, ge=1)
     description: str | None = None
     unit_type: str | None = Field(default=None, min_length=1, max_length=32)
     pricing_method: str | None = None
@@ -90,6 +92,27 @@ class PartMasterUpdate(BaseModel):
     is_active: bool | None = None
     status: str | None = Field(default=None, max_length=32)
     notes: str | None = None
+
+    @field_validator("part_code")
+    @classmethod
+    def _strip_code_u(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return v.strip().upper()
+
+    @field_validator("part_name")
+    @classmethod
+    def _strip_name_u(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return v.strip()
+
+    @field_validator("unit_type")
+    @classmethod
+    def _lower_ut_u(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return v.strip().lower()
 
     @field_validator("pricing_method")
     @classmethod
@@ -120,6 +143,18 @@ class PartMasterUpdate(BaseModel):
         if s not in PART_STATUSES:
             raise ValueError(f"status must be one of {PART_STATUSES}")
         return s
+
+    @model_validator(mode="after")
+    def _commercial_consistency_u(self) -> PartMasterUpdate:
+        d = self.model_dump(exclude_unset=True)
+        pm = d.get("pricing_method")
+        ru = d.get("rate_unit_type")
+        if pm is not None and ru is not None:
+            if pm == "weight_based" and ru != "per_kg":
+                raise ValueError("weight_based parts must use rate_unit_type=per_kg (rate per kg).")
+            if pm == "piece_based" and ru == "per_kg":
+                raise ValueError("piece_based parts cannot use rate_unit_type=per_kg; use per_piece or another unit.")
+        return self
 
 
 class PartMasterPublic(BaseModel):

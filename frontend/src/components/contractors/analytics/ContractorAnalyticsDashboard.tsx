@@ -27,7 +27,6 @@ import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatMoney, rateStatusLabel } from "@/components/contractors/rateStatus"
 import { ApiError, getJson } from "@/lib/api"
-import { ContractorReportExport } from "@/components/contractors/analytics/ContractorReportExport"
 import type {
   AnalyticsTimelineEvent,
   CommercialInsights,
@@ -184,14 +183,6 @@ export function ContractorAnalyticsDashboard({ contractorId }: { contractorId: n
             {filtersOpen ? "Hide filters" : "Filters"}
             {!filtersOpen && activeFilterCount > 0 ? ` (${activeFilterCount})` : null}
           </Button>
-          <ContractorReportExport
-            contractorId={contractorId}
-            filters={filterParams}
-            summary={summary}
-            neg={neg}
-            wo={wo}
-            commercial={commercial}
-          />
           <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden />
             Refresh

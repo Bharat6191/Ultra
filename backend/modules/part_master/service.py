@@ -261,6 +261,12 @@ class PartMasterService:
         superseded_ids: list[int] = []
         activation_change: str | None = None
 
+        if "org_unit_id" in upd and upd["org_unit_id"] is not None:
+            self._ensure_plant(int(upd["org_unit_id"]))
+            row.org_unit_id = int(upd["org_unit_id"])
+        if "part_code" in upd and upd["part_code"] is not None:
+            row.part_code = str(upd["part_code"]).strip().upper()
+
         if "part_name" in upd and upd["part_name"] is not None:
             row.part_name = str(upd["part_name"]).strip()
         if "description" in upd:
@@ -326,7 +332,13 @@ class PartMasterService:
             row.is_active = new_active
 
         self._validate_dates(row.effective_from, row.effective_to)
-        if row.is_active and ("effective_from" in upd or "effective_to" in upd or activation_change == audit_helpers.PM_ACTION_ACTIVATED):
+        if row.is_active and (
+            "effective_from" in upd
+            or "effective_to" in upd
+            or activation_change == audit_helpers.PM_ACTION_ACTIVATED
+            or "part_code" in upd
+            or "org_unit_id" in upd
+        ):
             self._check_overlap(
                 part_code=row.part_code,
                 org_unit_id=int(row.org_unit_id),

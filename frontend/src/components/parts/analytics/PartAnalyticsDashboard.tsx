@@ -30,7 +30,6 @@ import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatMoney, rateStatusLabel } from "@/components/contractors/rateStatus"
 import { ApiError, getJson } from "@/lib/api"
-import { PartReportExport } from "@/components/parts/analytics/PartReportExport"
 import type {
   PartAnalyticsFilters,
   PartCommercialInsights,
@@ -215,7 +214,6 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
             {filtersOpen ? "Hide filters" : "Filters"}
             {!filtersOpen && activeFilterCount > 0 ? ` (${activeFilterCount})` : null}
           </Button>
-          <PartReportExport partMasterId={partMasterId} filters={filterParams} />
           <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden />
             Refresh
