@@ -29,7 +29,7 @@ export function InvoicePreview({ data }: { data: InvoicePreviewData }) {
   const total = subtotalEx + tax
 
   return (
-    <div className="rounded-xl border bg-white text-zinc-900 shadow-sm">
+    <div className="box-border w-full min-w-0 max-w-full rounded-xl border bg-white text-zinc-900 shadow-sm">
       <div className="p-8">
         <div className="flex items-center justify-between gap-6">
           <div className="h-px flex-1 bg-zinc-900/40" />

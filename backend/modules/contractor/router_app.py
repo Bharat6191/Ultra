@@ -13,6 +13,7 @@ All endpoints are RBAC-guarded. Permissions follow the dotted convention:
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile, status
@@ -43,6 +44,16 @@ from modules.contractor.schema import (
 )
 from modules.contractor.service import ContractorService
 from modules.contractor.timeline import ContractorTimelineService
+from modules.contractor.analytics_schema import (
+    AnalyticsFilters,
+    AnalyticsTimelineEvent,
+    CommercialInsights,
+    ContractorAnalyticsSummary,
+    NegotiationAnalytics,
+    PendingActions,
+    WorkOrderAnalytics,
+)
+from modules.contractor.analytics_service import ContractorAnalyticsService
 from modules.errors import ConflictError, NotFoundError
 
 
@@ -55,6 +66,28 @@ def get_contractor_service(db: Session = Depends(get_db)) -> ContractorService:
 
 def get_timeline_service(db: Session = Depends(get_db)) -> ContractorTimelineService:
     return ContractorTimelineService(db)
+
+
+def get_contractor_analytics_service(db: Session = Depends(get_db)) -> ContractorAnalyticsService:
+    return ContractorAnalyticsService(db)
+
+
+def analytics_filter_params(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    plant_id: int | None = Query(None, ge=1),
+    work_order_status: str | None = Query(None),
+    negotiation_status: str | None = Query(None),
+    part_search: str | None = Query(None),
+) -> AnalyticsFilters:
+    return AnalyticsFilters(
+        date_from=date_from,
+        date_to=date_to,
+        plant_id=plant_id,
+        work_order_status=work_order_status,
+        negotiation_status=negotiation_status,
+        part_search=part_search,
+    )
 
 
 # ---------- Contractors: list / create / read / update ----------
@@ -181,6 +214,137 @@ def get_contractor(
     except NotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return ContractorPublic.model_validate(svc.to_public_dict(row))
+
+
+# ---------- Analytics dashboard ----------
+
+
+@router.get(
+    "/{contractor_id:int}/analytics/summary",
+    response_model=ContractorAnalyticsSummary,
+    dependencies=[Depends(require_permission("contractor.view"))],
+)
+def contractor_analytics_summary(
+    contractor_id: int,
+    flt: Annotated[AnalyticsFilters, Depends(analytics_filter_params)],
+    svc: Annotated[ContractorAnalyticsService, Depends(get_contractor_analytics_service)],
+) -> ContractorAnalyticsSummary:
+    try:
+        return svc.get_summary(contractor_id, flt)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{contractor_id:int}/analytics/negotiations",
+    response_model=NegotiationAnalytics,
+    dependencies=[Depends(require_permission("contractor.view"))],
+)
+def contractor_analytics_negotiations(
+    contractor_id: int,
+    flt: Annotated[AnalyticsFilters, Depends(analytics_filter_params)],
+    svc: Annotated[ContractorAnalyticsService, Depends(get_contractor_analytics_service)],
+) -> NegotiationAnalytics:
+    try:
+        return svc.get_negotiations(contractor_id, flt)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{contractor_id:int}/analytics/work-orders",
+    response_model=WorkOrderAnalytics,
+    dependencies=[Depends(require_permission("contractor.view"))],
+)
+def contractor_analytics_work_orders(
+    contractor_id: int,
+    flt: Annotated[AnalyticsFilters, Depends(analytics_filter_params)],
+    svc: Annotated[ContractorAnalyticsService, Depends(get_contractor_analytics_service)],
+) -> WorkOrderAnalytics:
+    try:
+        return svc.get_work_orders(contractor_id, flt)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{contractor_id:int}/analytics/commercial",
+    response_model=CommercialInsights,
+    dependencies=[Depends(require_permission("contractor.view"))],
+)
+def contractor_analytics_commercial(
+    contractor_id: int,
+    flt: Annotated[AnalyticsFilters, Depends(analytics_filter_params)],
+    svc: Annotated[ContractorAnalyticsService, Depends(get_contractor_analytics_service)],
+) -> CommercialInsights:
+    try:
+        return svc.get_commercial(contractor_id, flt)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{contractor_id:int}/analytics/pending",
+    response_model=PendingActions,
+    dependencies=[Depends(require_permission("contractor.view"))],
+)
+def contractor_analytics_pending(
+    contractor_id: int,
+    svc: Annotated[ContractorAnalyticsService, Depends(get_contractor_analytics_service)],
+) -> PendingActions:
+    try:
+        return svc.get_pending(contractor_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{contractor_id:int}/analytics/timeline",
+    response_model=list[AnalyticsTimelineEvent],
+    dependencies=[Depends(require_permission("contractor.view"))],
+)
+def contractor_analytics_timeline(
+    contractor_id: int,
+    svc: Annotated[ContractorAnalyticsService, Depends(get_contractor_analytics_service)],
+    categories: str | None = Query(
+        None,
+        description="Comma-separated: negotiations,work_orders,approvals,financial,compliance or all",
+    ),
+) -> list[AnalyticsTimelineEvent]:
+    try:
+        parts = [p.strip().lower() for p in categories.split(",")] if categories else ["all"]
+        return svc.get_timeline(contractor_id, parts)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{contractor_id:int}/analytics/report",
+    dependencies=[Depends(require_permission("contractor.view"))],
+)
+def contractor_analytics_report(
+    contractor_id: int,
+    svc: Annotated[ContractorAnalyticsService, Depends(get_contractor_analytics_service)],
+    flt: Annotated[AnalyticsFilters, Depends(analytics_filter_params)],
+    format: str = Query("xlsx", description="xlsx supported; PDF is generated client-side."),
+) -> Response:
+    try:
+        if str(format).lower() not in ("xlsx", "excel"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only format=xlsx is available from the API. Use the in-app PDF export for print-quality reports.",
+            )
+        data = svc.build_xlsx(contractor_id, flt)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    fname = f"contractor-{contractor_id}-analytics.xlsx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 @router.patch(

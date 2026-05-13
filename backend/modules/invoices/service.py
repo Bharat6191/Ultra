@@ -27,7 +27,7 @@ from modules.invoices.validation import (
     raise_if_new_invoice_breaches_work_order_caps,
 )
 from modules.org_units.model import OrgUnit
-from modules.part_master.pricing import amount_from_snapshot
+from modules.part_master.pricing import pricing_snapshot_for_item
 from modules.work_orders.models import WorkOrder, WorkOrderItem
 from modules.work_orders.service import WorkOrderService
 
@@ -139,7 +139,7 @@ class InvoiceService:
 
             rate = _dec(ln.rate) if ln.rate is not None else _dec(item.resolved_rate)
             try:
-                amount = amount_from_snapshot(quantity=_dec(ln.quantity), resolved_rate=rate, snapshot=item.pricing_snapshot)
+                amount = WorkOrderService.ex_tax_for_invoice_qty(item=item, invoice_quantity=_dec(ln.quantity))
             except ValueError as exc:
                 raise ConflictError(str(exc)) from exc
             tax_pct = _dec(ln.tax_pct) if ln.tax_pct is not None else Decimal("0")
@@ -345,22 +345,9 @@ class InvoiceService:
                 )
                 pq = Decimal(str(it.planned_quantity)) if it.planned_quantity is not None else None
                 rate = Decimal(str(it.resolved_rate))
-                planned_contract_val = Decimal("0")
-                if str(it.progress_type) == "quantity" and pq is not None:
-                    planned_contract_val = amount_from_snapshot(
-                        quantity=pq, resolved_rate=rate, snapshot=it.pricing_snapshot
-                    )
-                elif str(it.progress_type) == "percentage":
-                    if it.planned_percentage is not None:
-                        planned_contract_val = amount_from_snapshot(
-                            quantity=Decimal(str(it.planned_percentage)) / Decimal("100"),
-                            resolved_rate=rate,
-                            snapshot=it.pricing_snapshot,
-                        )
-                    else:
-                        planned_contract_val = amount_from_snapshot(
-                            quantity=Decimal("1"), resolved_rate=rate, snapshot=it.pricing_snapshot
-                        )
+                planned_contract_val = _q2(Decimal(str(it.taxable_value)))
+                basis_dec = WorkOrderService._taxable_qty_from_item(it)
+                basis_float = float(basis_dec) if basis_dec > 0 else None
                 perm_val = _q2(planned_contract_val * (Decimal("1") + tol / Decimal("100"))) if planned_contract_val > 0 else Decimal("0")
                 prev_qty = Decimal(str(prev_qty_raw or 0))
                 prev_amt = Decimal(str(prev_amt_raw or 0))
@@ -369,6 +356,13 @@ class InvoiceService:
                 cq = Decimal(str(proj.get("completed_quantity") or "0"))
                 aq = pq if pq is not None else cq
                 rem_qty_based = aq - prev_qty if pq is not None else None
+
+                eff_snap = pricing_snapshot_for_item(it)
+                w_raw = eff_snap.get("weight_per_piece")
+                try:
+                    w_float = float(_dec(w_raw)) if w_raw not in (None, "") else None
+                except Exception:
+                    w_float = None
 
                 out_lines.append(
                     {
@@ -382,6 +376,9 @@ class InvoiceService:
                         "pricing_method": snap.get("pricing_method"),
                         "rate_unit_type": rut,
                         "rate_basis_label": rate_basis_label(rut),
+                        "weight_per_piece": w_float,
+                        "approved_line_taxable_ex_vat": float(planned_contract_val),
+                        "approved_line_qty_basis": basis_float,
                         "progress_type": it.progress_type,
                         "approved_quantity": proj.get("approved_quantity"),
                         "approved_percentage": proj.get("approved_percentage"),

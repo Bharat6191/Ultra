@@ -120,6 +120,9 @@ class BillableWOLinePublic(BaseModel):
     pricing_method: str | None = None
     rate_unit_type: str | None = None
     rate_basis_label: str | None = None
+    weight_per_piece: float | None = None
+    approved_line_taxable_ex_vat: float
+    approved_line_qty_basis: float | None = None
     progress_type: str
     approved_quantity: float | None = None
     approved_percentage: float | None = None

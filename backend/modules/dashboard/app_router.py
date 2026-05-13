@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy import case, func, select
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
@@ -26,6 +27,7 @@ from modules.part_master.models import PartMaster
 from modules.org_units.model import OrgUnit
 from modules.work_orders.models import WorkOrder
 from modules.invoices.models import Invoice, ContractorInvoiceCompliance
+from modules.dashboard.intelligence_service import DashboardIntelligenceService, IntelligenceFilters
 
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -369,4 +371,75 @@ def get_dashboard_summary(
         }
 
     return {"modules": modules}
+
+
+@router.get("/intelligence")
+def get_dashboard_intelligence(
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    date_from: date | None = None,
+    date_to: date | None = None,
+    plant_id: int | None = Query(default=None),
+    contractor_id: int | None = Query(default=None),
+    work_order_status: str | None = None,
+    negotiation_status: str | None = None,
+    invoice_status: str | None = None,
+    part_pricing_method: str | None = None,
+) -> dict[str, Any]:
+    user_id = int(current.subject)
+    grants = set(get_flat_permission_codes_for_user(db, user_id))
+    flt = IntelligenceFilters(
+        date_from=date_from,
+        date_to=date_to,
+        plant_id=plant_id,
+        contractor_id=contractor_id,
+        work_order_status=work_order_status,
+        negotiation_status=negotiation_status,
+        invoice_status=invoice_status,
+        part_pricing_method=part_pricing_method,
+    )
+    return DashboardIntelligenceService(db).build(grants, flt)
+
+
+@router.get("/intelligence/report")
+def get_dashboard_intelligence_report(
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    date_from: date | None = None,
+    date_to: date | None = None,
+    plant_id: int | None = Query(default=None),
+    contractor_id: int | None = Query(default=None),
+    work_order_status: str | None = None,
+    negotiation_status: str | None = None,
+    invoice_status: str | None = None,
+    part_pricing_method: str | None = None,
+    export_format: str = Query("xlsx", alias="format", description="xlsx supported; PDF from the UI."),
+) -> Response:
+    user_id = int(current.subject)
+    grants = set(get_flat_permission_codes_for_user(db, user_id))
+    flt = IntelligenceFilters(
+        date_from=date_from,
+        date_to=date_to,
+        plant_id=plant_id,
+        contractor_id=contractor_id,
+        work_order_status=work_order_status,
+        negotiation_status=negotiation_status,
+        invoice_status=invoice_status,
+        part_pricing_method=part_pricing_method,
+    )
+    if str(export_format).lower() not in ("xlsx", "excel"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only format=xlsx is available from the API. Use the in-app PDF export for print.",
+        )
+    try:
+        data = DashboardIntelligenceService(db).build_xlsx(grants, flt)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    fname = "dashboard-intelligence.xlsx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 

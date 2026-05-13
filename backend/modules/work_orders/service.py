@@ -12,7 +12,7 @@ from modules.approvals.service import ApprovalEngineService
 from modules.contractor.models import Contractor
 from modules.contractor_rates.models import ContractorRate
 from modules.part_master.models import PartMaster
-from modules.part_master.pricing import commercial_snapshot_from_part_row, amount_from_snapshot
+from modules.part_master.pricing import commercial_snapshot_from_part_row, amount_from_snapshot, pricing_snapshot_for_item
 from modules.errors import ConflictError, NotFoundError
 from modules.org_units.hierarchy import collect_plant_ids_under_scope
 from modules.org_units.model import OrgUnit
@@ -301,6 +301,29 @@ class WorkOrderService:
             return Decimal("1")
         return Decimal("0")
 
+    @staticmethod
+    def ex_tax_for_invoice_qty(*, item: WorkOrderItem, invoice_quantity: Decimal) -> Decimal:
+        """Ex-VAT amount from the work order line's stored ``taxable_value``, linearly prorated by invoice quantity.
+
+        Uses the same billing basis as when the line was valued (planned quantity or planned % as 0..1).
+        If that basis is missing (legacy row), falls back to the commercial snapshot engine.
+        """
+        inv_q = _dec(invoice_quantity)
+        if inv_q <= 0:
+            raise ValueError("Invoice quantity must be positive.")
+        basis = WorkOrderService._taxable_qty_from_item(item)
+        if basis <= 0:
+            try:
+                return amount_from_snapshot(
+                    quantity=inv_q,
+                    resolved_rate=_dec(item.resolved_rate),
+                    snapshot=pricing_snapshot_for_item(item),
+                )
+            except ValueError as exc:
+                raise ValueError(str(exc)) from exc
+        tv = _q2(_dec(item.taxable_value))
+        return _q2((inv_q * tv) / basis)
+
     def _build_item_from_create(
         self,
         wo: WorkOrder,
@@ -400,7 +423,7 @@ class WorkOrderService:
             taxable = amount_from_snapshot(
                 quantity=qty_basis,
                 resolved_rate=_dec(item.resolved_rate),
-                snapshot=item.pricing_snapshot,
+                snapshot=pricing_snapshot_for_item(item),
             )
         except ValueError as exc:
             raise ConflictError(str(exc)) from exc

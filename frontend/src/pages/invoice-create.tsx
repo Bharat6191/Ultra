@@ -24,6 +24,9 @@ type BillableLine = {
   pricing_method?: string | null
   rate_unit_type?: string | null
   rate_basis_label?: string | null
+  weight_per_piece?: number | null
+  approved_line_taxable_ex_vat: number
+  approved_line_qty_basis: number | null
   /** @deprecated legacy API */
   job_type?: string
   unit?: string
@@ -54,6 +57,22 @@ type DraftLineQty = {
 function money(n: number): string {
   if (!Number.isFinite(n)) return "—"
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function q2Money(n: number): number {
+  const sign = n < 0 ? -1 : 1
+  const x = Math.abs(n)
+  return sign * (Math.round(x * 100 + 1e-10) / 100)
+}
+
+/** Ex-tax line total from work order line: ``invoice_qty × (approved_line_taxable_ex_vat / approved_line_qty_basis)``. */
+function lineExTax(ln: BillableLine, invoiceQty: number): number | null {
+  const basis = ln.approved_line_qty_basis
+  const tv = ln.approved_line_taxable_ex_vat
+  if (!Number.isFinite(invoiceQty) || invoiceQty <= 0) return null
+  if (basis == null || !Number.isFinite(basis) || basis <= 0) return null
+  if (!Number.isFinite(tv) || tv < 0) return null
+  return q2Money(invoiceQty * (tv / basis))
 }
 
 export function InvoiceCreatePage() {
@@ -219,13 +238,13 @@ export function InvoiceCreatePage() {
       if (!qRaw) continue
       const q = Number(qRaw.replace(",", ""))
       if (!Number.isFinite(q) || q <= 0) continue
-      const rate = ln.approved_rate
-      const base = q * rate
+      count += 1
+      const base = lineExTax(ln, q)
+      if (base === null) continue
       const taxRaw = inp?.tax_pct?.trim() ?? ""
       const tp = taxRaw === "" ? 0 : Number(taxRaw.replace(",", ""))
       const tg = tp && Number.isFinite(tp) ? base * (1 + tp / 100) : base
       gross += tg
-      count += 1
     }
     return { count, gross }
   }
@@ -251,8 +270,10 @@ export function InvoiceCreatePage() {
       if (!qRaw) continue
       const qty = Number(qRaw.replace(/,/g, ""))
       if (!Number.isFinite(qty) || qty <= 0) continue
+      const ex = lineExTax(ln, qty)
+      if (ex === null) continue
       const unitPrice = ln.approved_rate
-      const taxable = qty * unitPrice
+      const taxable = ex
       const taxRaw = inp?.tax_pct?.trim()
       const tp = taxRaw === "" || taxRaw === undefined ? 0 : Number(taxRaw.replace(/,/g, ""))
       const taxPctLine = Number.isFinite(tp) && tp > 0 ? tp : 0
@@ -501,14 +522,15 @@ export function InvoiceCreatePage() {
 
       {preflight && preflight.lines.length > 0 ? (
         <>
-          <div className="grid gap-4 lg:grid-cols-[1fr_520px] items-start">
-            <div className="space-y-3">
-              <Card>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)] items-start">
+            <div className="min-w-0 space-y-3">
+              <Card className="min-w-0">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium">Step 3 · Invoice line items</CardTitle>
                   <CardDescription>
-                    Edit invoice qty and tax %; taxable value follows the work order rate. Cumulative invoice amounts
-                    (ex. tax) per work order cannot exceed the approved work order value.
+                    Edit invoice qty and tax %; taxable value is prorated from the work order line&apos;s approved
+                    taxable amount (same basis as the execution sheet). Cumulative invoice amounts (ex. tax) per work
+                    order cannot exceed the approved work order value.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -523,6 +545,7 @@ export function InvoiceCreatePage() {
                             <TableHead className="w-[120px]">Work order</TableHead>
                             <TableHead>Line item</TableHead>
                             <TableHead className="w-[56px]">Unit</TableHead>
+                            <TableHead className="w-[88px] text-right">WT / PC</TableHead>
                             <TableHead className="w-[72px] text-right">Rate basis</TableHead>
                             <TableHead className="text-right">Unit rate</TableHead>
                             <TableHead className="w-[100px] text-right">Invoice qty</TableHead>
@@ -537,10 +560,17 @@ export function InvoiceCreatePage() {
                           {selectedInvoiceLines.map((ln) => {
                             const inp = lineInputs[ln.work_order_item_id] ?? { qty: "", tax_pct: "", notes: "" }
                             const q = Number((inp.qty || "").replace(/,/g, ""))
-                            const base = Number.isFinite(q) && q > 0 ? q * ln.approved_rate : 0
+                            const baseEx =
+                              Number.isFinite(q) && q > 0 ? lineExTax(ln, q) : null
+                            const base = baseEx ?? 0
                             const tp = inp.tax_pct?.trim() ? Number(inp.tax_pct.replace(/,/g, "")) : 0
-                            const taxAmt = Number.isFinite(tp) && tp > 0 ? base * (tp / 100) : 0
+                            const taxAmt =
+                              baseEx !== null && Number.isFinite(tp) && tp > 0 ? baseEx * (tp / 100) : 0
                             const gross = base + taxAmt
+                            const wtPc =
+                              ln.weight_per_piece != null && Number.isFinite(ln.weight_per_piece)
+                                ? money(ln.weight_per_piece)
+                                : "—"
                             return (
                               <TableRow key={ln.work_order_item_id}>
                                 <TableCell className="text-xs font-mono">{ln.work_order_number}</TableCell>
@@ -552,6 +582,7 @@ export function InvoiceCreatePage() {
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">{ln.unit_type ?? ln.unit ?? "—"}</TableCell>
+                                <TableCell className="text-right text-xs tabular-nums text-muted-foreground">{wtPc}</TableCell>
                                 <TableCell className="text-right text-[11px] text-muted-foreground">
                                   {ln.rate_basis_label ?? "—"}
                                 </TableCell>
@@ -582,8 +613,12 @@ export function InvoiceCreatePage() {
                                     placeholder="—"
                                   />
                                 </TableCell>
-                                <TableCell className="text-right text-xs tabular-nums">{money(base)}</TableCell>
-                                <TableCell className="text-right text-xs tabular-nums">{money(gross)}</TableCell>
+                                <TableCell className="text-right text-xs tabular-nums">
+                                  {baseEx === null && Number.isFinite(q) && q > 0 ? "—" : money(base)}
+                                </TableCell>
+                                <TableCell className="text-right text-xs tabular-nums">
+                                  {baseEx === null && Number.isFinite(q) && q > 0 ? "—" : money(gross)}
+                                </TableCell>
                                 <TableCell>
                                   <Input
                                     className="h-8 text-xs"
@@ -631,8 +666,10 @@ export function InvoiceCreatePage() {
               </Card>
             </div>
 
-            <div className="lg:sticky lg:top-16">
-              <InvoicePreview data={pdfData} />
+            <div className="min-w-0 max-w-full lg:sticky lg:top-16 lg:self-start">
+              <div className="overflow-x-auto overscroll-x-contain">
+                <InvoicePreview data={pdfData} />
+              </div>
             </div>
           </div>
 

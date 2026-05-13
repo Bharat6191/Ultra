@@ -11,6 +11,7 @@ import { ContractorCharts } from "@/components/contractors/ContractorCharts"
 import { RatesDashboard, type RatesDashboardModule } from "@/components/contractors/RatesDashboard"
 import { WorkOrdersDashboard, type WorkOrdersDashboardModule } from "@/components/dashboard/work-orders-dashboard"
 import { InvoicesDashboard, type InvoicesDashboardModule } from "@/components/dashboard/invoices-dashboard"
+import { ExecutiveIntelligenceDashboard } from "@/components/dashboard/intelligence/ExecutiveIntelligenceDashboard"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { getJson } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
@@ -63,10 +64,10 @@ export function DashboardPage() {
     <div className="grid gap-6">
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Workspace</h1>
-        <div className="text-sm text-muted-foreground">
-          Operational overview based on your modules and permissions.
-        </div>
+        <p className="text-sm text-muted-foreground">Overview and modules available to your account.</p>
       </div>
+
+      <ExecutiveIntelligenceDashboard />
 
       {loadError ? (
         <Card className="border-dashed border-emerald-200">
@@ -103,7 +104,7 @@ export function DashboardPage() {
             onCreate={() => navigate("/dashboard/contractors/new")}
             loading={!summary}
           />
-          {(contractorsModule.by_status || contractorsModule.contractors_by_plant) ? (
+          {contractorsModule.by_status || contractorsModule.contractors_by_plant ? (
             <ContractorCharts
               byStatus={contractorsModule.by_status ?? []}
               byPlant={contractorsModule.contractors_by_plant ?? []}

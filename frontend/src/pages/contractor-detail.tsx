@@ -22,6 +22,7 @@ import { ContractorStats } from "@/components/contractors/ContractorStats"
 import { ContractorOverview } from "@/components/contractors/ContractorOverview"
 import { ContractorPlants } from "@/components/contractors/ContractorPlants"
 import { ContractorTimeline } from "@/components/contractors/ContractorTimeline"
+import { ContractorAnalyticsDashboard } from "@/components/contractors/analytics/ContractorAnalyticsDashboard"
 import { getJson, patchJson } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
 
@@ -101,7 +102,7 @@ export function ContractorDetailPage() {
   const canActivate = hasPermission("contractor.activate") || hasPermission("contractor.update")
   const canViewRates = hasPermission("contractor_rates.view")
 
-  const rawTab = (searchParams.get("tab") ?? "overview").toLowerCase()
+  const rawTab = (searchParams.get("tab") ?? "dashboard").toLowerCase()
   const focusParam = searchParams.get("focus")
   const focusRateId = focusParam ? Number(focusParam) : null
 
@@ -109,8 +110,8 @@ export function ContractorDetailPage() {
   // read-only view of negotiation history — actions (create / submit / cancel /
   // add round) live on the dedicated `/dashboard/negotiated-rates/:id` page.
   const allowedTabs = canViewRates
-    ? (["overview", "documents", "plants", "rates", "timeline"] as const)
-    : (["overview", "documents", "plants", "timeline"] as const)
+    ? (["dashboard", "overview", "documents", "plants", "rates", "timeline"] as const)
+    : (["dashboard", "overview", "documents", "plants", "timeline"] as const)
   const tabValue: string = (allowedTabs as readonly string[]).includes(rawTab)
     ? rawTab
     : "overview"
@@ -320,7 +321,8 @@ export function ContractorDetailPage() {
         value={tabValue}
         onValueChange={(v) => {
           const next = new URLSearchParams(searchParams)
-          if (v === "overview") next.delete("tab")
+          if (v === "dashboard") next.delete("tab")
+          else if (v === "overview") next.set("tab", "overview")
           else next.set("tab", v)
           // The deep-link `focus` param is only meaningful while the rates tab
           // is selected; drop it when the user navigates elsewhere.
@@ -330,6 +332,7 @@ export function ContractorDetailPage() {
         className="gap-4"
       >
         <TabsList variant="line" className="rounded-2xl bg-white p-2 shadow-sm">
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="plants">Plants</TabsTrigger>
@@ -338,6 +341,10 @@ export function ContractorDetailPage() {
           ) : null}
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="dashboard">
+          <ContractorAnalyticsDashboard contractorId={contractor.id} />
+        </TabsContent>
 
         <TabsContent value="overview">
           <ContractorOverview contractor={contractor} />

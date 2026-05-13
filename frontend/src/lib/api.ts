@@ -131,6 +131,22 @@ export async function postForm<TResponse>(
   return data as TResponse
 }
 
+/** GET binary (e.g. Excel export). */
+export async function getBlob(path: string): Promise<Blob> {
+  const res = await authFetch(path)
+  if (!res.ok) {
+    const text = await res.text()
+    let data: unknown
+    try {
+      data = text ? JSON.parse(text) : undefined
+    } catch {
+      data = undefined
+    }
+    throw new ApiError(parseErrorMessage(data, res.status), res.status, data)
+  }
+  return res.blob()
+}
+
 /** Authenticated fetch (e.g. binary negotiation attachments). Caller checks ``res.ok``. */
 export async function authFetch(path: string, init?: RequestInit): Promise<Response> {
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`

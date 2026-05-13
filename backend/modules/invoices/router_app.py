@@ -23,7 +23,7 @@ from modules.invoices.service import InvoiceService
 from modules.invoices.models import InvoiceAttachment
 from modules.invoices.line_format import rate_basis_label, unit_label_from_type
 from modules.invoices.storage import save_invoice_attachment
-from modules.part_master.pricing import amount_from_snapshot
+from modules.work_orders.service import WorkOrderService
 from modules.work_orders.models import WorkOrder, WorkOrderItem
 
 
@@ -62,9 +62,10 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
         wit = db.get(WorkOrderItem, int(l.work_order_item_id)) if db is not None else None
         ps = (wit.pricing_snapshot or {}) if wit is not None else {}
         if wit is not None:
-            base_expect = amount_from_snapshot(
-                quantity=qty, resolved_rate=rate_dec, snapshot=wit.pricing_snapshot
-            )
+            try:
+                base_expect = WorkOrderService.ex_tax_for_invoice_qty(item=wit, invoice_quantity=qty)
+            except ValueError:
+                base_expect = _q2(qty * rate_dec)
             job_desc = f"{ps.get('part_code') or ''} — {ps.get('part_name') or ''}".strip(" —")
             wo = db.get(WorkOrder, int(wit.work_order_id))
             if wo is not None:

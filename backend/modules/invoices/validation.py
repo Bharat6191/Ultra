@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from modules.errors import ConflictError
 from modules.invoices.models import Invoice, InvoiceLine, InvoiceValidationIssue
-from modules.part_master.pricing import amount_from_snapshot
+from modules.work_orders.service import WorkOrderService
 from modules.settings.lookup import get_setting
 from modules.work_orders.models import WorkOrderItem, WorkOrderItemProgress, WorkOrder
 
@@ -332,26 +332,7 @@ class InvoiceValidationEngine:
             )
             prev_amt_dec = _dec(prev_amt or 0)
 
-            planned_contract_value = Decimal("0")
-            if item.progress_type == "quantity" and item.planned_quantity is not None:
-                planned_contract_value = amount_from_snapshot(
-                    quantity=_dec(item.planned_quantity),
-                    resolved_rate=expected_rate,
-                    snapshot=item.pricing_snapshot,
-                )
-            elif item.progress_type == "percentage":
-                if item.planned_percentage is not None:
-                    planned_contract_value = amount_from_snapshot(
-                        quantity=_dec(item.planned_percentage) / Decimal("100"),
-                        resolved_rate=expected_rate,
-                        snapshot=item.pricing_snapshot,
-                    )
-                else:
-                    planned_contract_value = amount_from_snapshot(
-                        quantity=Decimal("1"),
-                        resolved_rate=expected_rate,
-                        snapshot=item.pricing_snapshot,
-                    )
+            planned_contract_value = _q2(_dec(item.taxable_value))
             if planned_contract_value > 0:
                 perm_value_line = planned_contract_value * (Decimal("1") + (tol / Decimal("100")))
                 cumulative_value = prev_amt_dec + _dec(line.amount)
@@ -386,18 +367,17 @@ class InvoiceValidationEngine:
                         metadata={"previous_invoiced_qty": str(prev_qty_dec)},
                     )
 
-            # Amount calc guardrail (commercial engine vs naive qty×rate).
-            calc = amount_from_snapshot(
-                quantity=_dec(line.quantity),
-                resolved_rate=expected_rate,
-                snapshot=item.pricing_snapshot,
-            )
-            if _q2(_dec(line.amount)) != _q2(calc):
+            # Amount guardrail: stored line amount vs work-order-line proration.
+            try:
+                calc = WorkOrderService.ex_tax_for_invoice_qty(item=item, invoice_quantity=_dec(line.quantity))
+            except ValueError:
+                calc = None
+            if calc is not None and _q2(_dec(line.amount)) != _q2(calc):
                 add_issue(
                     line_id=int(line.id),
                     code="AMOUNT_MISMATCH",
                     severity="warning",
-                    message="Line amount does not match commercial calculation for this part.",
+                    message="Line amount does not match the work order line (prorated from approved taxable value).",
                     allowed_value=_q2(calc),
                     actual_value=_q2(_dec(line.amount)),
                 )

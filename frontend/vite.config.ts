@@ -61,8 +61,8 @@ export default defineConfig({
         changeOrigin: true,
         bypass: (req) => {
           const path = (req.url ?? '').split('?')[0] ?? ''
-          // Only `/dashboard/summary` is the FastAPI route; all other `/dashboard/*` is the SPA.
-          if (path === '/dashboard/summary') return undefined
+          // FastAPI dashboard APIs; all other `/dashboard/*` is the SPA.
+          if (path === '/dashboard/summary' || path.startsWith('/dashboard/intelligence')) return undefined
           if (path.startsWith('/dashboard')) return req.url
           return undefined
         },

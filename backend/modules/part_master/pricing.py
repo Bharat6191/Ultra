@@ -99,3 +99,17 @@ def amount_from_snapshot(*, quantity: Decimal, resolved_rate: Decimal, snapshot:
     except ValueError as exc:
         # Preserve message for API / validation layers.
         raise ValueError(str(exc)) from exc
+
+
+def pricing_snapshot_for_item(item: Any) -> dict[str, Any]:
+    """Merge ORM fields into a snapshot dict for :func:`amount_from_snapshot` (matches WO execution math).
+
+    Work order lines store weight on ``weight_per_piece_snapshot``; JSON ``pricing_snapshot`` should
+    already include ``weight_per_piece``, but we prefer the column when present so invoice math cannot
+    drift from the execution sheet.
+    """
+    ps = dict(getattr(item, "pricing_snapshot", None) or {})
+    w_snap = getattr(item, "weight_per_piece_snapshot", None)
+    if w_snap is not None:
+        ps["weight_per_piece"] = str(w_snap)
+    return ps
