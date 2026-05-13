@@ -36,7 +36,7 @@ for _p in (_BACKEND_ROOT, _SCRIPTS_ROOT):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 import db.models  # noqa: F401 — register all models on Base.metadata
@@ -45,7 +45,9 @@ from core.security import hash_password
 from db.session import SessionLocal
 from modules.org_units.model import OrgUnit
 from modules.permissions.model import Permission
+from modules.rbac_audit.model import RbacAuditLog
 from modules.rbac_association import user_org_unit
+from modules.rbac_audit.service import RbacAuditService
 from modules.rbac_sync import sync_all_modules_to_db
 from modules.roles.model import Role
 from modules.users.model import User
@@ -337,6 +339,18 @@ def _upsert_all_access_user(db: Session, *, password: str, org: OrgUnit) -> User
         db.flush()
         db.execute(delete(user_org_unit).where(user_org_unit.c.user_id == u.id))
         db.execute(user_org_unit.insert().values(user_id=u.id, org_unit_id=org.id))
+        RbacAuditService(db).log(
+            actor_user_id=None,
+            target_type="user",
+            target_id=u.id,
+            action="assign",
+            old_value=None,
+            new_value={
+                "role_ids": [int(all_role.id)],
+                "role_names": [all_role.name],
+                "source": "demo_seed",
+            },
+        )
         db.commit()
         db.refresh(u)
         return u
@@ -355,6 +369,24 @@ def _upsert_all_access_user(db: Session, *, password: str, org: OrgUnit) -> User
     db.execute(user_org_unit.insert().values(user_id=existing.id, org_unit_id=org.id))
     existing.hashed_password = hash_password(password)
     existing.password_changed_at = now
+    rbac_n = db.scalar(
+        select(func.count())
+        .select_from(RbacAuditLog)
+        .where(RbacAuditLog.target_type == "user", RbacAuditLog.target_id == existing.id)
+    )
+    if not rbac_n:
+        RbacAuditService(db).log(
+            actor_user_id=None,
+            target_type="user",
+            target_id=existing.id,
+            action="assign",
+            old_value=None,
+            new_value={
+                "role_ids": [int(all_role.id)],
+                "role_names": [all_role.name],
+                "source": "demo_seed_backfill",
+            },
+        )
     db.commit()
     db.refresh(existing)
     return existing

@@ -27,3 +27,23 @@ def save_negotiation_attachment(*, contractor_rate_id: int, round_id: int, filen
     candidate.write_bytes(content)
     rel = candidate.relative_to(root / "uploads").as_posix()
     return f"/uploads/{rel}"
+
+
+def negotiation_attachment_abs_path(stored_url: str) -> Path:
+    """
+    Map DB ``file_path`` (``/uploads/...``) to an absolute path under ``backend/uploads``.
+
+    Rejects values that escape the uploads directory.
+    """
+    s = (stored_url or "").strip()
+    prefix = "/uploads/"
+    if not s.startswith(prefix):
+        raise ValueError("invalid negotiation attachment path")
+    rel = s[len(prefix) :].lstrip("/")
+    uploads_root = Path(__file__).resolve().parents[2] / "uploads"
+    out = (uploads_root / rel).resolve()
+    try:
+        out.relative_to(uploads_root.resolve())
+    except ValueError as exc:
+        raise ValueError("path traversal") from exc
+    return out

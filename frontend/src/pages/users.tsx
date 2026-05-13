@@ -19,6 +19,7 @@ type UserPublic = {
   email: string | null
   is_active: boolean
   is_superuser: boolean
+  roles?: { id: number; name: string }[]
   role: { id: number; name: string } | null
   org_unit: { id: number; name: string; type: string } | null
   created_at: string
@@ -82,7 +83,7 @@ export function UsersPage() {
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead className="h-11">Name</TableHead>
                 <TableHead className="h-11">Phone</TableHead>
-                <TableHead className="h-11">Role</TableHead>
+                <TableHead className="h-11">Roles</TableHead>
                 <TableHead className="h-11">Plant</TableHead>
                 <TableHead className="h-11 w-[100px]">Status</TableHead>
                 <TableHead className="h-11 w-[150px] text-right">Actions</TableHead>
@@ -120,7 +121,21 @@ export function UsersPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-sm">{u.phone ?? "—"}</TableCell>
-                    <TableCell className="text-sm">{u.role?.name ?? "—"}</TableCell>
+                    <TableCell className="text-sm">
+                      {(() => {
+                        const list = u.roles?.length ? u.roles : u.role ? [u.role] : []
+                        if (!list.length) return "—"
+                        return (
+                          <div className="flex max-w-[280px] flex-wrap gap-1">
+                            {list.map((r) => (
+                              <Badge key={r.id} variant="secondary" className="font-normal">
+                                {r.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        )
+                      })()}
+                    </TableCell>
                     <TableCell className="text-sm">{u.org_unit?.name ?? "—"}</TableCell>
                     <TableCell className="text-sm">
                       <Badge

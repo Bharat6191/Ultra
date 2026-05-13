@@ -24,6 +24,7 @@ type UserPublic = {
   is_active: boolean
   is_superuser: boolean
   mfa_setup_completed?: boolean
+  roles?: { id: number; name: string }[]
   role: { id: number; name: string } | null
   org_unit: { id: number; name: string; type: string } | null
   created_at: string
@@ -308,9 +309,16 @@ export function UserViewPage() {
                   <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Designation</dt>
                   <dd className="mt-0.5 text-foreground">{user.designation ?? "—"}</dd>
                 </div>
-                <div>
-                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Role</dt>
-                  <dd className="mt-0.5 text-foreground">{user.role?.name ?? "—"}</dd>
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Roles</dt>
+                  <dd className="mt-1 flex flex-wrap gap-1.5">
+                    {(user.roles && user.roles.length > 0 ? user.roles : user.role ? [user.role] : []).map((r) => (
+                      <Badge key={r.id} variant="secondary" className="font-normal">
+                        {r.name}
+                      </Badge>
+                    ))}
+                    {!user.roles?.length && !user.role ? <span className="text-foreground">—</span> : null}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Plant</dt>
@@ -364,7 +372,7 @@ export function UserViewPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Audit Trail</CardTitle>
               <CardDescription>
-                Timeline for this user. {canViewAudit ? "Includes request/approval lifecycle when available." : "You don’t have permission to view audit details."}
+                Timeline for this user. {canViewAudit ? "Includes onboarding approvals and RBAC changes (roles, assignments)." : "You don’t have permission to view audit details."}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -379,12 +387,27 @@ export function UserViewPage() {
                   {sortedTimeline.map((ev, i) => (
                     <li key={i} className="rounded-md border bg-muted/30 px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-medium capitalize">{ev.type.replace("_", " ")}</span>
+                        <span className="font-medium capitalize">
+                          {ev.type === "rbac_audit" ? "RBAC" : ev.type.replace("_", " ")}
+                        </span>
                         <span className="text-xs text-muted-foreground">
                           {ev.timestamp ? formatDateTime(ev.timestamp) : ev.action === "pending" ? "Now" : "—"}
                         </span>
                       </div>
                       {ev.type === "created" ? <p className="text-xs text-muted-foreground">By {ev.user ?? "—"}</p> : null}
+                      {ev.type === "rbac_audit" ? (
+                        <>
+                          <p className="text-xs text-muted-foreground">
+                            {String(ev.action ?? "change")}
+                            {ev.user ? ` · by ${ev.user}` : ""}
+                          </p>
+                          {Array.isArray((ev.details?.new_value as Record<string, unknown> | undefined)?.role_names) ? (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              Roles: {(ev.details!.new_value as { role_names: string[] }).role_names.join(", ")}
+                            </p>
+                          ) : null}
+                        </>
+                      ) : null}
                       {ev.type === "approval_step" && ev.action && ev.action !== "pending" ? (
                         <p className="text-xs text-muted-foreground">
                           Step {ev.step ?? "—"} · {ev.action} by {ev.user ?? "—"}

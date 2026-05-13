@@ -1,6 +1,27 @@
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, computed_field, model_validator
+
+from modules.users.email_validation import normalize_optional_user_email, normalize_user_email
+
+
+def _before_user_email(v: object) -> str:
+    if not isinstance(v, str):
+        raise TypeError("email must be a string")
+    return normalize_user_email(v)
+
+
+def _before_optional_user_email(v: object) -> str | None:
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise TypeError("email must be a string or null")
+    return normalize_optional_user_email(v)
+
+
+UserEmail = Annotated[str, BeforeValidator(_before_user_email)]
+OptionalUserEmail = Annotated[str | None, BeforeValidator(_before_optional_user_email)]
 
 
 class RoleSummary(BaseModel):
@@ -22,25 +43,41 @@ class UserCreate(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
     username: str = Field(min_length=3, max_length=64)
     phone: str = Field(min_length=3, max_length=32)
-    email: EmailStr
+    email: UserEmail
     employee_code: str | None = Field(default=None, max_length=64)
     department: str | None = Field(default=None, max_length=128)
     designation: str | None = Field(default=None, max_length=128)
     address: str | None = None
-    role_id: int = Field(ge=1)
+    # Legacy single role, or set ``role_ids`` for multiple (at least one role required overall).
+    role_id: int | None = Field(default=None, ge=1)
+    role_ids: list[int] | None = Field(default=None, min_length=1)
     org_unit_id: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def _resolve_role_ids(self) -> "UserCreate":
+        if self.role_ids:
+            merged = sorted({int(x) for x in self.role_ids if int(x) >= 1})
+            if not merged:
+                raise ValueError("role_ids must contain at least one valid role id")
+            object.__setattr__(self, "role_ids", merged)
+        elif self.role_id is not None:
+            object.__setattr__(self, "role_ids", [int(self.role_id)])
+        else:
+            raise ValueError("Provide role_id or role_ids with at least one role")
+        return self
 
 
 class UserUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=255)
     username: str | None = Field(default=None, min_length=3, max_length=64)
     phone: str | None = Field(default=None, min_length=3, max_length=32)
-    email: EmailStr | None = None
+    email: OptionalUserEmail = None
     employee_code: str | None = Field(default=None, max_length=64)
     department: str | None = Field(default=None, max_length=128)
     designation: str | None = Field(default=None, max_length=128)
     address: str | None = None
     role_id: int | None = Field(default=None, ge=1)
+    role_ids: list[int] | None = Field(default=None, min_length=1)
     org_unit_id: int | None = Field(default=None, ge=1)
     is_active: bool | None = None
 
@@ -65,9 +102,8 @@ class UserPublic(BaseModel):
     # Loaded from SQLAlchemy relationship; excluded to keep wire schema stable.
     mfa_record: object | None = Field(default=None, exclude=True)
 
-    # Loaded from SQLAlchemy relationships. Excluded so the API stays stable while
-    # computed fields expose a single primary role/org unit.
-    roles: list[RoleSummary] = Field(default_factory=list, exclude=True)
+    # All assigned roles (serialized). ``role`` below remains the first for backward compatibility.
+    roles: list[RoleSummary] = Field(default_factory=list)
     org_units: list[OrgUnitSummary] = Field(default_factory=list, exclude=True)
 
     @computed_field  # type: ignore[misc]

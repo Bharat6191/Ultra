@@ -45,6 +45,18 @@ import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 
 import { getJson } from "@/lib/api"
 import { clearAuthProfile, isSuperuser, persistAuthFromMe } from "@/lib/permissions"
 
+/** Compare /me outcomes so we only remount dashboard routes when RBAC identity actually changes.
+ *  Otherwise focus/visibility events (e.g. closing the native file picker) would bump the outlet key
+ *  and wipe in-progress form state. */
+function workspaceMeSignature(me: {
+  email?: string
+  is_superuser?: boolean
+  permissions?: string[]
+}): string {
+  const p = [...(me.permissions ?? [])].sort()
+  return `${Boolean(me.is_superuser)}|${me.email ?? ""}|${p.join("\0")}`
+}
+
 function App() {
   return (
     <>
@@ -375,6 +387,7 @@ function AppRoute() {
   const [checking, setChecking] = React.useState(true)
   const [userEmail, setUserEmail] = React.useState<string | null>(null)
   const [profileTick, setProfileTick] = React.useState(0)
+  const profileSigRef = React.useRef<string | null>(null)
 
   // Refetch /me and re-snapshot the RBAC cache. Used both at mount (to gate
   // the route) and on window focus / explicit refresh so that permission
@@ -400,9 +413,11 @@ function AppRoute() {
           return
         }
         setUserEmail(typeof me.email === "string" ? me.email : null)
-        // Bump tick on every refresh so descendant pages re-evaluate
-        // hasPermission()-driven UI (sidebar items, tabs, action buttons).
-        setProfileTick((t) => t + 1)
+        const sig = workspaceMeSignature(me)
+        if (profileSigRef.current !== sig) {
+          profileSigRef.current = sig
+          setProfileTick((t) => t + 1)
+        }
         setChecking(false)
       } catch {
         if (opts?.silent) return

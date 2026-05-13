@@ -111,8 +111,14 @@ class WorkOrderService:
         part_master_id: int,
         work_date: date,
     ) -> tuple[Decimal, str, int | None]:
-        """Return (rate, source, contractor_rate_id)."""
-        # Prefer an approved negotiated rate whose window covers work_date.
+        """Return (rate, source, contractor_rate_id).
+
+        Uses the work order **work_date**: the latest **approved** negotiated rate whose
+        ``[effective_from, effective_to]`` window contains that date wins; otherwise the
+        active Part Master baseline applies.
+        """
+        # Prefer an approved negotiated rate whose validity window covers work_date.
+        # Order by effective_from (newest window first), then approval time, then id.
         stmt = (
             select(ContractorRate)
             .where(
@@ -122,7 +128,11 @@ class WorkOrderService:
                 ContractorRate.effective_from <= work_date,
                 func.coalesce(ContractorRate.effective_to, date(9999, 12, 31)) >= work_date,
             )
-            .order_by(ContractorRate.approved_at.desc().nullslast(), ContractorRate.id.desc())
+            .order_by(
+                ContractorRate.effective_from.desc(),
+                ContractorRate.approved_at.desc().nullslast(),
+                ContractorRate.id.desc(),
+            )
         )
         cr = self._db.scalar(stmt)
         if cr is not None:
@@ -426,7 +436,7 @@ class WorkOrderService:
         )
 
     def _reprice_items_after_contractor_change(self, wo: WorkOrder, *, work_date: date) -> None:
-        """Re-resolve negotiated/master rates for each line after header contractor changes."""
+        """Re-resolve negotiated/master rates for each line (contractor or work-date change)."""
         self._ensure_contractor(int(wo.contractor_id))
         for item in list(wo.items or []):
             rate, src, cr_id = self._resolve_rate_for(
@@ -582,6 +592,10 @@ class WorkOrderService:
                 items=list(payload.items),
                 work_date=wo.work_date,
             )
+        elif "work_date" in incoming and payload.work_date is not None and list(wo.items or []):
+            # Lines were built for the previous work_date; re-resolve rates when only the date moves.
+            self._reprice_items_after_contractor_change(wo, work_date=wo.work_date)
+            self._db.flush()
 
         audit_helpers.write_audit(
             self._db,

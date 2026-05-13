@@ -349,6 +349,7 @@ export function WorkOrderApprovalReview(props: {
         onReference={() => {}}
         onOrgUnit={() => {}}
         plantLabel={plantLabel}
+        work_date={row.work_date}
       />
 
       <WorkOrderExecutionTable

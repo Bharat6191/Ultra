@@ -9,7 +9,8 @@ Covers:
       - finalize approves the rate, deactivates the previous active one,
         and writes RATE_ACTIVATED + RATE_DEACTIVATED + EXPIRED audit rows
       - rejection moves the rate to ``rejected`` and writes a REJECTED audit row
-  * overlapping approved date-range rejection
+  * one negotiation thread per (contractor, part): duplicate ``create_rate`` blocked
+    while draft / pending / rejected / current approved window exists
   * audit logs written on every state transition
 """
 
@@ -278,7 +279,7 @@ def test_upload_opening_evidence_seeds_round_and_stores_files(
     assert len(refreshed.negotiation_logs[0].attachments or []) == 2
 
 
-def test_upload_opening_evidence_conflict_when_rounds_already_exist(
+def test_upload_opening_evidence_appends_more_files_to_same_opening_round(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
     rm = _make_part(
@@ -297,6 +298,51 @@ def test_upload_opening_evidence_conflict_when_rounds_already_exist(
     svc.upload_opening_evidence(
         int(rate.id),
         [("a.txt", b"x", "text/plain")],
+        actor_user_id=int(actor.id),
+    )
+    log2, more = svc.upload_opening_evidence(
+        int(rate.id),
+        [("b.txt", b"y", "text/plain")],
+        actor_user_id=int(actor.id),
+    )
+    assert len(more) == 1
+    refreshed = svc.get_rate(int(rate.id))
+    assert len(refreshed.negotiation_logs) == 1
+    assert int(log2.id) == int(refreshed.negotiation_logs[0].id)
+    assert len(refreshed.negotiation_logs[0].attachments or []) == 2
+
+
+def test_upload_opening_evidence_conflict_after_non_opening_round(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    """Once a second negotiation round exists, opening-evidence uploads must not apply."""
+    rm = _make_part(
+        db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
+    )
+    svc = ContractorRateService(db)
+    rate = svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            part_master_id=int(rm.id),
+            negotiated_rate=Decimal("100"),
+            effective_from=date.today(),
+        ),
+        actor_user_id=int(actor.id),
+    )
+    svc.upload_opening_evidence(
+        int(rate.id),
+        [("a.txt", b"x", "text/plain")],
+        actor_user_id=int(actor.id),
+    )
+    svc.add_negotiation_round(
+        int(rate.id),
+        NegotiationRoundCreate(
+            proposed_rate=None,
+            counter_rate=Decimal("95"),
+            remarks=None,
+            round_summary="Counter",
+            apply_to_negotiated_rate=True,
+        ),
         actor_user_id=int(actor.id),
     )
     with pytest.raises(ConflictError):
@@ -692,15 +738,40 @@ def test_rejection_marks_rate_rejected_and_audits(
     assert ACTION_REJECTED in actions
 
 
-# ---------- Overlap protection ----------
+# ---------- One negotiation thread per contractor + part ----------
 
 
-def test_overlapping_date_range_rejected_at_submission(
+def test_create_rate_rejected_when_draft_exists_for_same_contractor_part(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
     rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     svc = ContractorRateService(db)
-    # First approved rate (no workflow -> auto-approves).
+    svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            part_master_id=int(rm.id),
+            negotiated_rate=Decimal("90"),
+            effective_from=date.today(),
+        ),
+        actor_user_id=int(actor.id),
+    )
+    with pytest.raises(ConflictError, match="negotiation already exists"):
+        svc.create_rate(
+            ContractorRateCreate(
+                contractor_id=int(contractor.id),
+                part_master_id=int(rm.id),
+                negotiated_rate=Decimal("80"),
+                effective_from=date.today(),
+            ),
+            actor_user_id=int(actor.id),
+        )
+
+
+def test_create_rate_rejected_when_approved_current_window_exists(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    svc = ContractorRateService(db)
     first = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
@@ -712,20 +783,47 @@ def test_overlapping_date_range_rejected_at_submission(
         actor_user_id=int(actor.id),
     )
     svc.submit_for_approval(int(first.id), actor_user_id=int(actor.id))
+    with pytest.raises(ConflictError, match="negotiation already exists"):
+        svc.create_rate(
+            ContractorRateCreate(
+                contractor_id=int(contractor.id),
+                part_master_id=int(rm.id),
+                negotiated_rate=Decimal("80"),
+                effective_from=date.today() + timedelta(days=30),
+            ),
+            actor_user_id=int(actor.id),
+        )
 
-    # Second draft with an overlapping window must be rejected on submit.
+
+def test_create_rate_allowed_after_prior_approved_thread_ended(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    """Once the only approved window for this pair is entirely in the past, a new row may be created."""
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    svc = ContractorRateService(db)
+    past_end = date.today() - timedelta(days=10)
+    past_start = date.today() - timedelta(days=100)
+    first = svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            part_master_id=int(rm.id),
+            negotiated_rate=Decimal("90"),
+            effective_from=past_start,
+            effective_to=past_end,
+        ),
+        actor_user_id=int(actor.id),
+    )
+    svc.submit_for_approval(int(first.id), actor_user_id=int(actor.id))
     second = svc.create_rate(
         ContractorRateCreate(
             contractor_id=int(contractor.id),
             part_master_id=int(rm.id),
             negotiated_rate=Decimal("80"),
-            effective_from=date.today() + timedelta(days=30),
-            effective_to=date.today() + timedelta(days=90),
+            effective_from=date.today(),
         ),
         actor_user_id=int(actor.id),
     )
-    with pytest.raises(ConflictError):
-        svc.submit_for_approval(int(second.id), actor_user_id=int(actor.id))
+    assert int(second.id) != int(first.id)
 
 
 # ---------- Aggregate summary ----------

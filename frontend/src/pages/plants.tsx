@@ -5,6 +5,14 @@ import { AccessDenied } from "@/components/admin/access-denied"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -44,8 +52,17 @@ export function PlantsPage() {
   const [attachClusterId, setAttachClusterId] = React.useState<string>("")
   const [attaching, setAttaching] = React.useState(false)
 
+  const [editOpen, setEditOpen] = React.useState(false)
+  const [editTarget, setEditTarget] = React.useState<{ kind: "PLANT" | "CLUSTER"; row: OrgUnitPublic } | null>(
+    null,
+  )
+  const [editName, setEditName] = React.useState("")
+  const [editParentId, setEditParentId] = React.useState<string>("")
+  const [savingEdit, setSavingEdit] = React.useState(false)
+
   const canCreate = hasPermission("org_units.create") || isSuperuser()
   const canUpdate = hasPermission("org_units.update") || isSuperuser()
+  const showActions = canUpdate
 
   const [tab, setTab] = React.useState<string>("catalog")
 
@@ -60,6 +77,25 @@ export function PlantsPage() {
     for (const c of clusters) m.set(c.id, c)
     return m
   }, [clusters])
+
+  /** Cluster ids in the subtree rooted at ``rootId`` (includes ``rootId``). Used to block invalid parent picks. */
+  const clusterSubtreeIds = React.useCallback(
+    (rootId: number) => {
+      const out = new Set<number>([rootId])
+      const queue = [rootId]
+      while (queue.length) {
+        const cur = queue.shift()!
+        for (const c of clusters) {
+          if (c.parent_id === cur && !out.has(c.id)) {
+            out.add(c.id)
+            queue.push(c.id)
+          }
+        }
+      }
+      return out
+    },
+    [clusters],
+  )
 
   async function load() {
     setError(null)
@@ -162,10 +198,58 @@ export function PlantsPage() {
     }
   }
 
+  function openEdit(row: OrgUnitPublic, kind: "PLANT" | "CLUSTER") {
+    setEditTarget({ kind, row })
+    setEditName(row.name)
+    setEditParentId(row.parent_id != null ? String(row.parent_id) : "")
+    setEditOpen(true)
+  }
+
+  function closeEdit() {
+    setEditOpen(false)
+    setEditTarget(null)
+    setEditName("")
+    setEditParentId("")
+  }
+
+  async function saveEdit() {
+    if (!editTarget) return
+    const n = editName.trim()
+    if (!n) {
+      toast.error("Name is required.")
+      return
+    }
+    setSavingEdit(true)
+    toast.loading("Saving…", { id: "edit-org-page" })
+    try {
+      await patchJson<OrgUnitPublic>(`/admin/org-units/${editTarget.row.id}`, {
+        name: n,
+        parent_id: editParentId ? Number(editParentId) : null,
+      })
+      toast.success("Saved", { id: "edit-org-page" })
+      closeEdit()
+      await load()
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to save"
+      toast.error(message, { id: "edit-org-page" })
+      setError(message)
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const catalogColSpan = showActions ? 4 : 3
+
   const sortedClusters = React.useMemo(
     () => clusters.slice().sort((a, b) => a.name.localeCompare(b.name)),
     [clusters],
   )
+
+  const clusterParentChoicesForEdit = React.useMemo(() => {
+    if (!editTarget || editTarget.kind !== "CLUSTER") return sortedClusters
+    const blocked = clusterSubtreeIds(editTarget.row.id)
+    return sortedClusters.filter((c) => !blocked.has(c.id))
+  }, [editTarget, sortedClusters, clusterSubtreeIds])
 
   const sortedPlants = React.useMemo(() => {
     if (!plants) return []
@@ -177,9 +261,9 @@ export function PlantsPage() {
       <div className="min-w-0">
         <h2 className="truncate text-sm font-medium">Clusters & plants</h2>
         <p className="text-sm text-muted-foreground">
-          Use the tabs below to create clusters, create plants under a cluster, or move an existing plant between clusters.
-          Creating rows requires <span className="font-mono text-xs">org_units.create</span>; attaching or moving a plant
-          requires <span className="font-mono text-xs">org_units.update</span>.
+          Create clusters and plants, attach plants to clusters, or edit names and parent links in the catalog
+          (edit requires <span className="font-mono text-xs">org_units.update</span>). Creating rows requires{" "}
+          <span className="font-mono text-xs">org_units.create</span>.
         </p>
       </div>
 
@@ -208,18 +292,19 @@ export function PlantsPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Cluster</TableHead>
                   <TableHead className="w-[100px]">Type</TableHead>
+                  {showActions ? <TableHead className="w-[88px] text-right">Actions</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {plants === null ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={catalogColSpan} className="py-8 text-center text-sm text-muted-foreground">
                       Loading…
                     </TableCell>
                   </TableRow>
                 ) : sortedPlants.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={catalogColSpan} className="py-8 text-center text-sm text-muted-foreground">
                       No plants found.
                     </TableCell>
                   </TableRow>
@@ -233,6 +318,19 @@ export function PlantsPage() {
                           {parent ? parent.name : "—"}
                         </TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">{p.type}</TableCell>
+                        {showActions ? (
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8"
+                              onClick={() => openEdit(p, "PLANT")}
+                            >
+                              Edit
+                            </Button>
+                          </TableCell>
+                        ) : null}
                       </TableRow>
                     )
                   })
@@ -250,18 +348,19 @@ export function PlantsPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Parent cluster</TableHead>
                   <TableHead className="w-[100px]">Type</TableHead>
+                  {showActions ? <TableHead className="w-[88px] text-right">Actions</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {plants === null ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={catalogColSpan} className="py-8 text-center text-sm text-muted-foreground">
                       Loading…
                     </TableCell>
                   </TableRow>
                 ) : sortedClusters.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={catalogColSpan} className="py-8 text-center text-sm text-muted-foreground">
                       No clusters yet. Open the <strong>New cluster</strong> tab to add one.
                     </TableCell>
                   </TableRow>
@@ -273,6 +372,19 @@ export function PlantsPage() {
                         <TableCell className="text-sm">{c.name}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{parent ? parent.name : "—"}</TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">{c.type}</TableCell>
+                        {showActions ? (
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8"
+                              onClick={() => openEdit(c, "CLUSTER")}
+                            >
+                              Edit
+                            </Button>
+                          </TableCell>
+                        ) : null}
                       </TableRow>
                     )
                   })
@@ -445,10 +557,67 @@ export function PlantsPage() {
         </TabsContent>
       </Tabs>
 
+      <Dialog
+        open={editOpen}
+        onOpenChange={(open) => {
+          if (!open) closeEdit()
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editTarget?.kind === "PLANT" ? "Edit plant" : "Edit cluster"}</DialogTitle>
+            <DialogDescription>
+              {editTarget?.kind === "PLANT"
+                ? "Update the display name or move the plant to another cluster (or leave unassigned)."
+                : "Update the display name or reparent the cluster. You cannot choose this cluster or anything nested under it as the parent."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-org-name">Name</Label>
+              <Input
+                id="edit-org-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-org-parent">
+                {editTarget?.kind === "PLANT" ? "Cluster (optional)" : "Parent cluster (optional)"}
+              </Label>
+              <select
+                id="edit-org-parent"
+                className={SELECT_CLASS}
+                value={editParentId}
+                onChange={(e) => setEditParentId(e.target.value)}
+              >
+                <option value="">
+                  {editTarget?.kind === "PLANT" ? "None (unassigned plant)" : "None (root cluster)"}
+                </option>
+                {(editTarget?.kind === "CLUSTER" ? clusterParentChoicesForEdit : sortedClusters).map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => closeEdit()} disabled={savingEdit}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void saveEdit()} disabled={savingEdit}>
+              {savingEdit ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {!canCreate && !canUpdate && tab === "catalog" ? (
         <p className="text-xs text-muted-foreground">
           You have read-only access. Ask an admin for <span className="font-mono">org_units.create</span> or{" "}
-          <span className="font-mono">org_units.update</span> to change hierarchy.
+          <span className="font-mono">org_units.update</span> to create or edit plants and clusters.
         </p>
       ) : null}
     </div>

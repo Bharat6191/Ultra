@@ -197,7 +197,12 @@ export function NegotiatedRateDetailPage() {
         </div>
       </div>
 
-      <RateDetailPanel rate={rate} canUpdate={canUpdate} />
+      <RateDetailPanel
+        rate={rate}
+        canUpdate={canUpdate}
+        canCreate={canCreate}
+        onAfterMutation={() => void load()}
+      />
     </div>
   )
 }

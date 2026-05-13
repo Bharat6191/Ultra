@@ -144,6 +144,7 @@ export function WorkOrderDetailPage() {
   const [editReference, setEditReference] = React.useState("")
   const [editOrgUnit, setEditOrgUnit] = React.useState("")
   const [editContractorId, setEditContractorId] = React.useState("")
+  const [editWorkDate, setEditWorkDate] = React.useState("")
   const [draftLines, setDraftLines] = React.useState<ExecutionDraftLine[]>(() => [newDraftLine()])
 
   const canSubmit = hasPermission("work_orders.create")
@@ -205,6 +206,7 @@ export function WorkOrderDetailPage() {
     setEditReference(row.description ?? "")
     setEditOrgUnit(String(row.org_unit_id))
     setEditContractorId(String(row.contractor_id ?? ""))
+    setEditWorkDate(row.work_date ?? "")
     setDraftLines(flattenWorkOrderToDraftLines(row))
   }, [row, editableDraft])
 
@@ -341,7 +343,7 @@ export function WorkOrderDetailPage() {
 
   async function saveDraft() {
     if (!row || !editableDraft) return
-    if (!editOrgUnit) return toast.error("Plant is required.")
+    if (!editWorkDate.trim()) return toast.error("Work date is required.")
     if (!editTitle.trim()) return toast.error("Title is required.")
     const built = buildWorkOrderLinesForApi(editContractorId, draftLines, partMasters)
     if (!built.ok) return toast.error(built.error)
@@ -351,7 +353,7 @@ export function WorkOrderDetailPage() {
       await patchJson(`/work-orders/${row.id}`, {
         title: editTitle.trim(),
         description: editReference.trim() || null,
-        work_date: row.work_date,
+        work_date: editWorkDate,
         org_unit_id: Number(editOrgUnit),
         contractor_id: built.contractor_id,
         items: built.items,
@@ -387,7 +389,9 @@ export function WorkOrderDetailPage() {
           <h2 className="text-base font-medium">Work order</h2>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Badge variant={workOrderStatusBadgeVariant(row.status)}>{row.status}</Badge>
-            <span className="text-sm text-muted-foreground tabular-nums">Work date: {row.work_date ?? "—"}</span>
+            {!editableDraft ? (
+              <span className="text-sm text-muted-foreground tabular-nums">Work date: {row.work_date ?? "—"}</span>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -413,6 +417,8 @@ export function WorkOrderDetailPage() {
         onReference={setEditReference}
         onOrgUnit={setEditOrgUnit}
         plantLabel={editableDraft ? undefined : plantLabel}
+        work_date={editableDraft ? editWorkDate : row.work_date}
+        onWorkDate={editableDraft ? setEditWorkDate : undefined}
       />
 
       <WorkOrderExecutionTable
@@ -434,7 +440,7 @@ export function WorkOrderDetailPage() {
         showSubmit={showSubmitButton}
         tip={
           editableDraft
-            ? "Tip: choose the contractor once, then edit part lines. Saved taxable values use negotiated rates when approved."
+            ? "Work date drives which approved negotiated rate applies to each line (inclusive window). Change it and save to re-price lines. Choose the contractor once, then edit part lines."
             : showCompletionEngine
               ? "Active work order: update completion per line — invoice lines cannot exceed the latest saved completion. After approval, the approved work order value is fixed; cumulative invoices (ex. tax) cannot exceed that total (with validation tolerance)."
               : "Rates shown are governed (negotiated where applicable)."

@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Eye, File, FileImage, FileText } from "lucide-react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -9,8 +10,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { SectionHint } from "@/components/ui/section-hint"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ApiError, getJson, postForm, postJson } from "@/lib/api"
-import { formatMoney } from "@/components/contractors/rateStatus"
+import { formatMoney, rateStatusLabel } from "@/components/contractors/rateStatus"
 import { hasPermission, isSuperuser } from "@/lib/permissions"
 import {
   EMPTY_RATE_FORM,
@@ -20,6 +22,66 @@ import {
 
 const SELECT_ROW_CLASS =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+
+const ATTACHMENT_ACCEPT =
+  "image/*,.pdf,.txt,.csv,.md,.log,.json,.xml,text/plain,text/csv,text/markdown,application/pdf"
+
+const TEXT_PREVIEW_MAX_BYTES = 512 * 1024
+
+function attachmentKind(f: File): "image" | "pdf" | "text" | "other" {
+  if (f.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name)) return "image"
+  if (f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf")) return "pdf"
+  if (
+    f.type.startsWith("text/") ||
+    /\.(txt|csv|md|log|json|xml|tsv)$/i.test(f.name)
+  ) {
+    return "text"
+  }
+  return "other"
+}
+
+function canPreviewStagedFile(f: File): boolean {
+  return attachmentKind(f) !== "other"
+}
+
+type ContractorRateListRow = {
+  id: number
+  part_master_id: number
+  status: string
+  effective_to: string | null
+}
+
+function isActiveNegotiationThreadRow(r: ContractorRateListRow, todayIso: string): boolean {
+  const st = r.status.toLowerCase()
+  if (st === "cancelled" || st === "expired") return false
+  if (st === "draft" || st === "pending_approval" || st === "rejected") return true
+  if (st === "approved") {
+    if (!r.effective_to) return true
+    return r.effective_to >= todayIso
+  }
+  return false
+}
+
+function buildThreadsByPartMasterId(
+  rates: ContractorRateListRow[],
+  todayIso: string,
+): Record<number, { id: number; status: string }> {
+  const out: Record<number, { id: number; status: string }> = {}
+  for (const r of rates) {
+    if (!isActiveNegotiationThreadRow(r, todayIso)) continue
+    const cur = out[r.part_master_id]
+    if (!cur || r.id > cur.id) out[r.part_master_id] = { id: r.id, status: r.status }
+  }
+  return out
+}
+
+function AttachmentRowIcon({ file }: { file: File }) {
+  const k = attachmentKind(file)
+  if (k === "image") return <FileImage className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+  if (k === "pdf") return <FileText className="size-4 shrink-0 text-red-700/80" aria-hidden />
+  if (k === "text") return <FileText className="size-4 shrink-0 text-sky-800/80" aria-hidden />
+  return <File className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+}
 
 export function NegotiatedRateNewPage() {
   const navigate = useNavigate()
@@ -40,6 +102,92 @@ export function NegotiatedRateNewPage() {
   const [saving, setSaving] = React.useState(false)
   const [saveError, setSaveError] = React.useState<string | null>(null)
   const [attachments, setAttachments] = React.useState<File[]>([])
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const [threadsByPartMasterId, setThreadsByPartMasterId] = React.useState<
+    Record<number, { id: number; status: string }>
+  >({})
+
+  const canViewRates = hasPermission("contractor_rates.view") || isSuperuser()
+
+  const [previewOpen, setPreviewOpen] = React.useState(false)
+  const [previewFile, setPreviewFile] = React.useState<File | null>(null)
+  const [previewBlobUrl, setPreviewBlobUrl] = React.useState<string | null>(null)
+  const [previewText, setPreviewText] = React.useState<string | null>(null)
+  const [previewTextTruncated, setPreviewTextTruncated] = React.useState(false)
+  const [previewLoading, setPreviewLoading] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!previewOpen || !previewFile) {
+      setPreviewBlobUrl((u) => {
+        if (u) URL.revokeObjectURL(u)
+        return null
+      })
+      setPreviewText(null)
+      setPreviewTextTruncated(false)
+      setPreviewLoading(false)
+      return
+    }
+
+    const k = attachmentKind(previewFile)
+    if (k === "image" || k === "pdf") {
+      const u = URL.createObjectURL(previewFile)
+      setPreviewBlobUrl(u)
+      setPreviewText(null)
+      setPreviewTextTruncated(false)
+      setPreviewLoading(false)
+      return () => {
+        URL.revokeObjectURL(u)
+      }
+    }
+
+    if (k === "text") {
+      setPreviewBlobUrl((u) => {
+        if (u) URL.revokeObjectURL(u)
+        return null
+      })
+      setPreviewText(null)
+      setPreviewLoading(true)
+      let cancelled = false
+      const slice =
+        previewFile.size > TEXT_PREVIEW_MAX_BYTES
+          ? previewFile.slice(0, TEXT_PREVIEW_MAX_BYTES)
+          : previewFile
+      void slice
+        .text()
+        .then((t) => {
+          if (!cancelled) {
+            setPreviewText(t)
+            setPreviewTextTruncated(previewFile.size > TEXT_PREVIEW_MAX_BYTES)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setPreviewText("Could not read this file as text.")
+        })
+        .finally(() => {
+          if (!cancelled) setPreviewLoading(false)
+        })
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setPreviewLoading(false)
+    return undefined
+  }, [previewOpen, previewFile])
+
+  function openAttachmentPreview(f: File) {
+    if (!canPreviewStagedFile(f)) {
+      toast.message("Preview is not available for this file type.")
+      return
+    }
+    setPreviewFile(f)
+    setPreviewOpen(true)
+  }
+
+  function closeAttachmentPreview() {
+    setPreviewOpen(false)
+    setPreviewFile(null)
+  }
 
   React.useEffect(() => {
     if (!canCreate) return
@@ -94,6 +242,29 @@ export function NegotiatedRateNewPage() {
     fixedContractorId ?? (typeof pickedContractorId === "number" ? pickedContractorId : null)
   const needContractorPick = fixedContractorId == null && contractorChoices.length > 0
 
+  React.useEffect(() => {
+    if (!canCreate || effectiveContractorId == null || !canViewRates) {
+      setThreadsByPartMasterId({})
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const rates = await getJson<ContractorRateListRow[]>(
+          `/contractor-rates?contractor_id=${effectiveContractorId}`,
+        )
+        if (cancelled) return
+        const todayIso = new Date().toISOString().slice(0, 10)
+        setThreadsByPartMasterId(buildThreadsByPartMasterId(Array.isArray(rates) ? rates : [], todayIso))
+      } catch {
+        if (!cancelled) setThreadsByPartMasterId({})
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [canCreate, canViewRates, effectiveContractorId])
+
   const selected = React.useMemo(
     () => partMasters.find((pm) => pm.id === form.part_master_id) ?? null,
     [partMasters, form.part_master_id],
@@ -118,6 +289,22 @@ export function NegotiatedRateNewPage() {
       )
       .slice(0, 12)
   }, [partMasters, search])
+
+  const { selectableParts, blockedParts } = React.useMemo(() => {
+    const sel: PartMasterPick[] = []
+    const blk: PartMasterPick[] = []
+    for (const pm of filtered) {
+      if (threadsByPartMasterId[pm.id]) blk.push(pm)
+      else sel.push(pm)
+    }
+    return { selectableParts: sel, blockedParts: blk }
+  }, [filtered, threadsByPartMasterId])
+
+  React.useEffect(() => {
+    if (form.part_master_id == null) return
+    if (!threadsByPartMasterId[form.part_master_id]) return
+    setForm((f) => ({ ...f, part_master_id: null }))
+  }, [threadsByPartMasterId, form.part_master_id])
 
   const baseRate = selected ? Number(selected.base_rate) : NaN
   const negRate = Number(form.negotiated_rate)
@@ -144,12 +331,14 @@ export function NegotiatedRateNewPage() {
     !!form.negotiated_rate.trim() &&
     Number.isFinite(negRate) &&
     negRate > 0 &&
-    !!form.effective_from
+    !!form.effective_from.trim() &&
+    (!form.effective_to.trim() || form.effective_to >= form.effective_from)
 
   async function submit() {
     if (!effectiveContractorId || form.part_master_id === null) return
     setSaving(true)
     setSaveError(null)
+    let createdId: number | null = null
     try {
       const created = await postJson<{ id: number }>("/contractor-rates", {
         contractor_id: effectiveContractorId,
@@ -157,18 +346,21 @@ export function NegotiatedRateNewPage() {
         negotiated_rate: form.negotiated_rate,
         initial_rate: form.initial_rate.trim() ? form.initial_rate : null,
         effective_from: form.effective_from,
-        effective_to: null,
+        effective_to: form.effective_to.trim() ? form.effective_to.trim() : null,
         remarks: form.remarks.trim() ? form.remarks : null,
       })
+      createdId = created.id
       if (attachments.length > 0) {
-        const fd = new FormData()
+        // One POST per file: first seeds round 1 + file; later calls append to the same
+        // opening-evidence round (avoids multipart/proxy quirks and supports retry after partial failure).
         for (const f of attachments) {
-          fd.append("file", f)
+          const fd = new FormData()
+          fd.append("file", f, f.name)
+          await postForm<{ negotiation_log_id: number; attachments: unknown[] }>(
+            `/contractor-rates/${created.id}/opening-evidence`,
+            fd,
+          )
         }
-        await postForm<{ negotiation_log_id: number; attachments: unknown[] }>(
-          `/contractor-rates/${created.id}/opening-evidence`,
-          fd,
-        )
       }
       toast.success(
         attachments.length
@@ -177,8 +369,12 @@ export function NegotiatedRateNewPage() {
       )
       navigate(`/dashboard/negotiated-rates/${created.id}`)
     } catch (e) {
-      const msg =
+      const base =
         e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to create draft"
+      const msg =
+        createdId !== null && attachments.length > 0
+          ? `${base} (draft #${createdId} was saved — open it from Negotiated rates to add files or retry.)`
+          : base
       setSaveError(msg)
       toast.error(msg)
     } finally {
@@ -200,8 +396,8 @@ export function NegotiatedRateNewPage() {
   }
 
   return (
-    <div className="w-full min-w-0 space-y-6">
-      <header className="space-y-1 border-b border-border/70 pb-6">
+    <div className="relative w-[calc(100%+2rem)] max-w-none -mx-4 min-w-0 space-y-5 px-4 sm:w-[calc(100%+3rem)] sm:-mx-6 sm:px-6 lg:w-[calc(100%+4rem)] lg:-mx-8 lg:px-8">
+      <header className="space-y-1 border-b border-border/70 pb-4">
         <div className="text-xs text-muted-foreground">
           <Link to="/dashboard/negotiated-rates" className="underline-offset-2 hover:underline">
             Negotiated rates
@@ -211,7 +407,7 @@ export function NegotiatedRateNewPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">Start a negotiation</h1>
-          <SectionHint text="Pick a Part Master baseline, then set the agreed rate for this draft. Optional initial ask anchors savings. Optional files are stored on an opening evidence round (round 1) on the timeline. Submit for approval when ready; the approved row becomes the binding rate for this contractor and part." />
+          <SectionHint text="One open negotiation per contractor and part. Use the existing rate to add rounds, or start a new record after the prior thread ends." />
         </div>
       </header>
 
@@ -227,11 +423,13 @@ export function NegotiatedRateNewPage() {
         </Alert>
       ) : null}
 
-      <div className="grid w-full min-w-0 gap-6 xl:grid-cols-12 xl:items-start">
-        <Card className="min-w-0 rounded-2xl border-border/50 shadow-sm xl:col-span-5">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Contractor & part</CardTitle>
-            <CardDescription>Commercial baseline comes from Part Master for the plant you select.</CardDescription>
+      <div className="grid w-full min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+        <Card className="min-w-0 rounded-2xl border-border/50 shadow-sm">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base">Contractor & part</CardTitle>
+              <SectionHint text="Baseline comes from Part Master for the selected plant. One active thread per contractor and part — open the existing rate to add rounds." />
+            </div>
           </CardHeader>
           <CardContent className="grid gap-4">
             {needContractorPick ? (
@@ -295,45 +493,86 @@ export function NegotiatedRateNewPage() {
                     Choose different part
                   </Button>
                 </div>
+              ) : effectiveContractorId == null ? (
+                <p className="rounded-md border border-dashed bg-muted/30 px-2 py-5 text-center text-xs text-muted-foreground">
+                  Select a contractor first.
+                </p>
               ) : (
-                <ul className="max-h-64 space-y-1 overflow-y-auto rounded-lg border p-1">
-                  {filtered.length === 0 ? (
+                <ul className="max-h-[min(28rem,55vh)] space-y-1 overflow-y-auto rounded-lg border p-1">
+                  {selectableParts.length === 0 && blockedParts.length === 0 ? (
                     <li className="px-2 py-6 text-center text-xs text-muted-foreground">No matches.</li>
-                  ) : (
-                    filtered.map((pm) => (
-                      <li key={pm.id}>
-                        <button
-                          type="button"
-                          className="w-full rounded-md px-2 py-2 text-left text-sm transition hover:bg-muted"
-                          onClick={() => setForm((f) => ({ ...f, part_master_id: pm.id }))}
-                        >
-                          <span className="font-mono text-xs">{pm.part_code}</span>{" "}
-                          <span className="text-muted-foreground">·</span> {pm.part_name}
-                          <div className="text-[11px] text-muted-foreground">
-                            {pm.org_unit_name ?? "—"} · {formatMoney(pm.base_rate)}
-                          </div>
-                        </button>
-                      </li>
-                    ))
-                  )}
+                  ) : null}
+                  {selectableParts.map((pm) => (
+                    <li key={pm.id}>
+                      <button
+                        type="button"
+                        className="w-full rounded-md px-2 py-2 text-left text-sm transition hover:bg-muted"
+                        onClick={() => setForm((f) => ({ ...f, part_master_id: pm.id }))}
+                      >
+                        <span className="font-mono text-xs">{pm.part_code}</span>{" "}
+                        <span className="text-muted-foreground">·</span> {pm.part_name}
+                        <div className="text-[11px] text-muted-foreground">
+                          {pm.org_unit_name ?? "—"} · {formatMoney(pm.base_rate)}
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                  {blockedParts.length > 0 ? (
+                    <li className="px-2 pt-2">
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Already under negotiation
+                      </div>
+                      <ul className="space-y-1">
+                        {blockedParts.map((pm) => {
+                          const t = threadsByPartMasterId[pm.id]
+                          return (
+                            <li
+                              key={pm.id}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200/80 bg-amber-50/50 px-2 py-2 text-sm"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <span className="font-mono text-xs">{pm.part_code}</span>{" "}
+                                <span className="text-muted-foreground">·</span>{" "}
+                                <span className="text-muted-foreground">{pm.part_name}</span>
+                                <div className="text-[11px] text-muted-foreground">
+                                  {t ? `${rateStatusLabel(t.status)} · ` : null}
+                                  {pm.org_unit_name ?? "—"}
+                                </div>
+                              </div>
+                              {t ? (
+                                <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 text-xs" asChild>
+                                  <Link to={`/dashboard/negotiated-rates/${t.id}`}>View existing</Link>
+                                </Button>
+                              ) : null}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </li>
+                  ) : null}
                 </ul>
               )}
             </div>
           </CardContent>
         </Card>
 
-        <Card className="min-w-0 rounded-2xl border-border/50 shadow-sm xl:col-span-5">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle className="text-base">Rates & notes</CardTitle>
-            <SectionHint text="Effective dates default to today with an open end; adjust later on the rate detail page if needed." />
+        <Card className="min-w-0 rounded-2xl border-border/50 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base">Rates & notes</CardTitle>
+              <SectionHint text="Work order lines use their work date: it must fall from effective from through effective to (inclusive). Leave effective to empty for no end date." />
+            </div>
           </CardHeader>
-          <CardContent className="grid gap-4">
+          <CardContent>
+            {/* Use a div instead of <form> so implicit submit / file-control quirks cannot full-page reload the app. */}
+            <div className="grid gap-4">
             <div className="grid gap-1">
-              <Label>Initial ask (optional)</Label>
+              <Label htmlFor="neg-initial">Initial ask (optional)</Label>
               <Input
+                id="neg-initial"
                 type="number"
                 inputMode="decimal"
-                placeholder="Leave blank to use agreed rate as opening ask"
+                placeholder="Same as agreed rate if blank"
                 value={form.initial_rate}
                 onChange={(e) => setForm((f) => ({ ...f, initial_rate: e.target.value }))}
               />
@@ -348,11 +587,37 @@ export function NegotiatedRateNewPage() {
                 onChange={(e) => setForm((f) => ({ ...f, negotiated_rate: e.target.value }))}
               />
             </div>
+            <div className="grid gap-1 sm:grid-cols-2 sm:gap-4">
+              <div className="grid gap-1">
+                <Label htmlFor="neg-effective-from" title="First day this rate can apply to work orders (by line work date).">
+                  Effective from
+                </Label>
+                <Input
+                  id="neg-effective-from"
+                  type="date"
+                  value={form.effective_from}
+                  onChange={(e) => setForm((f) => ({ ...f, effective_from: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor="neg-effective-to" title="Optional last day (inclusive). Leave blank for no end date.">
+                  Effective to (optional)
+                </Label>
+                <Input
+                  id="neg-effective-to"
+                  type="date"
+                  value={form.effective_to}
+                  min={form.effective_from || undefined}
+                  onChange={(e) => setForm((f) => ({ ...f, effective_to: e.target.value }))}
+                />
+              </div>
+            </div>
             <div className="grid gap-1">
-              <Label>Remarks</Label>
+              <Label htmlFor="neg-remarks">Remarks</Label>
               <Textarea
-                rows={4}
-                placeholder="Context for approvers…"
+                id="neg-remarks"
+                rows={3}
+                placeholder="Optional — approvers and timeline"
                 value={form.remarks}
                 onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))}
               />
@@ -361,10 +626,9 @@ export function NegotiatedRateNewPage() {
             <div className="grid gap-2">
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div className="grid gap-1">
-                  <Label>Attachments (optional)</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Multiple files allowed. They are saved with round 1 as opening evidence after the draft
-                    is created.
+                  <Label htmlFor="neg-file-btn">Attachments (optional)</Label>
+                  <p className="sr-only">
+                    Multiple files; attached to round 1 as opening evidence after the draft is created.
                   </p>
                 </div>
                 {attachments.length > 0 ? (
@@ -379,27 +643,44 @@ export function NegotiatedRateNewPage() {
                   </Button>
                 ) : null}
               </div>
-              <Input
-                type="file"
-                multiple
-                onChange={(e) => {
-                  const next = Array.from(e.target.files ?? [])
-                  if (next.length) {
-                    setAttachments((prev) => {
-                      const merged = [...prev, ...next]
-                      const seen = new Set<string>()
-                      return merged.filter((f) => {
-                        const k = `${f.name}:${f.size}`
-                        if (seen.has(k)) return false
-                        seen.add(k)
-                        return true
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={ATTACHMENT_ACCEPT}
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-hidden
+                  onChange={(e) => {
+                    const next = Array.from(e.target.files ?? [])
+                    if (next.length) {
+                      setAttachments((prev) => {
+                        const merged = [...prev, ...next]
+                        const seen = new Set<string>()
+                        return merged.filter((f) => {
+                          const k = `${f.name}:${f.size}`
+                          if (seen.has(k)) return false
+                          seen.add(k)
+                          return true
+                        })
                       })
-                    })
-                  }
-                  e.target.value = ""
-                }}
-                className="cursor-pointer text-sm file:mr-3 file:rounded-md file:border file:bg-muted file:px-3 file:py-1 file:text-xs"
-              />
+                    }
+                    e.target.value = ""
+                  }}
+                />
+                <Button
+                  id="neg-file-btn"
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Add files…
+                </Button>
+                <span className="text-xs text-muted-foreground">Multi-select · images, PDF, text</span>
+              </div>
               {attachments.length > 0 ? (
                 <ul className="max-h-40 space-y-1.5 overflow-y-auto rounded-lg border bg-muted/30 p-2 text-sm">
                   {attachments.map((f, i) => (
@@ -407,12 +688,30 @@ export function NegotiatedRateNewPage() {
                       key={`${f.name}-${f.size}-${i}`}
                       className="flex items-center justify-between gap-2 rounded-md bg-background px-2 py-1.5"
                     >
-                      <span className="min-w-0 truncate" title={f.name}>
-                        {f.name}
-                      </span>
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <AttachmentRowIcon file={f} />
+                        <span className="min-w-0 truncate font-medium" title={f.name}>
+                          {f.name}
+                        </span>
+                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
+                          {attachmentKind(f)}
+                        </span>
+                      </div>
                       <span className="shrink-0 text-xs text-muted-foreground">
                         {(f.size / 1024).toFixed(f.size < 10240 ? 1 : 0)} KB
                       </span>
+                      {canPreviewStagedFile(f) ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 shrink-0 px-2 text-xs"
+                          onClick={() => openAttachmentPreview(f)}
+                        >
+                          <Eye className="size-3.5" aria-hidden />
+                          View
+                        </Button>
+                      ) : null}
                       <Button
                         type="button"
                         variant="ghost"
@@ -467,9 +766,57 @@ export function NegotiatedRateNewPage() {
                 <Link to="/dashboard/negotiated-rates">Cancel</Link>
               </Button>
             </div>
+            </div>
           </CardContent>
         </Card>
       </div>
+
+      <Dialog
+        open={previewOpen}
+        onOpenChange={(open) => {
+          if (!open) closeAttachmentPreview()
+        }}
+      >
+        <DialogContent className="max-h-[min(94vh,1000px)] w-full max-w-[calc(100vw-1rem)] overflow-hidden p-5 sm:max-w-[min(88rem,calc(100vw-1rem))]">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-8 text-base">
+              {previewFile?.name ?? "Attachment"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[calc(94vh-7rem)] min-h-[min(60vh,520px)] overflow-auto">
+            {previewLoading ? (
+              <p className="text-sm text-muted-foreground">Loading preview…</p>
+            ) : null}
+            {!previewLoading && previewFile && attachmentKind(previewFile) === "image" && previewBlobUrl ? (
+              <img
+                src={previewBlobUrl}
+                alt=""
+                className="mx-auto max-h-[min(82vh,900px)] w-auto max-w-full object-contain"
+              />
+            ) : null}
+            {!previewLoading && previewFile && attachmentKind(previewFile) === "pdf" && previewBlobUrl ? (
+              <iframe
+                title={previewFile.name}
+                src={previewBlobUrl}
+                className="h-[min(82vh,900px)] min-h-[480px] w-full rounded-md border bg-muted/30"
+              />
+            ) : null}
+            {!previewLoading && previewFile && attachmentKind(previewFile) === "text" ? (
+              <div className="space-y-2">
+                {previewTextTruncated ? (
+                  <p className="text-xs text-amber-800">
+                    Showing the first {(TEXT_PREVIEW_MAX_BYTES / 1024).toFixed(0)} KB only. Full file will still be
+                    uploaded when you create the draft.
+                  </p>
+                ) : null}
+                <pre className="max-h-[min(82vh,900px)] min-h-[320px] overflow-auto whitespace-pre-wrap break-words rounded-md border bg-muted/20 p-3 font-mono text-xs">
+                  {previewText ?? ""}
+                </pre>
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

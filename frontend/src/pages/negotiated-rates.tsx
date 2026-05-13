@@ -201,10 +201,7 @@ export function NegotiatedRatesPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-medium">Negotiated rates</h2>
-          <p className="text-sm text-muted-foreground">
-            Workspace-wide view of every contractor negotiation: filter by status, plant, or
-            contractor and click a row to open the full negotiation timeline.
-          </p>
+          <p className="text-sm text-muted-foreground">Filter the list, then open a row for details.</p>
         </div>
         {canCreate ? (
           <Button asChild type="button">
@@ -214,26 +211,6 @@ export function NegotiatedRatesPage() {
           </Button>
         ) : null}
       </div>
-
-      <Alert>
-        <AlertTitle>How rates fit together</AlertTitle>
-        <AlertDescription className="space-y-2 text-sm">
-          <p>
-            <strong>Commercial baselines</strong> live under{" "}
-            <Link to="/dashboard/part-master" className="font-medium underline underline-offset-2">
-              Part master
-            </Link>
-            — one row per part code, pricing method, and plant. You need{" "}
-            <span className="font-mono text-xs">part_master.create</span> to add them.
-          </p>
-          <p>
-            <strong>Negotiations</strong> attach a contractor to a Part Master baseline. Use{" "}
-            <strong>New negotiation</strong> here, or open any contractor →{" "}
-            <strong>Rates</strong> tab. You need{" "}
-            <span className="font-mono text-xs">contractor_rates.create</span>.
-          </p>
-        </AlertDescription>
-      </Alert>
 
       {/* KPIs — only the lifecycle counters remain. The "savings"
           aggregates (negotiation savings, avg savings %, premium vs base)

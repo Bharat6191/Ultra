@@ -5,14 +5,26 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDollarSign,
+  Download,
+  Eye,
+  File,
+  FileImage,
+  FileText,
   Hourglass,
   MessagesSquare,
+  Paperclip,
   Plus,
   Send,
   TrendingUp,
 } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -23,7 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { getJson, postJson } from "@/lib/api"
+import { ApiError, authFetch, getJson, postForm, postJson } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
 import {
   formatMoney,
@@ -35,14 +47,25 @@ import {
 } from "@/components/contractors/rateStatus"
 import { ContractorRateTimeline } from "@/components/contractors/ContractorRateTimeline"
 
+export type NegotiationAttachmentItem = {
+  id: number
+  file_path: string
+  file_name: string | null
+  content_type: string | null
+  uploaded_by: number | null
+  uploaded_at: string
+}
+
 export type NegotiationRoundPublic = {
   id: number
   round_number: number
   proposed_rate: number | string | null
   counter_rate: number | string | null
   remarks: string | null
+  round_summary?: string | null
   created_by_name: string | null
   created_at: string
+  attachments?: NegotiationAttachmentItem[]
 }
 
 export type ContractorRatePublic = {
@@ -96,6 +119,166 @@ export type RatesSummary = {
   approved_above_base?: number
   approved_below_base?: number
   approved_at_base?: number
+}
+
+const OPENING_EVIDENCE_ACCEPT = "image/*,.pdf,application/pdf"
+
+/** Matches server rules for ``POST …/opening-evidence`` (draft only; 0 rounds or single round-1 opening evidence). */
+export function canAppendOpeningEvidence(rate: ContractorRatePublic): boolean {
+  if (rate.status !== "draft") return false
+  const rounds = rate.rounds ?? []
+  if (rounds.length === 0) return true
+  if (rounds.length !== 1) return false
+  const r = rounds[0]
+  if (Number(r.round_number) !== 1) return false
+  return (r.round_summary ?? "").trim() === "Opening evidence"
+}
+
+function attachmentKind(f: File): "image" | "pdf" | "other" {
+  if (f.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name)) return "image"
+  if (f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf")) return "pdf"
+  return "other"
+}
+
+function DraftOpeningEvidenceRowIcon({ file }: { file: File }) {
+  const k = attachmentKind(file)
+  if (k === "image") return <FileImage className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+  if (k === "pdf") return <FileText className="size-4 shrink-0 text-red-700/80" aria-hidden />
+  return <File className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+}
+
+function DraftOpeningEvidenceUploader({
+  rateId,
+  disabled,
+  onUploaded,
+}: {
+  rateId: number
+  disabled?: boolean
+  onUploaded: () => void
+}) {
+  const [staged, setStaged] = React.useState<File[]>([])
+  const [uploading, setUploading] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  async function uploadStaged() {
+    if (!staged.length) return
+    setUploading(true)
+    try {
+      for (const f of staged) {
+        const fd = new FormData()
+        fd.append("file", f, f.name)
+        await postForm(`/contractor-rates/${rateId}/opening-evidence`, fd)
+      }
+      toast.success(
+        staged.length === 1 ? "File attached to draft" : `${staged.length} files attached to draft`,
+      )
+      setStaged([])
+      onUploaded()
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Upload failed"
+      toast.error(msg)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed border-emerald-200/80 bg-emerald-50/40 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h4 className="text-sm font-medium text-emerald-950">Evidence before approval</h4>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Add PDFs or images to round 1 while this negotiation is still a draft. After you add further
+            negotiation rounds, use <span className="font-medium">Negotiate</span> to attach files to those
+            rounds.
+          </p>
+        </div>
+        {staged.length > 0 ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 shrink-0 text-xs text-muted-foreground"
+            disabled={uploading}
+            onClick={() => setStaged([])}
+          >
+            Clear list
+          </Button>
+        ) : null}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept={OPENING_EVIDENCE_ACCEPT}
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden
+          disabled={disabled || uploading}
+          onChange={(e) => {
+            const next = Array.from(e.target.files ?? [])
+            if (next.length) {
+              setStaged((prev) => {
+                const merged = [...prev, ...next]
+                const seen = new Set<string>()
+                return merged.filter((f) => {
+                  const k = `${f.name}:${f.size}`
+                  if (seen.has(k)) return false
+                  seen.add(k)
+                  return true
+                })
+              })
+            }
+            e.target.value = ""
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-9"
+          disabled={disabled || uploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          Add files…
+        </Button>
+        <Button type="button" size="sm" disabled={disabled || uploading || staged.length === 0} onClick={() => void uploadStaged()}>
+          {uploading ? "Uploading…" : staged.length ? `Upload ${staged.length} file${staged.length === 1 ? "" : "s"}` : "Upload"}
+        </Button>
+      </div>
+      {staged.length > 0 ? (
+        <ul className="mt-3 max-h-36 space-y-1.5 overflow-y-auto rounded-lg border bg-background/80 p-2 text-sm">
+          {staged.map((f, i) => (
+            <li
+              key={`${f.name}-${f.size}-${i}`}
+              className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5"
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <DraftOpeningEvidenceRowIcon file={f} />
+                <span className="min-w-0 truncate" title={f.name}>
+                  {f.name}
+                </span>
+              </div>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {(f.size / 1024).toFixed(f.size < 10240 ? 1 : 0)} KB
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 shrink-0 px-2 text-xs"
+                disabled={uploading}
+                onClick={() => setStaged((prev) => prev.filter((_, j) => j !== i))}
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  )
 }
 
 
@@ -409,7 +592,12 @@ export function ContractorRatesPanel({
       {/* Detail panel for the selected rate */}
       {selectedRate ? (
         <div ref={detailRef}>
-          <RateDetailPanel rate={selectedRate} canUpdate={canUpdate} />
+          <RateDetailPanel
+            rate={selectedRate}
+            canUpdate={canUpdate}
+            canCreate={canCreate}
+            onAfterMutation={() => void load()}
+          />
         </div>
       ) : null}
 
@@ -502,15 +690,183 @@ function ActiveRateCard({
 }
 
 
+function NegotiationRoundAttachments({
+  rateId,
+  logId,
+  items,
+}: {
+  rateId: number
+  logId: number
+  items: NegotiationAttachmentItem[]
+}) {
+  if (!items.length) return null
+
+  const [open, setOpen] = React.useState(false)
+  const [blobUrl, setBlobUrl] = React.useState<string | null>(null)
+  const [viewerMime, setViewerMime] = React.useState<string>("")
+  const [viewerName, setViewerName] = React.useState("")
+  const [loading, setLoading] = React.useState(false)
+  const [loadErr, setLoadErr] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl)
+    }
+  }, [blobUrl])
+
+  async function pullAndShow(att: NegotiationAttachmentItem, mode: "view" | "download") {
+    setLoadErr(null)
+    setLoading(true)
+    try {
+      const path = `/contractor-rates/${rateId}/negotiation-logs/${logId}/attachments/${att.id}/content`
+      const res = await authFetch(path)
+      if (!res.ok) {
+        let msg = res.statusText
+        try {
+          const j = (await res.json()) as { detail?: unknown }
+          if (typeof j.detail === "string") msg = j.detail
+        } catch {
+          try {
+            const t = await res.text()
+            if (t) msg = t.slice(0, 200)
+          } catch {
+            // ignore
+          }
+        }
+        throw new Error(msg)
+      }
+      const blob = await res.blob()
+      const mime = (att.content_type || blob.type || "").toLowerCase()
+      const name = att.file_name || `attachment-${att.id}`
+      if (mode === "download") {
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = name
+        a.rel = "noopener"
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(url)
+        return
+      }
+      if (blobUrl) URL.revokeObjectURL(blobUrl)
+      const url = URL.createObjectURL(blob)
+      setBlobUrl(url)
+      setViewerMime(mime)
+      setViewerName(name)
+      setOpen(true)
+    } catch (e) {
+      setLoadErr(e instanceof Error ? e.message : "Could not open file")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const canPreviewImage = viewerMime.startsWith("image/")
+  const canPreviewPdf = viewerMime === "application/pdf" || viewerMime.endsWith("/pdf")
+
+  return (
+    <div className="mt-2 rounded-lg border border-dashed bg-muted/20 p-2">
+      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <Paperclip className="size-3" />
+        Attachments
+      </div>
+      <ul className="space-y-1">
+        {items.map((att) => (
+          <li
+            key={att.id}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-background px-2 py-1.5 text-xs"
+          >
+            <span className="min-w-0 truncate font-medium text-foreground" title={att.file_name ?? undefined}>
+              {att.file_name ?? `File #${att.id}`}
+            </span>
+            <span className="flex shrink-0 gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={loading}
+                onClick={() => void pullAndShow(att, "view")}
+              >
+                <Eye className="size-3.5" />
+                View
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={loading}
+                onClick={() => void pullAndShow(att, "download")}
+              >
+                <Download className="size-3.5" />
+                Save
+              </Button>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {loadErr ? <p className="mt-1 text-xs text-destructive">{loadErr}</p> : null}
+
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next)
+          if (!next && blobUrl) {
+            URL.revokeObjectURL(blobUrl)
+            setBlobUrl(null)
+          }
+        }}
+      >
+        <DialogContent className="max-h-[min(94vh,1000px)] w-full max-w-[calc(100vw-1rem)] overflow-hidden p-5 sm:max-w-[min(88rem,calc(100vw-1rem))]">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-8 text-base">{viewerName}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[calc(94vh-7rem)] min-h-[min(60vh,520px)] overflow-auto">
+            {blobUrl && canPreviewImage ? (
+              <img
+                src={blobUrl}
+                alt={viewerName}
+                className="mx-auto max-h-[min(82vh,900px)] w-auto max-w-full object-contain"
+              />
+            ) : null}
+            {blobUrl && canPreviewPdf ? (
+              <iframe
+                title={viewerName}
+                src={blobUrl}
+                className="h-[min(82vh,900px)] min-h-[480px] w-full rounded-md border bg-muted/30"
+              />
+            ) : null}
+            {blobUrl && !canPreviewImage && !canPreviewPdf ? (
+              <p className="text-sm text-muted-foreground">
+                No in-browser preview for this type. Close and use <strong>Save</strong> to download and open it
+                locally.
+              </p>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+
 export function RateDetailPanel({
   rate,
   canUpdate,
+  canCreate = false,
+  onAfterMutation,
 }: {
   rate: ContractorRatePublic
   canUpdate: boolean
+  canCreate?: boolean
+  onAfterMutation?: () => void
 }) {
   const stepIdx = rateStepperIndex(rate.status)
   const isTerminal = rate.status === "rejected" || rate.status === "cancelled"
+  const canUploadOpeningDraft = canAppendOpeningEvidence(rate) && (canCreate || canUpdate)
   return (
     <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
       <Card>
@@ -572,7 +928,7 @@ export function RateDetailPanel({
           </ol>
 
           {/* Rate facts */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Fact label="Base rate" value={formatMoney(rate.base_rate)} />
             <Fact label="Initial ask" value={formatMoney(rate.initial_rate)} />
             <Fact label="Agreed rate" value={formatMoney(rate.negotiated_rate)} strong />
@@ -585,7 +941,14 @@ export function RateDetailPanel({
               }
               strong
             />
+            <Fact label="Effective from" value={rate.effective_from} />
+            <Fact label="Effective to" value={rate.effective_to ?? "Open"} />
           </div>
+          <p className="text-xs text-muted-foreground">
+            Work orders use each line&apos;s <strong>work date</strong>: an <strong>approved</strong> negotiated
+            rate applies when that date falls between effective from and to (inclusive). Outside that window,
+            Part Master pricing applies (or another non-overlapping approved rate that covers the date).
+          </p>
 
           {/* Negotiation savings highlight (initial ask -> agreed). */}
           {rate.savings_amount !== null && Number(rate.savings_amount) > 0 ? (
@@ -614,6 +977,10 @@ export function RateDetailPanel({
             </div>
           ) : null}
 
+          {canUploadOpeningDraft ? (
+            <DraftOpeningEvidenceUploader rateId={rate.id} onUploaded={() => onAfterMutation?.()} />
+          ) : null}
+
           {/* Negotiation rounds */}
           <div>
             <div className="flex items-center justify-between">
@@ -631,7 +998,9 @@ export function RateDetailPanel({
             </div>
             {rate.rounds.length === 0 ? (
               <p className="mt-2 rounded-md border border-dashed bg-gray-50 p-3 text-xs text-muted-foreground">
-                No rounds yet. Add a counter-offer or proposal to start the discussion.
+                {rate.status === "draft"
+                  ? "No rounds yet. Add opening evidence above (before submit), or use Negotiate to record a proposal or counter-offer."
+                  : "No rounds yet. Add a counter-offer or proposal to start the discussion."}
               </p>
             ) : (
               <ol className="mt-2 space-y-2">
@@ -666,6 +1035,11 @@ export function RateDetailPanel({
                     <div className="mt-1 text-[11px] text-muted-foreground">
                       by {rnd.created_by_name ?? "System"}
                     </div>
+                    <NegotiationRoundAttachments
+                      rateId={rate.id}
+                      logId={rnd.id}
+                      items={rnd.attachments ?? []}
+                    />
                   </li>
                 ))}
               </ol>

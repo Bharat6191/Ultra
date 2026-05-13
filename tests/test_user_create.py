@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -40,7 +38,6 @@ def test_create_user_assigns_role_and_org(db: Session) -> None:
             full_name="Alice Example",
             username="alice.example",
             phone="+15550000001",
-            password="GoodPass1!",
             email="alice@example.com",
             role_id=role.id,
             org_unit_id=plant.id,
@@ -52,6 +49,30 @@ def test_create_user_assigns_role_and_org(db: Session) -> None:
     assert user.roles[0].id == role.id
     assert len(user.org_units) == 1
     assert user.org_units[0].id == plant.id
+
+
+def test_create_user_multiple_roles(db: Session) -> None:
+    plant = OrgUnit(name="Plant A", type="PLANT")
+    r1 = Role(name="Operator", description=None)
+    r2 = Role(name="Auditor", description=None)
+    db.add_all([plant, r1, r2])
+    db.commit()
+    db.refresh(plant)
+    db.refresh(r1)
+    db.refresh(r2)
+
+    svc = UserService(db)
+    user = svc.create_user(
+        UserCreate(
+            full_name="Bob Multi",
+            username="bob.multi",
+            phone="+15550000009",
+            email="bob@example.com",
+            role_ids=[r1.id, r2.id],
+            org_unit_id=plant.id,
+        )
+    )
+    assert sorted(r.id for r in user.roles) == sorted([r1.id, r2.id])
 
 
 def test_duplicate_phone_fails(db: Session) -> None:
@@ -68,7 +89,6 @@ def test_duplicate_phone_fails(db: Session) -> None:
             full_name="A",
             username="user.a",
             phone="+15550000002",
-            password="GoodPass1!",
             email="a@example.com",
             role_id=role.id,
             org_unit_id=plant.id,
@@ -80,7 +100,6 @@ def test_duplicate_phone_fails(db: Session) -> None:
                 full_name="B",
                 username="user.b",
                 phone="+15550000002",
-                password="GoodPass2!",
                 email="b@example.com",
                 role_id=role.id,
                 org_unit_id=plant.id,
@@ -103,7 +122,6 @@ def test_missing_role_fails(db: Session) -> None:
                 full_name="A",
                 username="user.missingrole",
                 phone="+15550000003",
-                password="GoodPass1!",
                 email="missingrole@example.com",
                 role_id=999,
                 org_unit_id=plant.id,

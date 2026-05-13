@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -48,6 +49,7 @@ type UserPublic = {
   address?: string | null
   is_active: boolean
   is_superuser: boolean
+  roles?: { id: number; name: string }[]
   role: { id: number; name: string } | null
   org_unit: { id: number; name: string; type: string } | null
   created_at: string
@@ -63,7 +65,7 @@ const editUserSchema = z.object({
   department: z.string().max(128).optional(),
   designation: z.string().max(128).optional(),
   address: z.string().max(5000).optional(),
-  role_id: z.string().min(1, "Role is required"),
+  role_ids: z.array(z.number()).min(1, "Select at least one role"),
   org_unit_id: z.string().min(1, "Plant is required"),
   is_active: z.boolean(),
 })
@@ -93,7 +95,7 @@ export function UserEditPage() {
       department: "",
       designation: "",
       address: "",
-      role_id: "",
+      role_ids: [] as number[],
       org_unit_id: "",
       is_active: true,
     },
@@ -104,10 +106,11 @@ export function UserEditPage() {
 
   React.useEffect(() => {
     if (!roles) return
-    const rid = form.getValues("role_id")
-    if (!rid) return
-    if (!rolesForPlant(roles, plantId).some((r) => String(r.id) === rid)) {
-      form.setValue("role_id", "")
+    const allowed = new Set(rolesForPlant(roles, plantId).map((r) => r.id))
+    const cur = form.getValues("role_ids")
+    const next = cur.filter((id) => allowed.has(id))
+    if (next.length !== cur.length) {
+      form.setValue("role_ids", next, { shouldValidate: true })
     }
   }, [plantId, roles, form])
 
@@ -149,7 +152,12 @@ export function UserEditPage() {
             department: u.department ?? "",
             designation: u.designation ?? "",
             address: u.address ?? "",
-            role_id: u.role?.id ? String(u.role.id) : "",
+            role_ids:
+              u.roles && u.roles.length > 0
+                ? u.roles.map((r) => r.id)
+                : u.role?.id != null
+                  ? [u.role.id]
+                  : [],
             org_unit_id: u.org_unit?.id ? String(u.org_unit.id) : "",
             is_active: u.is_active,
           })
@@ -169,10 +177,9 @@ export function UserEditPage() {
     setError(null)
     try {
       const email = values.email.trim()
-      const roleId = Number(values.role_id)
       const orgUnitId = Number(values.org_unit_id)
-      if (!Number.isFinite(roleId) || roleId <= 0) {
-        toast.error("Role is required", { id: "edit-user" })
+      if (!values.role_ids.length) {
+        toast.error("Select at least one role", { id: "edit-user" })
         return
       }
       if (!Number.isFinite(orgUnitId) || orgUnitId <= 0) {
@@ -188,7 +195,7 @@ export function UserEditPage() {
         department: values.department?.trim() || null,
         designation: values.designation?.trim() || null,
         address: values.address?.trim() || null,
-        role_id: roleId,
+        role_ids: values.role_ids,
         org_unit_id: orgUnitId,
         is_active: values.is_active,
       })
@@ -222,7 +229,7 @@ export function UserEditPage() {
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold tracking-tight">Edit user</h2>
-          <p className="text-sm text-muted-foreground">Update profile, plant, role, and status.</p>
+          <p className="text-sm text-muted-foreground">Update profile, plant, roles, and status.</p>
         </div>
         <Button asChild variant="outline" size="sm">
           <Link to="..">Back</Link>
@@ -307,7 +314,7 @@ export function UserEditPage() {
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 sm:col-span-2">
                   <Label>Plant</Label>
                   <select
                     className="h-9 w-full rounded-md border bg-background px-2 text-sm"
@@ -326,18 +333,35 @@ export function UserEditPage() {
                   ) : null}
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Role</Label>
-                  <select className="h-9 w-full rounded-md border bg-background px-2 text-sm" {...form.register("role_id")} disabled={user.is_superuser}>
-                    <option value="">Select a role…</option>
-                    {rolesForPlant(roles, plantId).map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                  {form.formState.errors.role_id?.message ? (
-                    <p className="text-xs text-destructive">{form.formState.errors.role_id.message}</p>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Roles</Label>
+                  <p className="text-xs text-muted-foreground">Select every role this user should have.</p>
+                  <div className="mt-2 max-h-52 space-y-2 overflow-y-auto rounded-md border border-input bg-muted/20 p-3">
+                    {rolesForPlant(roles, plantId).length === 0 ? (
+                      <p className="text-xs text-muted-foreground">Pick a plant to see roles.</p>
+                    ) : (
+                      rolesForPlant(roles, plantId).map((r) => {
+                        const checked = form.watch("role_ids").includes(r.id)
+                        return (
+                          <label key={r.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                            <Checkbox
+                              checked={checked}
+                              disabled={user.is_superuser}
+                              onCheckedChange={(v) => {
+                                const on = v === true
+                                const cur = form.getValues("role_ids")
+                                const next = on ? [...new Set([...cur, r.id])] : cur.filter((id) => id !== r.id)
+                                form.setValue("role_ids", next, { shouldDirty: true, shouldValidate: true })
+                              }}
+                            />
+                            <span>{r.name}</span>
+                          </label>
+                        )
+                      })
+                    )}
+                  </div>
+                  {form.formState.errors.role_ids?.message ? (
+                    <p className="text-xs text-destructive">{String(form.formState.errors.role_ids.message)}</p>
                   ) : null}
                 </div>
 

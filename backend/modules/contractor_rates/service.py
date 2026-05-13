@@ -5,6 +5,14 @@ approval-engine integration stay consistent.
 
 Business invariants enforced here:
 
+* Only one **negotiation thread** per ``(contractor_id, part_master_id)`` at a time:
+  while a row exists in ``draft``, ``pending_approval``, ``rejected``, or a
+  **current** ``approved`` window (``effective_to`` is null or not before today),
+  ``create_rate`` is rejected — continue the existing record (new rounds, remarks,
+  attachments) instead of inserting another negotiation.
+* New ``contractor_rate`` rows for the same pair are allowed only after prior rows
+  are ``cancelled``, ``expired``, or ``approved`` with an ``effective_to`` strictly
+  before today (historical generation).
 * Only one ACTIVE (``status='approved'``) ``contractor_rate`` can exist per
   ``(contractor_id, part_master_id)`` at a time.
 * Approving a rate auto-deactivates any previously approved rate for the same
@@ -20,6 +28,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
 from typing import Any, Iterable
 
 from sqlalchemy import and_, func, or_, select
@@ -38,6 +47,7 @@ from modules.contractor_rates.models import (
 )
 from modules.contractor_rates.schema import ContractorRateCreate, ContractorRateUpdate, NegotiationRoundCreate
 from modules.part_master.models import PartMaster
+from modules.part_master.storage import negotiation_attachment_abs_path, save_negotiation_attachment
 from modules.errors import ConflictError, NotFoundError
 from modules.org_units.hierarchy import collect_plant_ids_under_scope
 from modules.org_units.model import OrgUnit
@@ -168,6 +178,38 @@ class ContractorRateService:
                     "An approved rate already exists for this contractor/rate combination "
                     "in the requested date range."
                 )
+
+    _NEGOTIATION_THREAD_BLOCKING_STATUSES = frozenset({"draft", "pending_approval", "rejected"})
+
+    def _active_negotiation_thread_for_part(
+        self, contractor_id: int, part_master_id: int, *, today: date | None = None
+    ) -> ContractorRate | None:
+        """Return a ``ContractorRate`` row that must be continued instead of ``create_rate``.
+
+        A thread is **active** when the row is not ``cancelled`` / ``expired``, and either
+        it is in-flight (draft / pending / rejected) or it is ``approved`` with a rate
+        window that still includes ``today`` (open-ended or ``effective_to`` >= today).
+        """
+        today = today or date.today()
+        stmt = (
+            select(ContractorRate)
+            .where(
+                ContractorRate.contractor_id == int(contractor_id),
+                ContractorRate.part_master_id == int(part_master_id),
+            )
+            .order_by(ContractorRate.id.desc())
+        )
+        for row in self._db.scalars(stmt).all():
+            st = str(row.status).lower()
+            if st in ("cancelled", "expired"):
+                continue
+            if st in self._NEGOTIATION_THREAD_BLOCKING_STATUSES:
+                return row
+            if st == "approved":
+                et = row.effective_to
+                if et is None or et >= today:
+                    return row
+        return None
 
     # --- public-shape helper ---
 
@@ -321,6 +363,15 @@ class ContractorRateService:
         self._ensure_contractor(int(payload.contractor_id))
         rm = self._ensure_part_master(int(payload.part_master_id))
         self._validate_dates(payload.effective_from, payload.effective_to)
+
+        clash = self._active_negotiation_thread_for_part(int(payload.contractor_id), int(rm.id))
+        if clash is not None:
+            raise ConflictError(
+                "A negotiation already exists for this contractor and part "
+                f"(rate #{int(clash.id)}, status {clash.status}). "
+                "Open that negotiation to add rounds, remarks, and attachments, "
+                "or wait until it is expired or cancelled before starting a new record."
+            )
 
         prev = self._last_approved_rate(int(payload.contractor_id), int(rm.id))
         previous_rate: Decimal | None = (
@@ -579,6 +630,20 @@ class ContractorRateService:
         )
         return self.add_negotiation_round(rate_id, payload, actor_user_id=actor_user_id)
 
+    def _opening_evidence_log_for_more_files(self, row: ContractorRate) -> NegotiationLog | None:
+        """If round 1 (opening evidence) already exists, return it so more files can attach."""
+        if row.status != "draft":
+            return None
+        logs = list(row.negotiation_logs or [])
+        if len(logs) != 1:
+            return None
+        log = logs[0]
+        if int(log.round_number or 0) != 1:
+            return None
+        if (log.round_summary or "").strip() != "Opening evidence":
+            return None
+        return log
+
     def upload_opening_evidence(
         self,
         rate_id: int,
@@ -588,7 +653,14 @@ class ContractorRateService:
     ) -> tuple[NegotiationLog, list[NegotiationAttachment]]:
         if not files:
             raise ConflictError("At least one file is required for opening evidence.")
-        log = self.seed_opening_evidence_round(rate_id, actor_user_id=actor_user_id)
+        row = self.get_rate(rate_id)
+        if row.status != "draft":
+            raise ConflictError(
+                "Opening evidence can only be added to draft negotiations that have no rounds yet."
+            )
+        log = self._opening_evidence_log_for_more_files(row)
+        if log is None:
+            log = self.seed_opening_evidence_round(rate_id, actor_user_id=actor_user_id)
         saved: list[NegotiationAttachment] = []
         for filename, content, content_type in files:
             saved.append(
@@ -618,8 +690,6 @@ class ContractorRateService:
         if log is None or int(log.contractor_rate_id) != int(row.id):
             raise NotFoundError("NegotiationLog", log_id)
 
-        from modules.part_master.storage import save_negotiation_attachment
-
         path = save_negotiation_attachment(
             contractor_rate_id=int(row.id),
             round_id=int(log.id),
@@ -637,6 +707,24 @@ class ContractorRateService:
         self._db.commit()
         self._db.refresh(att)
         return att
+
+    def get_negotiation_attachment_file(
+        self, rate_id: int, log_id: int, attachment_id: int
+    ) -> tuple[NegotiationAttachment, Path]:
+        row = self.get_rate(rate_id)
+        log = self._db.get(NegotiationLog, int(log_id))
+        if log is None or int(log.contractor_rate_id) != int(row.id):
+            raise NotFoundError("NegotiationLog", log_id)
+        att = self._db.get(NegotiationAttachment, int(attachment_id))
+        if att is None or int(att.negotiation_log_id) != int(log.id):
+            raise NotFoundError("NegotiationAttachment", attachment_id)
+        try:
+            path = negotiation_attachment_abs_path(att.file_path)
+        except ValueError as exc:
+            raise NotFoundError("NegotiationAttachment", attachment_id) from exc
+        if not path.is_file():
+            raise NotFoundError("NegotiationAttachment", attachment_id)
+        return att, path
 
     # --- submit / cancel ---
 

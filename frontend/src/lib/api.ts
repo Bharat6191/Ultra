@@ -131,6 +131,19 @@ export async function postForm<TResponse>(
   return data as TResponse
 }
 
+/** Authenticated fetch (e.g. binary negotiation attachments). Caller checks ``res.ok``. */
+export async function authFetch(path: string, init?: RequestInit): Promise<Response> {
+  const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`
+  const token = getAccessToken()
+  return fetch(url, {
+    ...init,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
+  })
+}
+
 export async function patchJson<TResponse>(
   path: string,
   body: Json,

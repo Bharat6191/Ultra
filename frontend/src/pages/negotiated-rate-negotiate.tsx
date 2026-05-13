@@ -1,4 +1,5 @@
 import * as React from "react"
+import { File, FileImage, FileText } from "lucide-react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -20,6 +21,21 @@ type NegotiationRoundResponse = {
   round_number: number
 }
 
+const ATTACHMENT_ACCEPT = "image/*,.pdf,application/pdf"
+
+function attachmentKind(f: File): "image" | "pdf" | "other" {
+  if (f.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name)) return "image"
+  if (f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf")) return "pdf"
+  return "other"
+}
+
+function AttachmentRowIcon({ file }: { file: File }) {
+  const k = attachmentKind(file)
+  if (k === "image") return <FileImage className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+  if (k === "pdf") return <FileText className="size-4 shrink-0 text-red-700/80" aria-hidden />
+  return <File className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+}
+
 export function NegotiatedRateNegotiatePage() {
   const params = useParams()
   const navigate = useNavigate()
@@ -33,8 +49,20 @@ export function NegotiatedRateNegotiatePage() {
   const [agreedRate, setAgreedRate] = React.useState("")
   const [remarks, setRemarks] = React.useState("")
   const [attachments, setAttachments] = React.useState<File[]>([])
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const [imagePreviews, setImagePreviews] = React.useState<{ url: string; name: string }[]>([])
   const [saving, setSaving] = React.useState(false)
   const [saveError, setSaveError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    const next = attachments
+      .filter((f) => attachmentKind(f) === "image")
+      .map((f) => ({ url: URL.createObjectURL(f), name: f.name }))
+    setImagePreviews(next)
+    return () => {
+      for (const p of next) URL.revokeObjectURL(p.url)
+    }
+  }, [attachments])
 
   const load = React.useCallback(async () => {
     if (!Number.isFinite(rateId)) return
@@ -75,7 +103,7 @@ export function NegotiatedRateNegotiatePage() {
       })
       for (const f of attachments) {
         const fd = new FormData()
-        fd.append("file", f)
+        fd.append("file", f, f.name)
         await postForm(`/contractor-rates/${rate.id}/negotiation-logs/${round.id}/attachments`, fd)
       }
       toast.success(
@@ -207,6 +235,18 @@ export function NegotiatedRateNegotiatePage() {
               <span>Round</span>
               <span>{rate.current_round + 1} (next)</span>
             </div>
+            <div className="flex justify-between gap-2 border-t pt-2">
+              <span className="text-muted-foreground">Effective from</span>
+              <span className="font-medium tabular-nums">{rate.effective_from}</span>
+            </div>
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">Effective to</span>
+              <span className="font-medium tabular-nums">{rate.effective_to ?? "Open end"}</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Work order lines use their work date within this window to resolve the negotiated rate. Change
+              dates on the rate detail page if needed.
+            </p>
           </CardContent>
         </Card>
 
@@ -217,7 +257,8 @@ export function NegotiatedRateNegotiatePage() {
               One rate field, optional remarks, and optional evidence files (multiple uploads allowed).
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4">
+          <CardContent>
+            <div className="grid gap-4">
             <div className="grid gap-1">
               <Label>Agreed rate</Label>
               <Input
@@ -257,27 +298,43 @@ export function NegotiatedRateNegotiatePage() {
                   </Button>
                 ) : null}
               </div>
-              <Input
-                type="file"
-                multiple
-                onChange={(e) => {
-                  const next = Array.from(e.target.files ?? [])
-                  if (next.length) {
-                    setAttachments((prev) => {
-                      const merged = [...prev, ...next]
-                      const seen = new Set<string>()
-                      return merged.filter((f) => {
-                        const k = `${f.name}:${f.size}`
-                        if (seen.has(k)) return false
-                        seen.add(k)
-                        return true
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={ATTACHMENT_ACCEPT}
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-hidden
+                  onChange={(e) => {
+                    const next = Array.from(e.target.files ?? [])
+                    if (next.length) {
+                      setAttachments((prev) => {
+                        const merged = [...prev, ...next]
+                        const seen = new Set<string>()
+                        return merged.filter((f) => {
+                          const k = `${f.name}:${f.size}`
+                          if (seen.has(k)) return false
+                          seen.add(k)
+                          return true
+                        })
                       })
-                    })
-                  }
-                  e.target.value = ""
-                }}
-                className="cursor-pointer text-sm file:mr-3 file:rounded-md file:border file:bg-muted file:px-3 file:py-1 file:text-xs"
-              />
+                    }
+                    e.target.value = ""
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Add files…
+                </Button>
+                <span className="text-xs text-muted-foreground">Images and PDFs · multi-select</span>
+              </div>
               {attachments.length > 0 ? (
                 <ul className="max-h-40 space-y-1.5 overflow-y-auto rounded-lg border bg-muted/30 p-2 text-sm">
                   {attachments.map((f, i) => (
@@ -285,9 +342,15 @@ export function NegotiatedRateNegotiatePage() {
                       key={`${f.name}-${f.size}-${i}`}
                       className="flex items-center justify-between gap-2 rounded-md bg-background px-2 py-1.5"
                     >
-                      <span className="min-w-0 truncate" title={f.name}>
-                        {f.name}
-                      </span>
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <AttachmentRowIcon file={f} />
+                        <span className="min-w-0 truncate font-medium" title={f.name}>
+                          {f.name}
+                        </span>
+                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
+                          {attachmentKind(f)}
+                        </span>
+                      </div>
                       <span className="shrink-0 text-xs text-muted-foreground">
                         {(f.size / 1024).toFixed(f.size < 10240 ? 1 : 0)} KB
                       </span>
@@ -304,6 +367,18 @@ export function NegotiatedRateNegotiatePage() {
                   ))}
                 </ul>
               ) : null}
+              {imagePreviews.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {imagePreviews.map((p) => (
+                    <div key={p.url} className="overflow-hidden rounded-md border bg-muted/40">
+                      <img src={p.url} alt="" className="h-28 w-full object-cover" title={p.name} />
+                      <p className="truncate px-1.5 py-1 text-[10px] text-muted-foreground" title={p.name}>
+                        {p.name}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
             {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
             <div className="flex flex-wrap gap-2">
@@ -313,6 +388,7 @@ export function NegotiatedRateNegotiatePage() {
               <Button type="button" variant="outline" asChild>
                 <Link to={`/dashboard/negotiated-rates/${rate.id}`}>Cancel</Link>
               </Button>
+            </div>
             </div>
           </CardContent>
         </Card>

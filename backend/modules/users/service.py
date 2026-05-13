@@ -17,7 +17,7 @@ from modules.rbac_audit.service import RbacAuditService
 from modules.rbac_safety import (
     assert_did_not_remove_last_role_based_admin,
     assert_self_role_assign_keeps_users_view,
-    assert_self_role_update_keeps_users_view,
+    assert_self_role_ids_replacement_keeps_users_view,
     count_superusers,
     count_users_with_admin_capability,
 )
@@ -86,9 +86,15 @@ class UserService:
                 if existing_emp is not None:
                     raise DuplicateEmployeeCodeError
 
-        role = self._db.get(Role, data.role_id)
-        if role is None:
-            raise NotFoundError("Role", data.role_id)
+        resolved_role_ids = list(data.role_ids or [])
+        if not resolved_role_ids:
+            raise ValueError("Provide role_id or role_ids with at least one role")
+        roles: list[Role] = []
+        for rid in resolved_role_ids:
+            role = self._db.get(Role, int(rid))
+            if role is None:
+                raise NotFoundError("Role", int(rid))
+            roles.append(role)
 
         org = self._db.get(OrgUnit, data.org_unit_id)
         if org is None:
@@ -112,7 +118,8 @@ class UserService:
             password_changed_at=now,
             is_active=True,
         )
-        user.roles.append(role)
+        for role in roles:
+            user.roles.append(role)
         self._db.add(user)
         self._db.flush()
 
@@ -130,7 +137,7 @@ class UserService:
             target_id=user.id,
             action="assign",
             old_value=None,
-            new_value={"role_ids": [role.id], "role_names": [role.name]},
+            new_value={"role_ids": [int(r.id) for r in roles], "role_names": [r.name for r in roles]},
         )
         bump_user_permission_version(self._db, user.id)
 
@@ -149,7 +156,8 @@ class UserService:
                     "username": user.username,
                     "phone": user.phone,
                     "email": user.email,
-                    "role_id": role.id,
+                    "role_id": int(roles[0].id),
+                    "role_ids": [int(r.id) for r in roles],
                     "org_unit_id": org.id,
                     # If MFA is enforced, setup email will be sent after approval anyway.
                     # We keep the temporary password so it can be emailed after approval.
@@ -285,19 +293,31 @@ class UserService:
             user.is_active = bool(updates["is_active"])
 
         role_changed = False
-        if "role_id" in updates and updates["role_id"] is not None:
-            role = self._db.get(Role, int(updates["role_id"]))
-            if role is None:
-                raise NotFoundError("Role", int(updates["role_id"]))
+        new_role_ids: list[int] | None = None
+        if "role_ids" in updates and updates["role_ids"] is not None:
+            new_role_ids = sorted({int(x) for x in updates["role_ids"] if int(x) >= 1})
+        elif "role_id" in updates and updates["role_id"] is not None:
+            new_role_ids = [int(updates["role_id"])]
+
+        if new_role_ids is not None:
+            if not new_role_ids:
+                raise ValueError("At least one role is required")
             old_ids = sorted({r.id for r in user.roles})
-            assert_self_role_update_keeps_users_view(
+            assert_self_role_ids_replacement_keeps_users_view(
                 self._db,
                 actor_user_id=actor_user_id,
                 target_user_id=user_id,
-                new_role_id=role.id,
+                new_role_ids=new_role_ids,
             )
+            roles: list[Role] = []
+            for rid in new_role_ids:
+                role = self._db.get(Role, int(rid))
+                if role is None:
+                    raise NotFoundError("Role", int(rid))
+                roles.append(role)
             user.roles.clear()
-            user.roles.append(role)
+            for role in roles:
+                user.roles.append(role)
             role_changed = True
             audit = RbacAuditService(self._db)
             audit.log(
@@ -306,7 +326,10 @@ class UserService:
                 target_id=user_id,
                 action="update",
                 old_value={"role_ids": old_ids},
-                new_value={"role_ids": [role.id], "role_names": [role.name]},
+                new_value={
+                    "role_ids": [int(r.id) for r in roles],
+                    "role_names": [r.name for r in roles],
+                },
             )
 
         if "org_unit_id" in updates and updates["org_unit_id"] is not None:

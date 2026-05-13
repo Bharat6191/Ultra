@@ -48,6 +48,28 @@ export default defineConfig({
           return undefined
         },
       },
+      // App API (when VITE_API_URL is unset, the SPA calls these paths on the dev server).
+      '/contractor-rates': { target: 'http://localhost:8000', changeOrigin: true },
+      '/contractors': { target: 'http://localhost:8000', changeOrigin: true },
+      '/part-master': { target: 'http://localhost:8000', changeOrigin: true },
+      '/uploads': { target: 'http://localhost:8000', changeOrigin: true },
+      '/invoices': { target: 'http://localhost:8000', changeOrigin: true },
+      '/work-orders': { target: 'http://localhost:8000', changeOrigin: true },
+      '/tasks': { target: 'http://localhost:8000', changeOrigin: true },
+      '/dashboard': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        bypass: (req) => {
+          const path = (req.url ?? '').split('?')[0] ?? ''
+          // Only `/dashboard/summary` is the FastAPI route; all other `/dashboard/*` is the SPA.
+          if (path === '/dashboard/summary') return undefined
+          if (path.startsWith('/dashboard')) return req.url
+          return undefined
+        },
+      },
+      '/auth': { target: 'http://localhost:8000', changeOrigin: true },
+      '/forgot-password': { target: 'http://localhost:8000', changeOrigin: true },
+      '/reset-password': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
   resolve: {

@@ -5,6 +5,7 @@ This document describes the work completed so far in this repo:
 - **Backend**: RBAC with dotted permission codes, `org_units` (Plants) as its own module, strict route guards, and **OR**-style guards where one API serves multiple workflows.
 - **Frontend**: **User workspace** (`/login` → `/dashboard/*`) with RBAC-gated sidebar; **Superadmin console** (`/admin/login` → `/admin/*`) superuser-only; shared JWT + `/me` permission snapshot in `localStorage`.
 - **Dev ergonomics**: Vite proxy so browser `GET /login` does not hit FastAPI.
+- **Recent (§14)**: Negotiated-rate **effective dates** and **catalog UX**, **work-order line pricing** vs `work_date`, **one thread per contractor + part**, **negotiation attachments / SPA remount** fixes, and **edit clusters & plants** in the catalog.
 
 ---
 
@@ -96,7 +97,7 @@ This keeps **plant CRUD** under **`org_units.*`** while allowing **user/role ass
 | Admin layout | `frontend/src/components/layout/admin-layout.tsx` |
 | Permission gate | `frontend/src/components/admin/require-permission.tsx` |
 | Users UI | `frontend/src/pages/users.tsx` — **View** (read-only dialog), **Edit** only with **`users.update`**; plant column and pickers aligned with **`canListOrgUnitsForAssignments`**; table/header styling for workspace |
-| Plants UI | `frontend/src/pages/plants.tsx` — create uses **`org_units.create`** |
+| Plants UI | `frontend/src/pages/plants.tsx` — **Catalog** lists plants/clusters; **New cluster** / **New plant** need **`org_units.create`**; **Attach plant** and **Edit** (dialog: name + parent) need **`org_units.update`**; cluster **Edit** parent list excludes self + descendants (cycle avoidance in UI) |
 | Roles UI | `frontend/src/pages/roles.tsx` — plant lists when **`canListOrgUnitsForAssignments`** |
 
 ---
@@ -701,4 +702,126 @@ The same plumbing also gives nicer titles + an "Open contractor" link for
 - rejection: workflow rejection flips rate to `rejected` and writes `REJECTED` audit.
 - overlap protection: submission rejects overlapping approved date ranges for the same combo.
 - aggregate summary: counters + total savings.
+
+---
+
+## 14) Recent product refinements (negotiated rates, work orders, org hierarchy)
+
+This section documents incremental work layered on top of §13 and related modules: **effective dating** for negotiations, **work-order pricing** tied to dates, **single active negotiation thread** per contractor + part, **catalog UX** on the standalone “new negotiation” flow, and **editable clusters/plants** in the admin/workspace catalog.
+
+### 14.1 Effective dates on new negotiations (`/dashboard/negotiated-rates/new`)
+
+**Purpose:** When starting a negotiation, operators set **when** the negotiated price may apply to operational data (work orders). The backend already accepted `effective_from` / `effective_to` on `POST /contractor-rates` (`ContractorRateCreate` in `backend/modules/contractor_rates/schema.py`).
+
+**Workspace routes** (`frontend/src/App.tsx`, nested under **`/dashboard/negotiated-rates`**):
+
+| Path | Page component | Route permission |
+|------|----------------|------------------|
+| `/` (index) | `NegotiatedRatesPage` | any of `contractor_rates.view` \| `.create` \| `.update` \| `.approve` |
+| `/new` | `NegotiatedRateNewPage` | `contractor_rates.create` |
+| `/:rateId` | `NegotiatedRateDetailPage` | `contractor_rates.view` |
+| `/:rateId/negotiate` | `NegotiatedRateNegotiatePage` | `contractor_rates.update` |
+
+**Frontend (`frontend/src/pages/negotiated-rate-new.tsx`):**
+
+- **Form fields** on the **Rates & notes** card:
+  - **Effective from** — required `type="date"` input (defaults via `EMPTY_RATE_FORM` in `ContractorRateDialog.tsx`: today’s ISO date).
+  - **Effective to (optional)** — `type="date"`; empty means open-ended (`null` in JSON).
+- **Validation:** `canSave` requires a non-empty `effective_from` and, if `effective_to` is set, **`effective_to >= effective_from`** (string compare on ISO dates is valid). The “to” input uses `min={form.effective_from}` for native browser hints.
+- **Submit payload:** `postJson` sends `effective_from`, `effective_to: form.effective_to.trim() ? trimmed : null`, plus existing fields (`contractor_id`, `part_master_id`, `negotiated_rate`, `initial_rate`, `remarks`, etc.).
+- **Copy / density:** Long instructional paragraphs were reduced; **work-order behavior** is summarized in **`SectionHint`** (help icon `title`/`aria-label`) and short **`title` attributes on labels** where needed. **Attachments** use a **`sr-only`** sentence for screen readers instead of a visible wall of text.
+- **Layout:** The page uses a **full-bleed** pattern relative to `AppShellLayout` main padding (`w-[calc(100%+2rem)] -mx-4 px-4` stepping up at `sm`/`lg`) so the two-column layout uses the **full content width**. The grid is **`lg:grid-cols-2`** (equal columns) instead of `xl:grid-cols-12` with two `col-span-5` columns (which wasted horizontal space).
+
+**Related:** `NewNegotiationDialog` in `frontend/src/components/contractors/ContractorRateDialog.tsx` already exposed the same date fields for in-context creation from contractor screens.
+
+### 14.2 Negotiate page — effective window in context (`/dashboard/negotiated-rates/:rateId/negotiate`)
+
+**File:** `frontend/src/pages/negotiated-rate-negotiate.tsx`.
+
+- The **Context** card (left column) now lists **Effective from**, **Effective to** (or **Open end**), plus a short note that **work order lines** resolve the negotiated rate using **line work dates** inside that window, and that **changing the window** is done on the **rate detail** page (negotiation rounds do not PATCH `effective_from`/`effective_to` via the round API — only the agreed rate / remarks / attachments per round).
+
+### 14.3 Work orders: which negotiated rate applies (`work_date` vs effective window)
+
+**Backend (`backend/modules/work_orders/service.py`):**
+
+- **`_resolve_rate_for(contractor_id, part_master_id, work_date)`** returns `(rate: Decimal, source: str, contractor_rate_id | None)`.
+  - It selects **approved** `ContractorRate` rows where **`effective_from <= work_date`** and **`coalesce(effective_to, 9999-12-31) >= work_date`** (open-ended `effective_to` is treated as far-future).
+  - **Tie-break:** `ORDER BY effective_from DESC`, then **`approved_at DESC NULLS LAST`**, then **`id DESC`** so the **newest applicable window** wins when multiple approved rows overlap in theory.
+  - If no negotiated row matches, it falls back to the **Part Master** baseline with the same **`work_date`** checks against the part master’s own `effective_from` / `effective_to` and `is_active`.
+- **`update_draft`:** When a draft work order’s **`work_date`** changes (including **only** that field), **line unit rates are recomputed** via `_resolve_rate_for` so totals stay aligned with the new date without manual line edits.
+
+**Frontend:** Work order create/detail/execution surfaces expose **work date** (header and/or lines) where it drives which negotiated rate applies.
+
+**Tests:** `tests/test_work_orders_and_invoices.py` — **work-date-only** draft update repricing.
+
+### 14.4 One negotiation thread per contractor + part
+
+**Rule:** While an **active** negotiation exists for a given **`(contractor_id, part_master_id)`** (same **part master** / rate card identity via `ContractorRate.part_master_id`), **`create_rate`** must **not** open a second record; users continue the existing thread (new rounds, submit, etc.).
+
+**Backend (`backend/modules/contractor_rates/service.py`):**
+
+- **`_NEGOTIATION_THREAD_BLOCKING_STATUSES`** — `draft`, `pending_approval`, `rejected` always block a new `create_rate`.
+- **`_active_negotiation_thread_for_part(contractor_id, part_master_id, today=...)`** scans matching rates (newest `id` first), skips `cancelled` / `expired`, returns the first blocking row: any in-flight status above, or **`approved`** whose window still covers **`today`** (`effective_to is None` or **`effective_to >= today`**).
+- **`create_rate`** calls that helper; on hit it raises **`ConflictError`** (surfaced as **409** to the client).
+
+**Frontend:**
+
+- **`isActiveNegotiationThreadRow`** + **`buildThreadsByPartMasterId`** in `negotiated-rate-new.tsx` mirror the same idea for UX: parts with an active thread appear under **“Already under negotiation”** with **View existing** → `/dashboard/negotiated-rates/:id`.
+- **`tests/test_contractor_rates.py`:** thread-blocking scenarios; creating again allowed after a prior approved thread’s window has **ended** (and related lifecycle cases). Older “overlap on submit” expectations were reconciled with the new create-time rule where applicable.
+
+### 14.5 Negotiation attachments & SPA stability (summary)
+
+- **Draft opening evidence** and **round attachments** use **multipart** uploads; the **new negotiation** page avoids a native **`<form>`** wrapper around the rates card so implicit submit / browser quirks do not **full-page reload** the SPA when interacting with file inputs.
+- After **`POST /contractor-rates`** creates a draft, staged files on the new page are uploaded with **`POST /contractor-rates/{id}/opening-evidence`** (one request per file; seeds **round 1** as opening evidence — see `router_app.py` docstring).
+- **`frontend/src/App.tsx`:** The **`Outlet`** remount key (`profileTick`) is tied to a **signature** of **`/me`** fields that matter for permissions (e.g. permission codes, email, superuser flag), **not** to every focus/visibility refresh — this prevents **remounting** the route tree on benign **`/me`** refetches, which was **wiping unstaged file picker state**.
+- **Preview:** Attachment **View** uses a **large dialog** (`max-w` / height tuned for PDF iframe and images). Shared patterns appear in **`negotiated-rate-new.tsx`** and **`ContractorRatesPanel.tsx`**.
+
+### 14.6 Clusters & plants — edit in catalog (`/dashboard/plants`)
+
+**Prior behavior:** `frontend/src/pages/plants.tsx` only supported **create** (tabs **New cluster** / **New plant**) and **Attach plant** (PATCH `parent_id` only). The **Catalog** tables were read-only.
+
+**Current behavior:**
+
+- Users with **`org_units.update`** (or superuser) see an **Actions** column on both **Plants** and **Clusters** tables with an **Edit** control.
+- **Edit** opens a **`Dialog`** (`DialogContent` ~`sm:max-w-md`) with:
+  - **Name** — trimmed string, required before save.
+  - **Parent** — for **PLANT**, optional **cluster** parent (same as create: only `CLUSTER` type allowed when set; `null` = unassigned). For **CLUSTER**, optional **parent cluster** (`null` = root cluster).
+- **Save** calls **`PATCH /admin/org-units/{id}`** with `{ name, parent_id }`, matching `OrgUnitPatch` and `OrgUnitService.update_org_unit` (`backend/modules/org_units/service.py`), which reuses **`validate_org_unit_parent`** (`backend/modules/org_units/hierarchy.py`).
+- **Cycle avoidance (UI only):** When editing a **cluster**, the parent `<select>` excludes **that cluster’s id and every cluster nested under it** (BFS subtree from `parent_id` links). The API does not implement full cycle detection beyond type checks; the UI prevents the common foot-gun.
+- **Copy:** The page intro mentions **editing in the catalog** and permissions (**`org_units.update`** vs **`org_units.create`**).
+
+**Table layout:** Loading/empty row **`colSpan`** accounts for the optional Actions column (`catalogColSpan`).
+
+### 14.7 Rate detail panel — effective window vs work orders (UX)
+
+**File:** `frontend/src/components/contractors/ContractorRatesPanel.tsx` (`RateDetailPanel` / facts section).
+
+- Surfaces **Effective from** / **Effective to** read-only facts for the selected `ContractorRatePublic`.
+- Short note for operators: **work orders** resolve the negotiated price from **line `work_date`** falling **inside** the inclusive **[`effective_from`, `effective_to`]** window (with open end when `effective_to` is null), consistent with §14.3.
+
+### 14.8 API quick reference (this slice)
+
+| Action | Method | Path | Permission |
+|--------|--------|------|--------------|
+| Create negotiation | `POST` | `/contractor-rates` | `contractor_rates.create` |
+| Upload opening evidence (draft) | `POST` | `/contractor-rates/{id}/opening-evidence` | `contractor_rates.create` **or** `contractor_rates.update` |
+| Add negotiation round | `POST` | `/contractor-rates/{id}/negotiate` | `contractor_rates.update` |
+| Patch org unit (name/parent) | `PATCH` | `/admin/org-units/{id}` | `org_units.update` |
+| List plants / clusters | `GET` | `/admin/org-units?type=PLANT` / `?type=CLUSTER` | OR-list on router (see §1) |
+
+### 14.9 Primary files touched (this slice)
+
+| Layer | Files |
+|-------|--------|
+| Frontend — negotiated rates | `frontend/src/pages/negotiated-rate-new.tsx`, `negotiated-rate-negotiate.tsx`, `negotiated-rates.tsx` (as needed for links), `negotiated-rate-detail.tsx` (props to panel), `frontend/src/components/contractors/ContractorRatesPanel.tsx`, `ContractorRateDialog.tsx`, `frontend/src/App.tsx` |
+| Frontend — plants | `frontend/src/pages/plants.tsx` |
+| Backend — rates / WO | `backend/modules/contractor_rates/service.py`, `backend/modules/work_orders/service.py` |
+| Backend — org units | `backend/modules/org_units/service.py`, `schema.py`, `hierarchy.py`, `router.py` (PATCH already existed) |
+| Tests | `tests/test_contractor_rates.py`, `tests/test_work_orders_and_invoices.py` |
+
+---
+
+## Document maintenance
+
+When adding features, extend this file with a new numbered subsection (or nested bullets under the closest domain section) and list **entry routes**, **permissions**, **primary API methods**, **key files**, and **tests** so future readers can trace behavior end-to-end.
 

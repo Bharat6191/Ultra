@@ -15,6 +15,7 @@ Endpoints exposed:
     * PATCH  /contractor-rates/{id}      -- update draft (negotiated_rate / dates / remarks)
   * POST   /contractor-rates/{id}/negotiate  -- add a round
   * POST   /contractor-rates/{id}/negotiation-logs/{log_id}/attachments  -- upload round file
+  * GET    /contractor-rates/{id}/negotiation-logs/{log_id}/attachments/{aid}/content  -- view/download (auth)
   * POST   /contractor-rates/{id}/submit     -- submit for approval (or auto-approve)
     * POST   /contractor-rates/{id}/cancel     -- cancel draft / pending / rejected
     * GET    /contractor-rates/{id}/timeline   -- merged audit + rounds + approvals
@@ -23,10 +24,11 @@ Endpoints exposed:
 
 from __future__ import annotations
 
+import inspect
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile, status
-from starlette.datastructures import UploadFile as StarletteUploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from core.auth import CurrentUser, get_current_user
@@ -55,6 +57,55 @@ from modules.users.model import User
 
 router = APIRouter(tags=["app", "contractor_rates"])
 
+
+def _require_multipart(request: Request) -> None:
+    """Browsers send ``multipart/form-data; boundary=…`` — do not require an exact match."""
+    ct = (request.headers.get("content-type") or "").lower()
+    if "multipart/form-data" not in ct:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="multipart/form-data required",
+        )
+
+
+async def _multipart_upload_parts(form: Any) -> list[tuple[str, bytes, str | None]]:
+    """
+    Collect ``(filename, bytes, content_type)`` from multipart fields.
+
+    Accepts repeated ``file``, ``files``, or a single ``file`` / ``files`` entry.
+    Skips plain string fields. Does not rely on a specific UploadFile subclass.
+    """
+    raw: list[Any] = list(form.getlist("file"))
+    if not raw:
+        raw = list(form.getlist("files"))
+    if not raw:
+        one = form.get("file")
+        if one is not None:
+            raw = [one]
+    if not raw:
+        one = form.get("files")
+        if one is not None:
+            raw = [one]
+    if not raw and hasattr(form, "multi_items"):
+        for key, u in form.multi_items():
+            if key in ("file", "files") and not isinstance(u, str):
+                raw.append(u)
+
+    out: list[tuple[str, bytes, str | None]] = []
+    for u in raw:
+        if isinstance(u, str):
+            continue
+        read = getattr(u, "read", None)
+        if read is None:
+            continue
+        if inspect.iscoroutinefunction(read):
+            data = await read()
+        else:
+            data = read()
+        fn = getattr(u, "filename", None) or "attachment"
+        ct = getattr(u, "content_type", None)
+        out.append((fn, data, ct))
+    return out
 
 
 def _get_rate_service(db: Annotated[Session, Depends(get_db)]) -> ContractorRateService:
@@ -184,21 +235,11 @@ async def upload_opening_evidence(
     current: Annotated[CurrentUser, Depends(get_current_user)],
 ) -> OpeningEvidenceUploadResult:
     """For a brand-new draft (no negotiation rounds yet), create round 1 and attach files."""
-    content_type_hdr = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
-    if content_type_hdr != "multipart/form-data":
-        raise HTTPException(status_code=422, detail="multipart/form-data required")
+    _require_multipart(request)
     form = await request.form()
-    uploads = form.getlist("file")
-    if not uploads:
-        raise HTTPException(status_code=422, detail="at least one file is required (field name: file)")
-    parsed: list[tuple[str, bytes, str | None]] = []
-    for u in uploads:
-        if not isinstance(u, (UploadFile, StarletteUploadFile)):
-            continue
-        raw = await u.read()
-        parsed.append((u.filename or "attachment", raw, getattr(u, "content_type", None)))
+    parsed = await _multipart_upload_parts(form)
     if not parsed:
-        raise HTTPException(status_code=422, detail="at least one valid file upload is required")
+        raise HTTPException(status_code=422, detail="at least one file is required (field name: file)")
     try:
         log, saved = svc.upload_opening_evidence(
             rate_id,
@@ -288,28 +329,48 @@ async def upload_negotiation_attachment(
     svc: Annotated[ContractorRateService, Depends(_get_rate_service)],
     current: Annotated[CurrentUser, Depends(get_current_user)],
 ) -> NegotiationAttachmentPublic:
-    content_type_hdr = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
-    if content_type_hdr != "multipart/form-data":
-        raise HTTPException(status_code=422, detail="multipart/form-data required")
+    _require_multipart(request)
     form = await request.form()
-    upload = form.get("file") or form.get("upload") or form.get("attachment")
-    if upload is None:
+    parsed = await _multipart_upload_parts(form)
+    if not parsed:
         raise HTTPException(status_code=422, detail="file is required (multipart field name: file)")
-    if not isinstance(upload, (UploadFile, StarletteUploadFile)):
-        raise HTTPException(status_code=422, detail="file must be an uploaded file")
-    raw = await upload.read()
+    filename, raw, content_type = parsed[0]
     try:
         row = svc.add_negotiation_attachment(
             rate_id,
             log_id,
-            filename=upload.filename or "attachment",
+            filename=filename,
             content=raw,
-            content_type=getattr(upload, "content_type", None),
+            content_type=content_type,
             actor_user_id=int(current.subject),
         )
     except NotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return NegotiationAttachmentPublic.model_validate(row, from_attributes=True)
+
+
+@router.get(
+    "/contractor-rates/{rate_id:int}/negotiation-logs/{log_id:int}/attachments/{attachment_id:int}/content",
+    dependencies=[Depends(require_permission("contractor_rates.view"))],
+)
+def negotiation_attachment_content(
+    rate_id: int,
+    log_id: int,
+    attachment_id: int,
+    svc: Annotated[ContractorRateService, Depends(_get_rate_service)],
+) -> FileResponse:
+    """Return stored bytes for preview/download (images, PDF, etc.)."""
+    try:
+        att, path = svc.get_negotiation_attachment_file(rate_id, log_id, attachment_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    name = att.file_name or path.name
+    return FileResponse(
+        str(path),
+        media_type=att.content_type or "application/octet-stream",
+        filename=name,
+        content_disposition_type="inline",
+    )
 
 
 @router.post(

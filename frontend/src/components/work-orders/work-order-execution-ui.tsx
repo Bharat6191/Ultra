@@ -129,6 +129,9 @@ export function WorkOrderExecutionHeader(props: {
   onTitle: (v: string) => void
   onReference: (v: string) => void
   onOrgUnit: (v: string) => void
+  /** ISO date (yyyy-mm-dd). When set, the field is shown; editable only with ``onWorkDate``. */
+  work_date?: string
+  onWorkDate?: (v: string) => void
   /** Detail-only: overrides plant dropdown */
   plantLabel?: string
 }) {
@@ -142,14 +145,19 @@ export function WorkOrderExecutionHeader(props: {
     onTitle,
     onReference,
     onOrgUnit,
+    work_date,
+    onWorkDate,
     plantLabel,
   } = props
 
   const selectCls =
     "h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
 
+  const showWorkDate = work_date !== undefined
+  const workDateEditable = Boolean(editable && onWorkDate)
+
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <div className="grid gap-1.5">
         <Label htmlFor="wo-title">Title</Label>
         <Input
@@ -185,6 +193,31 @@ export function WorkOrderExecutionHeader(props: {
           </select>
         )}
       </div>
+      {showWorkDate ? (
+        <div className="grid gap-1.5">
+          <Label htmlFor="wo-work-date">Work date (rate pricing)</Label>
+          {workDateEditable ? (
+            <Input
+              id="wo-work-date"
+              type="date"
+              value={work_date}
+              onChange={(e) => onWorkDate?.(e.target.value)}
+              disabled={loading}
+              className={selectCls}
+            />
+          ) : (
+            <div className={cn(selectCls, "flex h-10 items-center text-muted-foreground tabular-nums")}>
+              {work_date || "—"}
+            </div>
+          )}
+          {workDateEditable ? (
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Line rates use the <strong>approved</strong> negotiated rate whose effective window contains this date;
+              otherwise Part Master applies.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
