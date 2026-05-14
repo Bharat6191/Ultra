@@ -213,8 +213,11 @@ export function InvoiceDetailPage() {
           (l.job_description ? `${l.job_description} · ` : "") +
           `Item #${l.work_order_item_id}`,
         qty: Number(l.quantity ?? 0),
+        weightKg:
+          l.weight_per_piece_kg != null && Number.isFinite(Number(l.weight_per_piece_kg))
+            ? Number(l.weight_per_piece_kg)
+            : null,
         unit: l.unit_label ?? l.unit_type ?? "—",
-        rateBasis: l.rate_basis_label ?? undefined,
         unitPrice: Number(l.unit_rate ?? l.rate ?? 0),
         taxable,
         lineTaxPct: Number.isFinite(tp) && tp > 0 ? tp : undefined,
@@ -291,12 +294,10 @@ export function InvoiceDetailPage() {
                 <TableHead className="w-[110px]">Work order</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right w-[72px]">Qty</TableHead>
+                <TableHead className="text-right w-[80px]">WT (kg)</TableHead>
                 <TableHead className="w-[56px]">Unit</TableHead>
                 <TableHead className="text-right">Unit rate</TableHead>
-                <TableHead className="w-[64px]">Basis</TableHead>
                 <TableHead className="text-right">Taxable</TableHead>
-                <TableHead className="text-right w-[56px]">Tax %</TableHead>
-                <TableHead className="text-right">Tax</TableHead>
                 <TableHead className="text-right">Incl. tax</TableHead>
                 <TableHead className="text-right w-[64px]">Var %</TableHead>
               </TableRow>
@@ -324,15 +325,18 @@ export function InvoiceDetailPage() {
                     ) : null}
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-xs">{String(l.quantity)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
+                    {l.weight_per_piece_kg != null && Number.isFinite(Number(l.weight_per_piece_kg))
+                      ? Number(l.weight_per_piece_kg).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
+                      : "—"}
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{l.unit_label ?? l.unit_type ?? "—"}</TableCell>
                   <TableCell className="text-right tabular-nums text-xs">{String(l.unit_rate ?? l.rate)}</TableCell>
-                  <TableCell className="text-[11px] text-muted-foreground leading-tight">{l.rate_basis_label ?? "—"}</TableCell>
                   <TableCell className="text-right tabular-nums text-xs">
                     {String(l.taxable_value ?? l.amount ?? "—")}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-xs">{l.tax_pct != null ? String(l.tax_pct) : "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums text-xs">
-                    {l.tax_amount != null ? String(l.tax_amount) : "—"}
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-xs">
                     {l.amount_including_tax != null ? String(l.amount_including_tax) : "—"}

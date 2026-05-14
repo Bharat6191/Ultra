@@ -139,30 +139,28 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
 
         <View style={styles.table}>
           <View style={styles.thRow}>
-            <Text style={[styles.th, { flex: 2.1, paddingRight: 4 }]}>DESCRIPTION</Text>
-            <Text style={[styles.th, { width: 34 }, styles.right]}>QTY</Text>
-            <Text style={[styles.th, { width: 40 }]}>UNIT</Text>
-            <Text style={[styles.th, { width: 58 }, styles.right]}>UNIT RATE</Text>
-            <Text style={[styles.th, { width: 44 }]}>BASIS</Text>
+            <Text style={[styles.th, { flex: 2.2, paddingRight: 4 }]}>DESCRIPTION</Text>
+            <Text style={[styles.th, { width: 32 }, styles.right]}>QTY</Text>
+            <Text style={[styles.th, { width: 56 }, styles.right]}>WT (KG)</Text>
+            <Text style={[styles.th, { width: 36 }]}>UNIT</Text>
+            <Text style={[styles.th, { width: 56 }, styles.right]}>UNIT RATE</Text>
             <Text style={[styles.th, { width: 56 }, styles.right]}>TAXABLE</Text>
-            <Text style={[styles.th, { width: 28 }, styles.right]}>TAX%</Text>
-            <Text style={[styles.th, { width: 48 }, styles.right]}>TAX</Text>
-            <Text style={[styles.th, { width: 54 }, styles.right]}>TOTAL</Text>
+            <Text style={[styles.th, { width: 56 }, styles.right]}>TOTAL</Text>
           </View>
 
           {data.lines.map((l, idx) => (
             <View key={`${idx}`} style={styles.tr}>
-              <Text style={[styles.td, { flex: 2.1, paddingRight: 4 }]}>{l.description}</Text>
-              <Text style={[styles.td, { width: 34 }, styles.right]}>{String(l.qty)}</Text>
-              <Text style={[styles.td, { width: 40, fontSize: 7 }]}>{l.unit ?? "—"}</Text>
-              <Text style={[styles.td, { width: 58 }, styles.right]}>{money(l.unitPrice, symbol)}</Text>
-              <Text style={[styles.td, { width: 44, fontSize: 6 }]}>{l.rateBasis ?? "—"}</Text>
-              <Text style={[styles.td, { width: 56 }, styles.right]}>{money(l.taxable, symbol)}</Text>
-              <Text style={[styles.td, { width: 28 }, styles.right]}>
-                {l.lineTaxPct != null && l.lineTaxPct > 0 ? `${l.lineTaxPct.toFixed(1)}` : "—"}
+              <Text style={[styles.td, { flex: 2.2, paddingRight: 4 }]}>{l.description}</Text>
+              <Text style={[styles.td, { width: 32 }, styles.right]}>{String(l.qty)}</Text>
+              <Text style={[styles.td, { width: 56 }, styles.right]}>
+                {l.weightKg != null && Number.isFinite(l.weightKg)
+                  ? l.weightKg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  : "—"}
               </Text>
-              <Text style={[styles.td, { width: 48 }, styles.right]}>{money(l.taxAmount ?? 0, symbol)}</Text>
-              <Text style={[styles.td, { width: 54 }, styles.right]}>{money(l.totalInclTax, symbol)}</Text>
+              <Text style={[styles.td, { width: 36, fontSize: 7 }]}>{l.unit ?? "—"}</Text>
+              <Text style={[styles.td, { width: 56 }, styles.right]}>{money(l.unitPrice, symbol)}</Text>
+              <Text style={[styles.td, { width: 56 }, styles.right]}>{money(l.taxable, symbol)}</Text>
+              <Text style={[styles.td, { width: 56 }, styles.right]}>{money(l.totalInclTax, symbol)}</Text>
             </View>
           ))}
         </View>
@@ -173,13 +171,15 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
               <Text style={styles.totKey}>TAXABLE SUBTOTAL</Text>
               <Text style={styles.totVal}>{money(subtotalEx, symbol)}</Text>
             </View>
-            <View style={styles.totRow}>
-              <Text style={styles.totKey}>TAX</Text>
-              <Text style={styles.totVal}>
-                {lineTaxSum <= 0 && headerTaxPct > 0 ? `${headerTaxPct.toFixed(2)}% · ` : ""}
-                {money(tax, symbol)}
-              </Text>
-            </View>
+            {tax > 0 ? (
+              <View style={styles.totRow}>
+                <Text style={styles.totKey}>TAX</Text>
+                <Text style={styles.totVal}>
+                  {lineTaxSum <= 0 && headerTaxPct > 0 ? `${headerTaxPct.toFixed(2)}% · ` : ""}
+                  {money(tax, symbol)}
+                </Text>
+              </View>
+            ) : null}
             <View style={[styles.totRow, { marginTop: 2 }]}>
               <Text style={[styles.totKey, { fontSize: 9, fontWeight: 700, opacity: 1 }]}>TOTAL (INCL.)</Text>
               <Text style={[styles.totVal, { fontSize: 11 }]}>{money(total, symbol)}</Text>

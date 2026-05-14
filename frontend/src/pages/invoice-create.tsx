@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Eye, EyeOff } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -79,22 +80,7 @@ function effectiveBillingBasis(ln: BillableLine): "WEIGHT" | "PCS" | "MANUAL" {
   return "PCS"
 }
 
-function approvedWoTaxableExVat(ln: BillableLine): number {
-  const v = ln.approved_line_taxable_ex_vat
-  if (Number.isFinite(v)) return v
-  const p = ln.planned_contract_value
-  return Number.isFinite(p ?? NaN) ? (p as number) : 0
-}
-
-/** Total billable kg for this invoice line when qty is in **pieces** (WO UOM). */
-function calculatedTotalWeightKg(ln: BillableLine, invoiceQtyPieces: number): number | null {
-  const w = ln.weight_per_piece
-  if (w == null || !Number.isFinite(w) || w <= 0) return null
-  if (!Number.isFinite(invoiceQtyPieces) || invoiceQtyPieces <= 0) return null
-  return q2Money(invoiceQtyPieces * w)
-}
-
-/** For WEIGHT billing: billable **piece** qty comes from the work order (no manual invoice qty). Prefer remaining billable qty, then approved line qty / basis. */
+/** Quantity (WO UOM, e.g. pieces) used for commercial math on this screen / submit. */
 function autoWoDerivedBillQtyPieces(ln: BillableLine): number | null {
   const rem = ln.remaining_invoiceable_qty_hint
   if (rem != null && Number.isFinite(rem) && rem > 0) return rem
@@ -167,6 +153,37 @@ export function InvoiceCreatePage() {
     invoice_number: "",
     invoice_date: new Date().toISOString().slice(0, 10),
   })
+  const [showInvoicePreview, setShowInvoicePreview] = React.useState(false)
+  const invoiceNumberTouchedRef = React.useRef(false)
+  const suggestReqId = React.useRef(0)
+
+  React.useEffect(() => {
+    if (!canCreate) return
+    if (!form.contractor_id || !form.org_unit_id) {
+      suggestReqId.current += 1
+      setForm((f) => (f.invoice_number ? { ...f, invoice_number: "" } : f))
+      return
+    }
+    invoiceNumberTouchedRef.current = false
+    const rid = ++suggestReqId.current
+    void (async () => {
+      try {
+        const q = new URLSearchParams({
+          contractor_id: form.contractor_id,
+          org_unit_id: form.org_unit_id,
+        })
+        const { invoice_number } = await getJson<{ invoice_number: string }>(`/invoices/suggested-number?${q}`)
+        if (suggestReqId.current !== rid) return
+        if (invoiceNumberTouchedRef.current) return
+        setForm((f) => ({ ...f, invoice_number }))
+      } catch {
+        if (suggestReqId.current !== rid) return
+        if (!invoiceNumberTouchedRef.current) {
+          setForm((f) => (f.invoice_number ? { ...f, invoice_number: "" } : f))
+        }
+      }
+    })()
+  }, [form.contractor_id, form.org_unit_id, canCreate])
 
   React.useEffect(() => {
     if (!canCreate) return
@@ -332,21 +349,14 @@ export function InvoiceCreatePage() {
       count += 1
       const base = lineTaxableExVat(ln, q)
       if (base === null) continue
-      const taxRaw = inp?.tax_pct?.trim() ?? ""
-      const tp = taxRaw === "" ? 0 : Number(taxRaw.replace(",", ""))
-      const tg = tp && Number.isFinite(tp) ? base * (1 + tp / 100) : base
-      gross += tg
+      gross += base
     }
     return { count, gross }
   }
 
   const { count: draftLineCount, gross: draftGross } = totalsPreview()
 
-  const showWeightColumns = React.useMemo(
-    () => selectedInvoiceLines.some((l) => effectiveBillingBasis(l) === "WEIGHT"),
-    [selectedInvoiceLines],
-  )
-  const lineDetailColSpan = 11 + (showWeightColumns ? 2 : 0)
+  const lineDetailColSpan = 10
 
   const contractorName = React.useMemo(() => {
     const id = Number(form.contractor_id)
@@ -369,20 +379,19 @@ export function InvoiceCreatePage() {
       if (ex === null) continue
       const unitPrice = ln.approved_rate
       const taxable = ex
-      const taxRaw = inp?.tax_pct?.trim()
-      const tp = taxRaw === "" || taxRaw === undefined ? 0 : Number(taxRaw.replace(/,/g, ""))
-      const taxPctLine = Number.isFinite(tp) && tp > 0 ? tp : 0
-      const taxAmount = taxPctLine > 0 ? taxable * (taxPctLine / 100) : 0
-      const totalInclTax = taxable + taxAmount
+      const totalInclTax = taxable
+      const bb = effectiveBillingBasis(ln)
+      const w = ln.weight_per_piece
+      const weightKg =
+        bb === "WEIGHT" && w != null && Number.isFinite(w) && w > 0 ? w : null
       out.push({
         description: `${ln.work_order_number} · ${ln.part_code ?? ln.job_type ?? "—"}`,
         qty,
+        weightKg,
         unit: ln.unit_type ?? ln.unit ?? "—",
-        rateBasis: ln.rate_basis_label ?? undefined,
         unitPrice,
         taxable,
-        lineTaxPct: taxPctLine > 0 ? taxPctLine : undefined,
-        taxAmount,
+        taxAmount: 0,
         totalInclTax,
       })
     }
@@ -394,7 +403,7 @@ export function InvoiceCreatePage() {
     if (Number.isFinite(due.getTime())) due.setDate(due.getDate() + 30)
     const dueDate = Number.isFinite(due.getTime()) ? due.toISOString().slice(0, 10) : undefined
     return {
-      invoiceNo: form.invoice_number || "—",
+      invoiceNo: form.invoice_number.trim() || "—",
       invoiceDate: form.invoice_date || "—",
       dueDate,
       issuedTo: { name: contractorName, address: plantName !== "—" ? plantName : undefined },
@@ -482,9 +491,27 @@ export function InvoiceCreatePage() {
             Full-screen creation: select contractor + work orders, then enter invoice quantities with real-time preflight.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline">
             <Link to="/dashboard/invoices">Back</Link>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowInvoicePreview((v) => !v)}
+            className="gap-1.5"
+          >
+            {showInvoicePreview ? (
+              <>
+                <EyeOff className="size-4" />
+                Hide preview
+              </>
+            ) : (
+              <>
+                <Eye className="size-4" />
+                Preview invoice
+              </>
+            )}
           </Button>
           <Button asChild variant="outline" disabled={!previewLines.length}>
             <InvoicePdfDownloadButton
@@ -537,7 +564,14 @@ export function InvoiceCreatePage() {
           </div>
           <div className="grid gap-1.5">
             <Label>Invoice number</Label>
-            <Input value={form.invoice_number} onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))} />
+            <Input
+              value={form.invoice_number}
+              onChange={(e) => {
+                invoiceNumberTouchedRef.current = true
+                setForm((f) => ({ ...f, invoice_number: e.target.value }))
+              }}
+              placeholder="INV000001"
+            />
           </div>
           <div className="grid gap-1.5">
             <Label>Invoice date</Label>
@@ -618,17 +652,17 @@ export function InvoiceCreatePage() {
 
       {preflight && preflight.lines.length > 0 ? (
         <>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)] items-start">
+          <div
+            className={
+              showInvoicePreview
+                ? "grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)] items-start"
+                : "grid gap-4 items-start"
+            }
+          >
             <div className="min-w-0 space-y-3">
               <Card className="min-w-0">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium">Step 3 · Invoice line items</CardTitle>
-                  <CardDescription>
-                    <span className="font-medium">WEIGHT</span> lines: bill quantity is taken from the work order
-                    (remaining billable pieces when available, otherwise approved line qty). Taxable ex-VAT = that qty ×
-                    weight per unit × rate/kg — no separate invoice quantity. <span className="font-medium">PCS</span>{" "}
-                    lines: enter invoice qty; taxable = qty × unit rate (within the approved line cap).
-                  </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
                   {selectedInvoiceLines.length === 0 ? (
@@ -641,17 +675,10 @@ export function InvoiceCreatePage() {
                             <TableRow className="bg-muted/50">
                               <TableHead className="w-[120px]">Work order</TableHead>
                               <TableHead>Line item</TableHead>
+                              <TableHead className="w-[88px] text-right">WT (kg)</TableHead>
                               <TableHead className="w-[56px]">Unit</TableHead>
-                              {showWeightColumns ? (
-                                <>
-                                  <TableHead className="w-[100px] text-right">Wt / unit (kg)</TableHead>
-                                  <TableHead className="w-[88px] text-right">Total kg</TableHead>
-                                </>
-                              ) : null}
-                              <TableHead className="w-[72px] text-right">Rate basis</TableHead>
                               <TableHead className="min-w-[88px] text-right">Unit rate</TableHead>
                               <TableHead className="w-[112px] text-right">Qty (WO)</TableHead>
-                              <TableHead className="w-[72px] text-right">Tax %</TableHead>
                               <TableHead className="text-right">Taxable</TableHead>
                               <TableHead className="text-right">Incl. tax</TableHead>
                               <TableHead className="w-[180px]">Note</TableHead>
@@ -666,31 +693,11 @@ export function InvoiceCreatePage() {
                               const billQ = billQtyPiecesForLine(ln, inp)
                               const baseEx = billQ != null && billQ > 0 ? lineTaxableExVat(ln, billQ) : null
                               const base = baseEx ?? 0
-                              const tp = inp.tax_pct?.trim() ? Number(inp.tax_pct.replace(/,/g, "")) : 0
-                              const taxAmt = baseEx !== null && Number.isFinite(tp) && tp > 0 ? baseEx * (tp / 100) : 0
-                              const gross = base + taxAmt
+                              const gross = baseEx !== null ? baseEx : base
                               const wpu =
                                 ln.weight_per_piece != null && Number.isFinite(ln.weight_per_piece)
                                   ? ln.weight_per_piece
                                   : null
-                              const totalKg =
-                                isWeight && billQ != null && billQ > 0 ? calculatedTotalWeightKg(ln, billQ) : null
-                              const wtCell =
-                                showWeightColumns &&
-                                (isWeight && wpu != null ? (
-                                  <span className="tabular-nums text-muted-foreground" title="From Part Master / work order snapshot (read-only)">
-                                    {money(wpu)}
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                ))
-                              const totalKgCell =
-                                showWeightColumns &&
-                                (isWeight && totalKg != null ? (
-                                  <span className="tabular-nums">{money(totalKg)}</span>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                ))
                               const rateLabel =
                                 isWeight ? (
                                   <div className="text-right">
@@ -703,16 +710,6 @@ export function InvoiceCreatePage() {
                                     <div className="text-[10px] text-muted-foreground">per unit</div>
                                   </div>
                                 )
-                              const aq = ln.approved_quantity
-                              const iq = ln.previously_invoiced_qty
-                              const rq = ln.remaining_invoiceable_qty_hint
-                              const fmtQty = (n: number | null | undefined) =>
-                                n != null && Number.isFinite(n)
-                                  ? n.toLocaleString(undefined, { maximumFractionDigits: 3 })
-                                  : "—"
-                              const appTax = approvedWoTaxableExVat(ln)
-                              const remBill = ln.remaining_invoiceable_value
-
                               return (
                                 <React.Fragment key={ln.work_order_item_id}>
                                   <TableRow>
@@ -736,30 +733,25 @@ export function InvoiceCreatePage() {
                                         <span className="uppercase tracking-wide">{ln.progress_type}</span>
                                       </div>
                                     </TableCell>
+                                    <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+                                      {isWeight && wpu != null ? (
+                                        <span className="tabular-nums" title="Weight per WO qty unit (read-only)">
+                                          {money(wpu)}
+                                        </span>
+                                      ) : (
+                                        "—"
+                                      )}
+                                    </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">
                                       {ln.unit_type ?? ln.unit ?? "—"}
-                                    </TableCell>
-                                    {showWeightColumns ? (
-                                      <>
-                                        <TableCell className="text-right text-xs tabular-nums">{wtCell}</TableCell>
-                                        <TableCell className="text-right text-xs tabular-nums">{totalKgCell}</TableCell>
-                                      </>
-                                    ) : null}
-                                    <TableCell className="text-right text-[11px] text-muted-foreground">
-                                      {ln.rate_basis_label ?? "—"}
                                     </TableCell>
                                     <TableCell>{rateLabel}</TableCell>
                                     <TableCell>
                                       {isWeight ? (
-                                        <div className="text-right">
-                                          <div className="text-xs tabular-nums font-medium text-foreground">
-                                            {billQ != null && billQ > 0
-                                              ? billQ.toLocaleString(undefined, { maximumFractionDigits: 3 })
-                                              : "—"}
-                                          </div>
-                                          <div className="text-[10px] text-muted-foreground leading-tight">
-                                            Work order · read-only
-                                          </div>
+                                        <div className="text-right text-xs tabular-nums font-medium text-foreground">
+                                          {billQ != null && billQ > 0
+                                            ? billQ.toLocaleString(undefined, { maximumFractionDigits: 3 })
+                                            : "—"}
                                         </div>
                                       ) : (
                                         <Input
@@ -774,19 +766,6 @@ export function InvoiceCreatePage() {
                                           placeholder="0"
                                         />
                                       )}
-                                    </TableCell>
-                                    <TableCell>
-                                      <Input
-                                        className="h-8 text-xs tabular-nums text-right"
-                                        value={inp.tax_pct}
-                                        onChange={(e) =>
-                                          setLineInputs((m) => ({
-                                            ...m,
-                                            [ln.work_order_item_id]: { ...inp, tax_pct: e.target.value },
-                                          }))
-                                        }
-                                        placeholder="—"
-                                      />
                                     </TableCell>
                                     <TableCell className="text-right text-xs tabular-nums">
                                       {baseEx === null && billQ != null && billQ > 0 ? "—" : money(base)}
@@ -830,88 +809,29 @@ export function InvoiceCreatePage() {
                                       </button>
                                     </TableCell>
                                   </TableRow>
-                                  <TableRow className="border-b bg-muted/25 hover:bg-muted/25">
-                                    <TableCell colSpan={lineDetailColSpan} className="py-2.5 align-top">
-                                      <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
-                                        <div className="space-y-0.5 rounded-md border border-border/60 bg-background/80 px-2.5 py-2">
-                                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                            Quantities (work order)
+                                  <TableRow className="border-b bg-muted/20 hover:bg-muted/20">
+                                    <TableCell colSpan={lineDetailColSpan} className="border-t border-border/60 py-2.5">
+                                      <div className="flex flex-wrap items-baseline justify-end gap-x-8 gap-y-2 text-xs">
+                                        <div className="text-right tabular-nums">
+                                          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                            Total taxable value
                                           </div>
-                                          <div className="tabular-nums leading-relaxed">
-                                            <span className="text-muted-foreground">Approved qty:</span> {fmtQty(aq)}
-                                            <br />
-                                            <span className="text-muted-foreground">Invoiced qty (to date):</span>{" "}
-                                            {fmtQty(iq)}
-                                            <br />
-                                            <span className="text-muted-foreground">Remaining qty:</span> {fmtQty(rq)}
+                                          <div className="font-medium text-foreground">
+                                            ₹
+                                            {baseEx === null && billQ != null && billQ > 0
+                                              ? "—"
+                                              : baseEx != null
+                                                ? money(baseEx)
+                                                : "—"}
                                           </div>
                                         </div>
-                                        {isWeight ? (
-                                          <div className="space-y-1 rounded-md border border-border/60 bg-background/80 px-2.5 py-2 sm:col-span-2 lg:col-span-2">
-                                            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                              Weight billing (read-only weight from Part Master)
-                                            </div>
-                                            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
-                                              <div>
-                                                <span className="text-muted-foreground">Bill qty (pieces, WO):</span>{" "}
-                                                <span className="font-medium tabular-nums">
-                                                  {billQ != null && billQ > 0
-                                                    ? billQ.toLocaleString(undefined, { maximumFractionDigits: 3 })
-                                                    : "—"}
-                                                </span>
-                                              </div>
-                                              <div>
-                                                <span className="text-muted-foreground">Weight / unit:</span>{" "}
-                                                <span className="font-medium tabular-nums">
-                                                  {wpu != null ? `${money(wpu)} kg` : "—"}
-                                                </span>
-                                              </div>
-                                              <div>
-                                                <span className="text-muted-foreground">Rate / kg:</span>{" "}
-                                                <span className="font-medium tabular-nums">₹{money(ln.approved_rate)}</span>
-                                              </div>
-                                              <div>
-                                                <span className="text-muted-foreground">Total weight (this line):</span>{" "}
-                                                <span className="font-medium tabular-nums">
-                                                  {totalKg != null ? `${money(totalKg)} kg` : "—"}
-                                                </span>
-                                              </div>
-                                              <div>
-                                                <span className="text-muted-foreground">Invoice taxable (ex VAT):</span>{" "}
-                                                <span className="font-medium tabular-nums">
-                                                  {baseEx != null ? money(baseEx) : "—"}
-                                                </span>
-                                              </div>
-                                            </div>
-                                            <p className="text-[11px] text-muted-foreground">
-                                              Taxable (ex VAT) = weight per unit (X) × bill qty × rate per kg.
-                                            </p>
+                                        <div className="text-right tabular-nums">
+                                          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                            Invoice value
                                           </div>
-                                        ) : (
-                                          <div className="space-y-1 rounded-md border border-border/60 bg-background/80 px-2.5 py-2">
-                                            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                              PCS billing
-                                            </div>
-                                            <p className="text-[11px] text-muted-foreground">
-                                              Invoice taxable (ex VAT) = invoice qty × unit rate (prorated to approved
-                                              line cap when applicable).
-                                            </p>
-                                            <div className="tabular-nums">
-                                              <span className="text-muted-foreground">Invoice taxable (ex VAT):</span>{" "}
-                                              <span className="font-medium">{baseEx != null ? money(baseEx) : "—"}</span>
-                                            </div>
-                                          </div>
-                                        )}
-                                        <div className="space-y-0.5 rounded-md border border-border/60 bg-background/80 px-2.5 py-2">
-                                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                            Work order commercial cap (ex VAT)
-                                          </div>
-                                          <div className="tabular-nums leading-relaxed">
-                                            <span className="text-muted-foreground">Approved line taxable:</span>{" "}
-                                            {money(appTax)}
-                                            <br />
-                                            <span className="text-muted-foreground">Remaining billable:</span>{" "}
-                                            {remBill != null && Number.isFinite(remBill) ? money(remBill) : "—"}
+                                          <div className="text-sm font-semibold text-foreground">
+                                            ₹
+                                            {baseEx === null && billQ != null && billQ > 0 ? "—" : money(gross)}
                                           </div>
                                         </div>
                                       </div>
@@ -929,11 +849,13 @@ export function InvoiceCreatePage() {
               </Card>
             </div>
 
-            <div className="min-w-0 max-w-full lg:sticky lg:top-16 lg:self-start">
-              <div className="overflow-x-auto overscroll-x-contain">
-                <InvoicePreview data={pdfData} />
+            {showInvoicePreview ? (
+              <div className="min-w-0 max-w-full lg:sticky lg:top-16 lg:self-start">
+                <div className="overflow-x-auto overscroll-x-contain">
+                  <InvoicePreview data={pdfData} />
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
 
           <div className="sticky bottom-0 z-10 rounded-xl border bg-background shadow-sm px-4 py-3 flex flex-wrap items-center justify-between gap-2">

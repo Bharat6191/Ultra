@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -109,6 +110,25 @@ class InvoiceService:
             stmt = stmt.where(Invoice.status == status.strip().lower())
         stmt = stmt.limit(int(limit))
         return list(self._db.scalars(stmt).unique().all())
+
+    _INV_NUM_SEQ = re.compile(r"^INV(\d+)$", re.IGNORECASE)
+
+    def suggest_next_invoice_number(self, *, contractor_id: int, org_unit_id: int) -> str:
+        """Highest existing ``INV######`` for this contractor + plant, plus one (6-digit pad)."""
+        self._ensure_contractor(int(contractor_id))
+        self._ensure_plant(int(org_unit_id))
+        stmt = select(Invoice.invoice_number).where(
+            Invoice.contractor_id == int(contractor_id),
+            Invoice.org_unit_id == int(org_unit_id),
+        )
+        rows = self._db.scalars(stmt).all()
+        max_n = 0
+        for raw in rows:
+            s = str(raw or "").strip()
+            m = self._INV_NUM_SEQ.fullmatch(s)
+            if m:
+                max_n = max(max_n, int(m.group(1)))
+        return f"INV{max_n + 1:06d}"
 
     def create(self, payload: InvoiceCreate, *, actor_user_id: int) -> Invoice:
         self._ensure_contractor(int(payload.contractor_id))

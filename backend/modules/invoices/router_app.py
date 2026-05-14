@@ -18,6 +18,7 @@ from modules.invoices.schema import (
     InvoicePublic,
     InvoiceIssueJustificationUpdate,
     InvoiceAuditEntry,
+    SuggestedInvoiceNumber,
 )
 from modules.invoices.commercial_amount import invoice_line_ex_vat_amount
 from modules.invoices.models import InvoiceAttachment
@@ -96,6 +97,19 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
         ut = str(ut_raw) if ut_raw not in (None, "") else None
         rut_raw = ps.get("rate_unit_type")
         rut = str(rut_raw) if rut_raw not in (None, "") else None
+        w_kg: float | None = None
+        if wit is not None:
+            w_snap = getattr(wit, "weight_per_piece_snapshot", None)
+            if w_snap is not None:
+                try:
+                    w_kg = float(w_snap)
+                except (TypeError, ValueError):
+                    w_kg = None
+            if w_kg is None and ps.get("weight_per_piece") not in (None, ""):
+                try:
+                    w_kg = float(ps["weight_per_piece"])
+                except (TypeError, ValueError):
+                    w_kg = None
         line_rows.append(
             {
                 "id": int(l.id),
@@ -115,6 +129,7 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
                 "pricing_method": ps.get("pricing_method"),
                 "rate_unit_type": rut,
                 "rate_basis_label": rate_basis_label(rut),
+                "weight_per_piece_kg": w_kg,
                 "unit_rate": l.rate,
                 "taxable_value": amt,
                 "tax_amount": tax_amt,
@@ -249,6 +264,25 @@ def invoice_preflight(
             work_order_ids=wo_ids,
         )
         return InvoicePreflightResponse.model_validate(raw)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get(
+    "/invoices/suggested-number",
+    response_model=SuggestedInvoiceNumber,
+    dependencies=[Depends(require_permission("invoices.create"))],
+)
+def invoice_suggested_number(
+    contractor_id: int = Query(..., ge=1),
+    org_unit_id: int = Query(..., ge=1),
+    svc: InvoiceService = Depends(_svc),
+) -> SuggestedInvoiceNumber:
+    try:
+        n = svc.suggest_next_invoice_number(contractor_id=int(contractor_id), org_unit_id=int(org_unit_id))
+        return SuggestedInvoiceNumber(invoice_number=n)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ConflictError as exc:

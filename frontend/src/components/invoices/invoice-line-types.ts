@@ -3,6 +3,8 @@
 export type InvoiceDisplayLine = {
   description: string
   qty: number
+  /** Weight per WO quantity unit in kg when applicable (else omit for “—”). */
+  weightKg?: number | null
   /** Commercial unit (e.g. Hours, Kg). */
   unit?: string
   /** How unit rate applies (e.g. per kg). */

@@ -23,6 +23,12 @@ class InvoiceCreate(BaseModel):
     lines: list[InvoiceLineCreate] = Field(default_factory=list)
 
 
+class SuggestedInvoiceNumber(BaseModel):
+    """Next ``INV000001``-style number for the contractor + plant (unique scope)."""
+
+    invoice_number: str
+
+
 class InvoiceValidationIssuePublic(BaseModel):
     id: int
     invoice_id: int
@@ -63,6 +69,8 @@ class InvoiceLinePublic(BaseModel):
     rate_unit_type: str | None = None
     rate_basis_label: str | None = None
     """How the unit rate applies (e.g. per kg, per piece)."""
+    weight_per_piece_kg: float | None = None
+    """Snapshot weight per WO quantity unit in kg (for invoice display)."""
     unit_rate: Decimal | None = None
     """Same as ``rate``; explicit name for invoice grids."""
     taxable_value: Decimal | None = None
