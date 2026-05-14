@@ -15,7 +15,7 @@ import {
   executionDetailTaxableCell,
   flattenWorkOrderToDraftLines,
   formatExecutionQtyDisplay,
-  formatExecutionWeightKg,
+  formatExecutionWeightAmount,
   newDraftLine,
   WorkOrderExecutionFooter,
   WorkOrderExecutionHeader,
@@ -367,15 +367,16 @@ export function WorkOrderDetailPage() {
       const unitKg = String(it.unit_type ?? "").toLowerCase() === "kg"
       const showWeightHint = Boolean(weightStr && (weightBased || unitKg))
 
-      const unitProfileDisplay =
-        showWeightHint && weightStr ? formatExecutionWeightKg(weightStr) : it.unit_type?.trim() ? it.unit_type : "—"
+      const weightDisplay = showWeightHint && weightStr ? formatExecutionWeightAmount(weightStr) : "—"
+      const unitDisplay = it.unit_type?.trim() ? it.unit_type.trim() : "—"
 
       out.push({
         sr,
         contractor_label: contractorName(headCid),
         job_label,
         qty_display: qtyDisplay,
-        unit_profile_display: unitProfileDisplay,
+        weight_display: weightDisplay,
+        unit_display: unitDisplay,
         rate_display: rateDisplay,
         invoice_display: invoiceDisplay,
         completionCell:

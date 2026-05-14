@@ -36,8 +36,10 @@ export type ExecutionDetailRow = {
   contractor_label: string
   job_label: string
   qty_display: string
-  /** Weight + unit of measure in one column (e.g. "4,245 kg" or "box"). */
-  unit_profile_display: string
+  /** Line / per-piece weight when applicable; "—" if not shown. */
+  weight_display: string
+  /** Part unit of measure (e.g. kg, box). */
+  unit_display: string
   rate_display: React.ReactNode
   invoice_display: React.ReactNode
   /** Optional inline completion editor/rendering for active work orders */
@@ -136,6 +138,15 @@ export function formatExecutionWeightKg(weightStr: string): string {
   const n = Number(String(weightStr).replace(/,/g, ""))
   if (!Number.isFinite(n)) return `${weightStr} kg`
   return `${n.toLocaleString(undefined, { maximumFractionDigits: 3, minimumFractionDigits: 0 })} kg`
+}
+
+/** Numeric weight only (no unit); pair with ``unit_display`` in the execution sheet. */
+export function formatExecutionWeightAmount(weightStr: string): string {
+  const raw = String(weightStr).trim()
+  if (!raw) return "—"
+  const n = Number(raw.replace(/,/g, ""))
+  if (!Number.isFinite(n)) return raw
+  return n.toLocaleString(undefined, { maximumFractionDigits: 3, minimumFractionDigits: 0 })
 }
 
 /** Human-readable rate / taxable basis (e.g. wt/kg). */
@@ -365,8 +376,8 @@ export function WorkOrderExecutionTable(props: {
   const hasCompletion = !isEdit && (detailRows ?? []).some((r) => Boolean(r.completionCell))
   const hideContractorColumn = !isEdit && contractorSummaryLabel !== undefined
   const viewTableFixed = !isEdit && hasCompletion
-  /** View: SR, [Contractor], Part, Qty, Unit (merged), Rate, Taxable, [Completion] */
-  const viewColCount = (hideContractorColumn ? 0 : !isEdit ? 1 : 0) + 6 + (hasCompletion ? 1 : 0)
+  /** View: SR, [Contractor], Part, Qty, Wt, Unit, Rate, Taxable, [Completion] */
+  const viewColCount = (hideContractorColumn ? 0 : !isEdit ? 1 : 0) + 7 + (hasCompletion ? 1 : 0)
 
   function updateLine(key: string, patch: Partial<ExecutionDraftLine>) {
     onLinesChange(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -464,7 +475,7 @@ export function WorkOrderExecutionTable(props: {
                       ? "min-w-0 w-[52%]"
                       : viewTableFixed
                         ? hideContractorColumn
-                          ? "w-[16%] min-w-0 truncate"
+                          ? "w-[15%] min-w-0 truncate"
                           : "w-[12%] min-w-0 truncate"
                         : "min-w-[8rem] max-w-[14rem] truncate",
                   )}
@@ -478,8 +489,8 @@ export function WorkOrderExecutionTable(props: {
                       ? "w-12 text-right tabular-nums"
                       : viewTableFixed
                         ? hideContractorColumn
-                          ? "w-[6%] text-right tabular-nums"
-                          : "w-[5%] text-right tabular-nums"
+                          ? "w-[5%] text-right tabular-nums"
+                          : "w-[4%] text-right tabular-nums"
                         : "text-right tabular-nums",
                   )}
                 >
@@ -487,22 +498,36 @@ export function WorkOrderExecutionTable(props: {
                 </th>
                 {isEdit ? (
                   <>
-                    <th className={cn(th, "w-16")}>Wt / pc</th>
+                    <th className={cn(th, "w-16")}>Wt</th>
                     <th className={cn(th, "w-12")}>Unit</th>
                   </>
                 ) : (
-                  <th
-                    className={cn(
-                      th,
-                      viewTableFixed
-                        ? hideContractorColumn
-                          ? "w-[8%] text-right tabular-nums"
-                          : "w-[7%] text-right tabular-nums"
-                        : "text-right tabular-nums",
-                    )}
-                  >
-                    Wt / unit
-                  </th>
+                  <>
+                    <th
+                      className={cn(
+                        th,
+                        viewTableFixed
+                          ? hideContractorColumn
+                            ? "w-[5%] text-right tabular-nums"
+                            : "w-[4%] text-right tabular-nums"
+                          : "text-right tabular-nums",
+                      )}
+                    >
+                      Wt
+                    </th>
+                    <th
+                      className={cn(
+                        th,
+                        viewTableFixed
+                          ? hideContractorColumn
+                            ? "w-[4%] text-right tabular-nums"
+                            : "w-[3%] text-right tabular-nums"
+                          : "text-right tabular-nums",
+                      )}
+                    >
+                      Unit
+                    </th>
+                  </>
                 )}
                 <th
                   className={cn(
@@ -511,8 +536,8 @@ export function WorkOrderExecutionTable(props: {
                       ? "w-20 text-right tabular-nums"
                       : viewTableFixed
                         ? hideContractorColumn
-                          ? "w-[11%] text-right tabular-nums"
-                          : "w-[10%] text-right tabular-nums"
+                          ? "w-[10%] text-right tabular-nums"
+                          : "w-[9%] text-right tabular-nums"
                         : "text-right tabular-nums",
                   )}
                 >
@@ -525,8 +550,8 @@ export function WorkOrderExecutionTable(props: {
                       ? "w-24 text-right tabular-nums"
                       : viewTableFixed
                         ? hideContractorColumn
-                          ? "w-[21%] text-right tabular-nums"
-                          : "w-[18%] text-right tabular-nums"
+                          ? "w-[17%] text-right tabular-nums"
+                          : "w-[16%] text-right tabular-nums"
                         : "text-right tabular-nums",
                   )}
                 >
@@ -540,8 +565,8 @@ export function WorkOrderExecutionTable(props: {
                         ? "w-[36%] text-right"
                         : viewTableFixed
                           ? hideContractorColumn
-                            ? "w-[34%] text-right"
-                            : "w-[34%] text-right"
+                            ? "w-[40%] text-right"
+                            : "w-[38%] text-right"
                           : "text-right",
                     )}
                   >
@@ -665,7 +690,8 @@ export function WorkOrderExecutionTable(props: {
                         {dr.job_label}
                       </td>
                       <td className="px-2 py-2 align-middle text-right text-xs tabular-nums font-medium text-foreground">{dr.qty_display}</td>
-                      <td className="px-2 py-2 align-middle text-right text-xs tabular-nums text-muted-foreground">{dr.unit_profile_display}</td>
+                      <td className="px-2 py-2 align-middle text-right text-xs tabular-nums text-muted-foreground">{dr.weight_display}</td>
+                      <td className="px-2 py-2 align-middle text-right text-xs tabular-nums text-muted-foreground">{dr.unit_display}</td>
                       <td className="px-2 py-2 align-middle text-right text-xs">{dr.rate_display}</td>
                       <td className="px-2 py-2 align-middle text-right text-xs tabular-nums">{dr.invoice_display}</td>
                       {hasCompletion ? (
