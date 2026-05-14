@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -152,6 +153,31 @@ def create_work_order(
     except ConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return WorkOrderPublic.model_validate(_to_public(db, row))
+
+
+@router.get(
+    "/work-orders/rate-preview",
+    dependencies=[
+        Depends(require_any_permission("work_orders.view", "work_orders.create", "work_orders.approve"))
+    ],
+)
+def work_order_rate_preview(
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+    contractor_id: int = Query(..., ge=1),
+    part_master_id: int = Query(..., ge=1),
+    work_date: date = Query(...),
+) -> dict[str, Any]:
+    """Resolved unit rate for a contractor + part on a given work date (negotiated window vs Part Master)."""
+    try:
+        return svc.preview_resolved_line_rate(
+            contractor_id=contractor_id,
+            part_master_id=part_master_id,
+            work_date=work_date,
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.get(

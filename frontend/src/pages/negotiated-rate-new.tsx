@@ -308,9 +308,10 @@ export function NegotiatedRateNewPage() {
 
   const baseRate = selected ? Number(selected.base_rate) : NaN
   const negRate = Number(form.negotiated_rate)
-  const initialRateRaw = Number(form.initial_rate)
+  const initialAskStr = form.initial_rate.trim()
+  const initialAskN = Number(initialAskStr)
   const effectiveInitial =
-    Number.isFinite(initialRateRaw) && initialRateRaw > 0 ? initialRateRaw : negRate
+    initialAskStr !== "" && Number.isFinite(initialAskN) && initialAskN > 0 ? initialAskN : NaN
 
   const previewNegotiationSavings =
     Number.isFinite(effectiveInitial) && Number.isFinite(negRate) && effectiveInitial > 0
@@ -328,11 +329,15 @@ export function NegotiatedRateNewPage() {
   const canSave =
     effectiveContractorId !== null &&
     form.part_master_id !== null &&
+    initialAskStr !== "" &&
+    Number.isFinite(initialAskN) &&
+    initialAskN > 0 &&
     !!form.negotiated_rate.trim() &&
     Number.isFinite(negRate) &&
     negRate > 0 &&
     !!form.effective_from.trim() &&
-    (!form.effective_to.trim() || form.effective_to >= form.effective_from)
+    !!form.remarks.trim() &&
+    attachments.length >= 1
 
   async function submit() {
     if (!effectiveContractorId || form.part_master_id === null) return
@@ -344,10 +349,10 @@ export function NegotiatedRateNewPage() {
         contractor_id: effectiveContractorId,
         part_master_id: form.part_master_id,
         negotiated_rate: form.negotiated_rate,
-        initial_rate: form.initial_rate.trim() ? form.initial_rate : null,
+        initial_rate: form.initial_rate.trim(),
         effective_from: form.effective_from,
-        effective_to: form.effective_to.trim() ? form.effective_to.trim() : null,
-        remarks: form.remarks.trim() ? form.remarks : null,
+        effective_to: null,
+        remarks: form.remarks.trim(),
       })
       createdId = created.id
       if (attachments.length > 0) {
@@ -434,7 +439,7 @@ export function NegotiatedRateNewPage() {
           <CardContent className="grid gap-4">
             {needContractorPick ? (
               <div className="grid gap-1">
-                <Label>Contractor</Label>
+                <Label showRequired>Contractor</Label>
                 <select
                   className={SELECT_ROW_CLASS}
                   value={pickedContractorId === "" ? "" : String(pickedContractorId)}
@@ -469,7 +474,7 @@ export function NegotiatedRateNewPage() {
             </div>
 
             <div className="grid gap-1">
-              <Label>Part baseline</Label>
+              <Label showRequired>Part baseline</Label>
               {selected ? (
                 <div className="rounded-lg border bg-muted/40 p-3 text-sm">
                   <div className="font-medium">
@@ -560,26 +565,31 @@ export function NegotiatedRateNewPage() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-base">Rates & notes</CardTitle>
-              <SectionHint text="Work order lines use their work date: it must fall from effective from through effective to (inclusive). Leave effective to empty for no end date." />
+              <SectionHint text="Work order lines use their work date: it must fall on or after effective from. Approved rates stay open-ended until superseded or expired by policy." />
             </div>
           </CardHeader>
           <CardContent>
             {/* Use a div instead of <form> so implicit submit / file-control quirks cannot full-page reload the app. */}
             <div className="grid gap-4">
             <div className="grid gap-1">
-              <Label htmlFor="neg-initial">Initial ask (optional)</Label>
+              <Label htmlFor="neg-initial" showRequired>
+                Initial ask
+              </Label>
               <Input
                 id="neg-initial"
                 type="number"
                 inputMode="decimal"
-                placeholder="Same as agreed rate if blank"
+                placeholder="Contractor opening price"
                 value={form.initial_rate}
                 onChange={(e) => setForm((f) => ({ ...f, initial_rate: e.target.value }))}
               />
             </div>
             <div className="grid gap-1">
-              <Label>Agreed rate</Label>
+              <Label htmlFor="neg-agreed" showRequired>
+                Agreed rate
+              </Label>
               <Input
+                id="neg-agreed"
                 type="number"
                 inputMode="decimal"
                 placeholder="0.00"
@@ -587,37 +597,30 @@ export function NegotiatedRateNewPage() {
                 onChange={(e) => setForm((f) => ({ ...f, negotiated_rate: e.target.value }))}
               />
             </div>
-            <div className="grid gap-1 sm:grid-cols-2 sm:gap-4">
-              <div className="grid gap-1">
-                <Label htmlFor="neg-effective-from" title="First day this rate can apply to work orders (by line work date).">
-                  Effective from
-                </Label>
-                <Input
-                  id="neg-effective-from"
-                  type="date"
-                  value={form.effective_from}
-                  onChange={(e) => setForm((f) => ({ ...f, effective_from: e.target.value }))}
-                />
-              </div>
-              <div className="grid gap-1">
-                <Label htmlFor="neg-effective-to" title="Optional last day (inclusive). Leave blank for no end date.">
-                  Effective to (optional)
-                </Label>
-                <Input
-                  id="neg-effective-to"
-                  type="date"
-                  value={form.effective_to}
-                  min={form.effective_from || undefined}
-                  onChange={(e) => setForm((f) => ({ ...f, effective_to: e.target.value }))}
-                />
-              </div>
+            <div className="grid gap-1">
+              <Label
+                htmlFor="neg-effective-from"
+                showRequired
+                title="First day this rate can apply to work orders (by line work date)."
+              >
+                Effective from
+              </Label>
+              <Input
+                id="neg-effective-from"
+                type="date"
+                value={form.effective_from}
+                onChange={(e) => setForm((f) => ({ ...f, effective_from: e.target.value }))}
+              />
             </div>
             <div className="grid gap-1">
-              <Label htmlFor="neg-remarks">Remarks</Label>
+              <Label htmlFor="neg-remarks" showRequired>
+                Remarks
+              </Label>
               <Textarea
                 id="neg-remarks"
                 rows={3}
-                placeholder="Optional — approvers and timeline"
+                required
+                placeholder="Context for approvers — timeline, rationale, links…"
                 value={form.remarks}
                 onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))}
               />
@@ -626,7 +629,9 @@ export function NegotiatedRateNewPage() {
             <div className="grid gap-2">
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div className="grid gap-1">
-                  <Label htmlFor="neg-file-btn">Attachments (optional)</Label>
+                  <Label htmlFor="neg-file-btn" showRequired>
+                    Attachments
+                  </Label>
                   <p className="sr-only">
                     Multiple files; attached to round 1 as opening evidence after the draft is created.
                   </p>
@@ -734,25 +739,28 @@ export function NegotiatedRateNewPage() {
                 {previewNegotiationSavings.pct.toFixed(1)}%)
               </div>
             ) : null}
-            {previewVsBase && previewVsBase.amount !== 0 ? (
+            {previewVsBase ? (
               <div
-                className={`rounded-lg border p-3 text-xs ${
-                  previewVsBase.amount > 0
-                    ? "border-amber-200 bg-amber-50/70 text-amber-900"
-                    : "border-emerald-200 bg-emerald-50/50 text-emerald-900"
+                className={`flex justify-end rounded-lg border px-3 py-2 ${
+                  previewVsBase.pct > 0
+                    ? "border-red-200/80 bg-red-50/50"
+                    : previewVsBase.pct < 0
+                      ? "border-emerald-200/80 bg-emerald-50/50"
+                      : "border-border bg-muted/30"
                 }`}
               >
-                {previewVsBase.amount > 0 ? (
-                  <>
-                    <strong>{formatMoney(previewVsBase.amount)}</strong> above Part Master base (
-                    {previewVsBase.pct.toFixed(1)}%).
-                  </>
-                ) : (
-                  <>
-                    <strong>{formatMoney(Math.abs(previewVsBase.amount))}</strong> below base (
-                    {Math.abs(previewVsBase.pct).toFixed(1)}%).
-                  </>
-                )}
+                <span
+                  className={`text-base font-semibold tabular-nums tracking-tight ${
+                    previewVsBase.pct > 0
+                      ? "text-red-600"
+                      : previewVsBase.pct < 0
+                        ? "text-emerald-600"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {previewVsBase.pct > 0 ? "+" : ""}
+                  {previewVsBase.pct.toFixed(2)}%
+                </span>
               </div>
             ) : null}
 

@@ -152,7 +152,6 @@ class InvoiceValidationEngine:
         tol = _tolerance_pct(self._db)
 
         wo_add_by_id: dict[int, Decimal] = defaultdict(Decimal)
-        wo_first_line: dict[int, int] = {}
 
         blocker = 0
         errors = 0
@@ -238,8 +237,6 @@ class InvoiceValidationEngine:
             if wo is not None and str(wo.status) == "active":
                 wid = int(wo.id)
                 wo_add_by_id[wid] += _dec(line.amount)
-                if wid not in wo_first_line:
-                    wo_first_line[wid] = int(line.id)
 
             # Completion -> allowed quantity/value (latest approved snapshot per line; matches WO completion engine).
             allowed_qty: Decimal | None = None
@@ -334,21 +331,23 @@ class InvoiceValidationEngine:
 
             planned_contract_value = _q2(_dec(item.taxable_value))
             if planned_contract_value > 0:
-                perm_value_line = planned_contract_value * (Decimal("1") + (tol / Decimal("100")))
                 cumulative_value = prev_amt_dec + _dec(line.amount)
-                if _q2(cumulative_value) > _q2(perm_value_line):
+                if _q2(cumulative_value) > _q2(planned_contract_value):
                     add_issue(
                         line_id=int(line.id),
-                        code="VALUE_EXCEEDS_APPROVED_TOLERANCE",
-                        severity="warning",
-                        message="Cumulative invoice value for this line exceeds its line budget (informational).",
-                        allowed_value=_q2(perm_value_line),
+                        code="LINE_VALUE_EXCEEDS_APPROVED",
+                        severity="blocker",
+                        message=(
+                            "Cumulative invoice value for this work order line exceeds the approved "
+                            "line total (ex. tax)."
+                        ),
+                        allowed_value=_q2(planned_contract_value),
                         actual_value=_q2(cumulative_value),
-                        requires_justification=False,
-                        requires_attachments=False,
+                        requires_justification=True,
+                        requires_attachments=True,
                         metadata={
                             "previous_invoiced_value": str(_q2(prev_amt_dec)),
-                            "planned_contract_value_strict": str(_q2(planned_contract_value)),
+                            "approved_line_value": str(_q2(planned_contract_value)),
                         },
                     )
 
@@ -400,26 +399,31 @@ class InvoiceValidationEngine:
                 self._db, work_order_id=int(wid), exclude_invoice_id=int(invoice.id)
             )
             if _q2(prev + add_amt) > _q2(cap):
-                lid = wo_first_line.get(int(wid))
-                add_issue(
-                    line_id=lid,
-                    code="WO_INVOICE_TOTAL_EXCEEDED",
-                    severity="blocker",
-                    message=(
-                        f"Cumulative invoice amounts for work order {wo_row.work_order_number} exceed "
-                        f"the approved work order value ({_q2(cap)} ex. tax; "
-                        f"including this invoice: {_q2(prev + add_amt)} ex. tax)."
-                    ),
-                    allowed_value=_q2(cap),
-                    actual_value=_q2(prev + add_amt),
-                    metadata={
-                        "work_order_id": int(wid),
-                        "previous_invoiced_ex_tax": str(_q2(prev)),
-                        "approved_value_total": str(_q2(cap)),
-                    },
-                    requires_justification=True,
-                    requires_attachments=True,
+                msg = (
+                    f"Cumulative invoice amounts for work order {wo_row.work_order_number} exceed "
+                    f"the approved work order value ({_q2(cap)} ex. tax; "
+                    f"including this invoice: {_q2(prev + add_amt)} ex. tax)."
                 )
+                meta = {
+                    "work_order_id": int(wid),
+                    "previous_invoiced_ex_tax": str(_q2(prev)),
+                    "approved_value_total": str(_q2(cap)),
+                }
+                for inv_line in invoice.lines or []:
+                    itm = self._db.get(WorkOrderItem, int(inv_line.work_order_item_id))
+                    if itm is None or int(itm.work_order_id) != int(wid):
+                        continue
+                    add_issue(
+                        line_id=int(inv_line.id),
+                        code="WO_INVOICE_TOTAL_EXCEEDED",
+                        severity="blocker",
+                        message=msg,
+                        allowed_value=_q2(cap),
+                        actual_value=_q2(prev + add_amt),
+                        metadata=meta,
+                        requires_justification=True,
+                        requires_attachments=True,
+                    )
 
         invoice.total_amount = _q2(total)
 

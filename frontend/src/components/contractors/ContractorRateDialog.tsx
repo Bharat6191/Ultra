@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { formatMoney } from "@/components/contractors/rateStatus"
@@ -112,11 +113,10 @@ export function NewNegotiationDialog({
 
   const baseRate = selected ? Number(selected.base_rate) : NaN
   const negRate = Number(form.negotiated_rate)
-  const initialRateRaw = Number(form.initial_rate)
-  // Effective opening ask = explicit input if present, else the proposed rate.
-  const effectiveInitial = Number.isFinite(initialRateRaw) && initialRateRaw > 0
-    ? initialRateRaw
-    : negRate
+  const initialAskStr = form.initial_rate.trim()
+  const initialAskN = Number(initialAskStr)
+  const effectiveInitial =
+    initialAskStr !== "" && Number.isFinite(initialAskN) && initialAskN > 0 ? initialAskN : NaN
 
   // Negotiation savings preview: opening ask -> final, clamped at 0.
   const previewNegotiationSavings =
@@ -142,8 +142,12 @@ export function NewNegotiationDialog({
   const canSave =
     effectiveContractorId !== null &&
     form.part_master_id !== null &&
+    initialAskStr !== "" &&
+    Number.isFinite(initialAskN) &&
+    initialAskN > 0 &&
     !!form.negotiated_rate.trim() &&
     Number.isFinite(negRate) &&
+    negRate > 0 &&
     !!form.effective_from
 
   const SELECT_ROW_CLASS =
@@ -254,10 +258,11 @@ export function NewNegotiationDialog({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">
-                Initial ask <span className="font-normal text-muted-foreground">(optional)</span>
-              </label>
+              <Label htmlFor="dlg-neg-initial" className="mb-1" showRequired>
+                Initial ask
+              </Label>
               <Input
+                id="dlg-neg-initial"
                 type="number"
                 inputMode="decimal"
                 placeholder="Contractor's opening price"
@@ -266,11 +271,7 @@ export function NewNegotiationDialog({
                   setForm((s) => ({ ...s, initial_rate: e.target.value }))
                 }
               />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                The opening price the contractor proposed. Leave blank if you're
-                already entering the agreed rate; you can capture it on round 1
-                later.
-              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Opening price from the contractor.</p>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">

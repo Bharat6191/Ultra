@@ -148,6 +148,26 @@ class WorkOrderService:
             raise ConflictError("Selected part master is expired for the work date.")
         return Decimal(rm.base_rate), "master", None
 
+    def preview_resolved_line_rate(
+        self,
+        *,
+        contractor_id: int,
+        part_master_id: int,
+        work_date: date,
+    ) -> dict[str, Any]:
+        """Same resolution as persisted WO lines; for UI preview while drafting."""
+        self._ensure_contractor(int(contractor_id))
+        rate, src, cr_id = self._resolve_rate_for(
+            contractor_id=int(contractor_id),
+            part_master_id=int(part_master_id),
+            work_date=work_date,
+        )
+        return {
+            "resolved_rate": str(rate),
+            "rate_source": src,
+            "contractor_rate_id": cr_id,
+        }
+
     def _next_number(self, *, org_unit_id: int) -> str:
         # Deterministic, readable numbering. Not gapless (safe under concurrency).
         # Format: WO-<plantId>-<YYYYMMDD>-<sequence>
@@ -502,6 +522,64 @@ class WorkOrderService:
             item.rate_source = src
             item.contractor_rate_id = cr_id
             self._recompute_taxable_for_item(item)
+
+    def sync_resolved_rates_for_contractor_part(self, *, contractor_id: int, part_master_id: int) -> int:
+        """Re-resolve rates on draft/active work orders after a negotiated rate becomes active.
+
+        Uses the same :meth:`_resolve_rate_for` rules as new work order lines (work date window,
+        then Part Master baseline). Skips lines that already use an **approved** manual override.
+
+        Invoice lines inherit ``resolved_rate`` from the work order item, so this keeps WO and
+        invoicing aligned with the latest negotiated price for that contractor + part.
+        """
+        wo_ids_sq = (
+            select(WorkOrderItem.work_order_id)
+            .join(WorkOrder, WorkOrder.id == WorkOrderItem.work_order_id)
+            .where(
+                WorkOrder.contractor_id == int(contractor_id),
+                WorkOrderItem.part_master_id == int(part_master_id),
+                WorkOrder.status.in_(("draft", "active")),
+                WorkOrder.is_active.is_(True),
+            )
+            .distinct()
+        )
+        stmt = select(WorkOrder).where(WorkOrder.id.in_(wo_ids_sq)).options(selectinload(WorkOrder.items))
+        wos = list(self._db.scalars(stmt).unique().all())
+        touched = 0
+        for wo in wos:
+            changed = False
+            for item in list(wo.items or []):
+                if int(item.part_master_id) != int(part_master_id):
+                    continue
+                if (
+                    item.override_rate is not None
+                    and str(item.rate_source or "") == "override"
+                    and str(item.override_status or "").strip().lower() == "approved"
+                ):
+                    continue
+                rate, src, cr_id = self._resolve_rate_for(
+                    contractor_id=int(wo.contractor_id),
+                    part_master_id=int(item.part_master_id),
+                    work_date=wo.work_date,
+                )
+                new_r = _q2(Decimal(rate))
+                new_src = str(src)
+                cr_same = (item.contractor_rate_id is None and cr_id is None) or (
+                    item.contractor_rate_id is not None
+                    and cr_id is not None
+                    and int(item.contractor_rate_id) == int(cr_id)
+                )
+                if item.resolved_rate == new_r and str(item.rate_source) == new_src and cr_same:
+                    continue
+                item.resolved_rate = new_r
+                item.rate_source = new_src
+                item.contractor_rate_id = cr_id
+                self._recompute_taxable_for_item(item)
+                changed = True
+            if changed:
+                touched += 1
+                self._sync_approved_value_total_from_lines(wo)
+        return touched
 
     def create(self, payload: WorkOrderCreate, *, actor_user_id: int) -> WorkOrder:
         self._ensure_plant(int(payload.org_unit_id))

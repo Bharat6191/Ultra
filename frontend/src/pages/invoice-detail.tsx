@@ -16,6 +16,36 @@ import { InvoicePdfDownloadButton } from "@/components/invoices/invoice-pdf"
 import { InvoicePreview } from "@/components/invoices/invoice-preview"
 import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
 
+function InvoiceLineCommercialBadge({ line, validated }: { line: any; validated: boolean }) {
+  if (!validated) {
+    return (
+      <Badge variant="secondary" className="font-normal">
+        Pending
+      </Badge>
+    )
+  }
+  const s = line.validation_line_status
+  if (s === "blocked") {
+    return (
+      <Badge variant="destructive" className="font-normal">
+        Blocked
+      </Badge>
+    )
+  }
+  if (s === "warn") {
+    return (
+      <Badge variant="warning" className="font-normal">
+        Warning
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="success" className="font-normal">
+      Passed
+    </Badge>
+  )
+}
+
 type Invoice = any
 type InvoiceAuditEntry = {
   id: number
@@ -239,6 +269,8 @@ export function InvoiceDetailPage() {
     lines: pdfLines,
   }
 
+  const invoiceValidationDone = Boolean(row.last_validated_at ?? row.validation_status)
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -285,12 +317,16 @@ export function InvoiceDetailPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Lines</CardTitle>
-          <CardDescription>Approved rates locked to work order snapshots; tint shows validation posture.</CardDescription>
+          <CardDescription>
+            Each line is checked against its approved work order line total and the work order total (ex. tax). Tint
+            reflects validation posture; badges show per-line result after validation runs.
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[100px]">WO value check</TableHead>
                 <TableHead className="w-[110px]">Work order</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right w-[72px]">Qty</TableHead>
@@ -314,6 +350,9 @@ export function InvoiceDetailPage() {
                         : undefined
                   }
                 >
+                  <TableCell className="align-middle">
+                    <InvoiceLineCommercialBadge line={l} validated={invoiceValidationDone} />
+                  </TableCell>
                   <TableCell className="text-xs font-mono whitespace-nowrap">{l.work_order_number ?? "—"}</TableCell>
                   <TableCell className="text-xs max-w-[200px]">
                     <div className="font-medium">#{l.work_order_item_id}</div>
@@ -396,7 +435,9 @@ export function InvoiceDetailPage() {
                 </div>
                 {canUpdate && i.requires_justification ? (
                   <div className="mt-2 grid gap-2">
-                    <Label className="text-xs">Justification</Label>
+                    <Label className="text-xs" showRequired>
+                      Justification
+                    </Label>
                     <Textarea
                       defaultValue={i.justification ?? ""}
                       rows={2}

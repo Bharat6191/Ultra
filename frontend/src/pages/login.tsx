@@ -173,7 +173,9 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
           {mfaChallenge ? (
             <form className="space-y-3" onSubmit={submitOtp}>
               <div className="space-y-1.5">
-                <Label htmlFor="otp">6-digit code</Label>
+                <Label htmlFor="otp" showRequired>
+                  6-digit code
+                </Label>
                 <Input
                   id="otp"
                   inputMode="numeric"
@@ -201,7 +203,9 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
           ) : (
             <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
               <div className="space-y-1.5">
-                <Label htmlFor="email">Email or username</Label>
+                <Label htmlFor="email" showRequired>
+                  Email or username
+                </Label>
                 <Input
                   id="email"
                   type="text"
@@ -217,7 +221,9 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password" showRequired>
+                    Password
+                  </Label>
                   <Link
                     to="/forgot-password?returnTo=%2Fadmin%2Flogin"
                     className="text-xs text-primary underline-offset-2 hover:underline"
@@ -240,7 +246,9 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
 
               {policy?.captcha_enabled ? (
                 <div className="space-y-1.5">
-                  <Label htmlFor="captcha_token">Captcha token</Label>
+                  <Label htmlFor="captcha_token" showRequired>
+                    Captcha token
+                  </Label>
                   <Input
                     id="captcha_token"
                     autoComplete="off"

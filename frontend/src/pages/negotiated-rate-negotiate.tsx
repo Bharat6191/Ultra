@@ -260,7 +260,7 @@ export function NegotiatedRateNegotiatePage() {
           <CardContent>
             <div className="grid gap-4">
             <div className="grid gap-1">
-              <Label>Agreed rate</Label>
+              <Label showRequired>Agreed rate</Label>
               <Input
                 type="number"
                 inputMode="decimal"

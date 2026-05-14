@@ -265,7 +265,9 @@ export function WorkflowAssignmentPage() {
             <div className="text-sm font-medium">1. Create a draft</div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="wf-name">Workflow name</Label>
+                <Label htmlFor="wf-name" showRequired>
+                  Workflow name
+                </Label>
                 <Input
                   id="wf-name"
                   value={newWorkflowName}
@@ -275,7 +277,9 @@ export function WorkflowAssignmentPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="wf-entity">Entity type</Label>
+                <Label htmlFor="wf-entity" showRequired>
+                  Entity type
+                </Label>
                 <Input
                   id="wf-entity"
                   value={newEntityType}
@@ -299,7 +303,9 @@ export function WorkflowAssignmentPage() {
           <div className="space-y-3">
             <div className="text-sm font-medium">2. Add approval levels</div>
             <div className="space-y-2">
-              <Label htmlFor="builder-wf">Workflow to edit</Label>
+              <Label htmlFor="builder-wf" showRequired>
+                Workflow to edit
+              </Label>
               <select
                 id="builder-wf"
                 className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"
@@ -351,7 +357,9 @@ export function WorkflowAssignmentPage() {
                   <div className="text-sm font-medium">Add next level ({nextStepOrder})</div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="step-role">Approver role</Label>
+                      <Label htmlFor="step-role" showRequired>
+                        Approver role
+                      </Label>
                       <select
                         id="step-role"
                         className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"
@@ -368,7 +376,9 @@ export function WorkflowAssignmentPage() {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="step-req">Required approvals at this level</Label>
+                      <Label htmlFor="step-req" showRequired>
+                        Required approvals at this level
+                      </Label>
                       <Input
                         id="step-req"
                         type="number"
@@ -420,7 +430,9 @@ export function WorkflowAssignmentPage() {
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="action-select">Action (permission code)</Label>
+              <Label htmlFor="action-select" showRequired>
+                Action (permission code)
+              </Label>
               <select
                 id="action-select"
                 className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"
@@ -438,7 +450,9 @@ export function WorkflowAssignmentPage() {
               </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="workflow-select">Workflow (active only)</Label>
+              <Label htmlFor="workflow-select" showRequired>
+                Workflow (active only)
+              </Label>
               <select
                 id="workflow-select"
                 className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"

@@ -20,6 +20,19 @@ def _dec(x: Any) -> Decimal:
     return Decimal(str(x))
 
 
+def derive_rate_per_kg_from_labour(
+    *,
+    labour_cost: Decimal,
+    man_days: Decimal,
+    weight_kg: Decimal,
+) -> Decimal:
+    """``rate_per_kg = (man_days × labour_cost) / weight_kg`` (half-up to 2 dp)."""
+    w = _dec(weight_kg)
+    if w <= 0:
+        raise ValueError("Weight (kg) must be greater than zero.")
+    return q2(_dec(man_days) * _dec(labour_cost) / w)
+
+
 def commercial_line_amount(
     *,
     quantity: Decimal,

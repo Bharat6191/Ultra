@@ -25,6 +25,8 @@ export type PartMasterPublic = {
   billing_basis: string
   allow_manual_amount_override: boolean
   weight_per_piece: string | number | null
+  labour_cost: string | number | null
+  man_days: string | number | null
   labour_headcount: number | null
   standard_man_hours: string | number | null
   base_rate: number | string
@@ -210,7 +212,7 @@ export function PartMasterPage() {
                   <TableHead>Pricing</TableHead>
                   <TableHead>Rate unit</TableHead>
                   <TableHead className="text-right">Base</TableHead>
-                  <TableHead className="text-right">Labour</TableHead>
+                  <TableHead className="text-right">Cost / days</TableHead>
                   <TableHead>Effective</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-[120px]" />
@@ -226,8 +228,14 @@ export function PartMasterPage() {
                     <TableCell className="text-xs">{r.rate_unit_type}</TableCell>
                     <TableCell className="text-right text-sm">{String(r.base_rate)}</TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
-                      {r.labour_headcount != null ? `${r.labour_headcount} hc` : "—"}
-                      {r.standard_man_hours != null ? ` · ${String(r.standard_man_hours)} mh` : ""}
+                      {r.labour_cost != null || r.man_days != null ? (
+                        <>
+                          {r.labour_cost != null ? String(r.labour_cost) : "—"}
+                          {r.man_days != null ? ` · ${String(r.man_days)} d` : ""}
+                        </>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {r.effective_from}

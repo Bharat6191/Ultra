@@ -22,6 +22,8 @@ class PartMasterCreate(BaseModel):
     )
     allow_manual_amount_override: bool = False
     weight_per_piece: Decimal | None = Field(default=None, ge=Decimal("0"))
+    labour_cost: Decimal | None = Field(default=None, ge=Decimal("0"))
+    man_days: Decimal | None = Field(default=None, ge=Decimal("0"))
     labour_headcount: int | None = Field(default=None, ge=0)
     standard_man_hours: Decimal | None = Field(default=None, ge=Decimal("0"))
     base_rate: Decimal = Field(gt=Decimal("0"))
@@ -108,6 +110,8 @@ class PartMasterUpdate(BaseModel):
     billing_basis: str | None = Field(default=None, max_length=16)
     allow_manual_amount_override: bool | None = None
     weight_per_piece: Decimal | None = None
+    labour_cost: Decimal | None = Field(default=None, ge=Decimal("0"))
+    man_days: Decimal | None = Field(default=None, ge=Decimal("0"))
     labour_headcount: int | None = Field(default=None, ge=0)
     standard_man_hours: Decimal | None = Field(default=None, ge=Decimal("0"))
     base_rate: Decimal | None = Field(default=None, gt=Decimal("0"))
@@ -212,6 +216,8 @@ class PartMasterPublic(BaseModel):
     billing_basis: str
     allow_manual_amount_override: bool
     weight_per_piece: Decimal | None = None
+    labour_cost: Decimal | None = None
+    man_days: Decimal | None = None
     labour_headcount: int | None = None
     standard_man_hours: Decimal | None = None
     base_rate: Decimal

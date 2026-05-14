@@ -102,7 +102,9 @@ export function MfaSetupPage() {
             </div>
           ) : null}
           <div className="space-y-2">
-            <Label htmlFor="mfa-otp">6-digit code</Label>
+            <Label htmlFor="mfa-otp" showRequired>
+              6-digit code
+            </Label>
             <Input
               id="mfa-otp"
               inputMode="numeric"

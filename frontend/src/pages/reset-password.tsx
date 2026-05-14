@@ -147,7 +147,9 @@ export function ResetPasswordPage() {
         <CardContent className="p-0">
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="new-password">New password</Label>
+              <Label htmlFor="new-password" showRequired>
+                New password
+              </Label>
               <Input
                 id="new-password"
                 type="password"
@@ -160,7 +162,9 @@ export function ResetPasswordPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="confirm-password">Confirm password</Label>
+              <Label htmlFor="confirm-password" showRequired>
+                Confirm password
+              </Label>
               <Input
                 id="confirm-password"
                 type="password"

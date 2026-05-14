@@ -406,7 +406,9 @@ export function PlantsPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="cluster-name-page">Cluster name</Label>
+                  <Label htmlFor="cluster-name-page" showRequired>
+                    Cluster name
+                  </Label>
                   <Input
                     id="cluster-name-page"
                     value={clusterName}
@@ -458,7 +460,9 @@ export function PlantsPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="plant-name-page">Plant name</Label>
+                  <Label htmlFor="plant-name-page" showRequired>
+                    Plant name
+                  </Label>
                   <Input
                     id="plant-name-page"
                     value={plantName}
@@ -510,7 +514,9 @@ export function PlantsPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="attach-plant">Plant</Label>
+                  <Label htmlFor="attach-plant" showRequired>
+                    Plant
+                  </Label>
                   <select
                     id="attach-plant"
                     className={SELECT_CLASS}
@@ -574,7 +580,9 @@ export function PlantsPage() {
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-org-name">Name</Label>
+              <Label htmlFor="edit-org-name" showRequired>
+                Name
+              </Label>
               <Input
                 id="edit-org-name"
                 value={editName}

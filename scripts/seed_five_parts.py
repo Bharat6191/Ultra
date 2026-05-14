@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Insert five Part Master rows with full commercial and labour fields.
+"""Insert five Part Master rows with commercial fields (weight-based uses labour × days ÷ weight).
 
 Uses the first PLANT org unit. Idempotent: skips any part_code that already exists
 for that plant (active row).
@@ -62,17 +62,17 @@ def main() -> None:
                 description="90° rectangular duct section; zinc-coated steel. Used in HVAC distribution mains.",
                 unit_type="kg",
                 pricing_method="weight_based",
-                weight_per_piece=Decimal("42.350"),
-                labour_headcount=2,
-                standard_man_hours=Decimal("3.25"),
-                base_rate=Decimal("118.50"),
+                weight_per_piece=Decimal("100"),
+                labour_cost=Decimal("11850"),
+                man_days=Decimal("1"),
+                base_rate=Decimal("1"),
                 rate_unit_type="per_kg",
                 org_unit_id=plant_id,
                 effective_from=today,
                 effective_to=None,
                 is_active=True,
                 status="active",
-                notes="Default catalog weight for standard elbow; weigh actual piece on site if variance >3%.",
+                notes="Rate/kg derived as man_days × labour_cost ÷ weight (100 kg → 118.50/kg).",
             ),
             PartMasterCreate(
                 part_code="P-SEED-002",
@@ -81,8 +81,6 @@ def main() -> None:
                 unit_type="nos",
                 pricing_method="piece_based",
                 weight_per_piece=None,
-                labour_headcount=4,
-                standard_man_hours=Decimal("16.00"),
                 base_rate=Decimal("87500.00"),
                 rate_unit_type="per_piece",
                 org_unit_id=plant_id,
@@ -99,8 +97,6 @@ def main() -> None:
                 unit_type="m",
                 pricing_method="piece_based",
                 weight_per_piece=None,
-                labour_headcount=1,
-                standard_man_hours=Decimal("0.45"),
                 base_rate=Decimal("2850.00"),
                 rate_unit_type="per_unit",
                 org_unit_id=plant_id,
@@ -117,8 +113,6 @@ def main() -> None:
                 unit_type="box",
                 pricing_method="piece_based",
                 weight_per_piece=None,
-                labour_headcount=2,
-                standard_man_hours=Decimal("6.50"),
                 base_rate=Decimal("14200.00"),
                 rate_unit_type="per_box",
                 org_unit_id=plant_id,
@@ -135,8 +129,6 @@ def main() -> None:
                 unit_type="nos",
                 pricing_method="piece_based",
                 weight_per_piece=None,
-                labour_headcount=0,
-                standard_man_hours=Decimal("0.02"),
                 base_rate=Decimal("48.75"),
                 rate_unit_type="per_nos",
                 org_unit_id=plant_id,
@@ -144,7 +136,7 @@ def main() -> None:
                 effective_to=None,
                 is_active=True,
                 status="active",
-                notes="Rate per each (per_nos); standard_man_hours is per 100 pieces for estimating only.",
+                notes="Rate per each (per_nos); commercial baseline only.",
             ),
         ]
 

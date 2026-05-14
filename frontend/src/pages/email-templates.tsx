@@ -203,11 +203,11 @@ export function EmailTemplatesPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Name</Label>
+              <Label showRequired>Name</Label>
               <Input value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder="e.g. User created v1" disabled={!canCreate} />
             </div>
             <div className="space-y-1.5">
-              <Label>Event</Label>
+              <Label showRequired>Event</Label>
               <select
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 value={createEvent}
@@ -222,11 +222,11 @@ export function EmailTemplatesPage() {
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label>Subject</Label>
+              <Label showRequired>Subject</Label>
               <Input value={createSubject} onChange={(e) => setCreateSubject(e.target.value)} placeholder="Subject…" disabled={!canCreate} />
             </div>
             <div className="space-y-1.5">
-              <Label>Body (HTML)</Label>
+              <Label showRequired>Body (HTML)</Label>
               <textarea
                 className="min-h-[140px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
                 value={createBody}

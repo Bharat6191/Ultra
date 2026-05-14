@@ -405,7 +405,7 @@ class ContractorRateService:
             effective_to=payload.effective_to,
             status="draft",
             current_round=0,
-            remarks=(payload.remarks or None),
+            remarks=payload.remarks,
             created_by=actor_user_id,
         )
         self._db.add(row)
@@ -992,6 +992,14 @@ class ContractorRateService:
             actor_user_id=actor_user_id,
             new_value={"version_number": int(ver.version_number)},
             metadata={"reason": "RATE_ACTIVATED"},
+        )
+
+        # Align draft/active work order lines (and thus invoices) with this negotiated rate.
+        from modules.work_orders.service import WorkOrderService  # noqa: PLC0415
+
+        WorkOrderService(self._db).sync_resolved_rates_for_contractor_part(
+            contractor_id=int(row.contractor_id),
+            part_master_id=int(row.part_master_id),
         )
 
     # --- notifications (best-effort, non-blocking) ---

@@ -28,6 +28,8 @@ PART_MASTER_TRACKED_FIELDS: tuple[str, ...] = (
     "billing_basis",
     "allow_manual_amount_override",
     "weight_per_piece",
+    "labour_cost",
+    "man_days",
     "labour_headcount",
     "standard_man_hours",
     "base_rate",

@@ -348,7 +348,9 @@ export function RolesPage() {
                   </DialogHeader>
                   <div className="space-y-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="role-name">Name</Label>
+                      <Label htmlFor="role-name" showRequired>
+                        Name
+                      </Label>
                       <Input
                         id="role-name"
                         value={createName}

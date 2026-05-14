@@ -10,15 +10,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
-/** Tabs follow ``validation_status`` (no payment-based grouping). */
-type InvoiceValidationTab = "all" | "not_validated" | "pass" | "warn" | "fail" | "blocked"
+/** Tabs: all invoices, validation passed only, or any non-pass outcome (warn / fail / blocked). */
+type InvoiceValidationTab = "all" | "pass" | "blocked"
 
 const INVOICE_VALIDATION_TABS: { id: InvoiceValidationTab; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "not_validated", label: "Not validated" },
   { id: "pass", label: "Pass" },
-  { id: "warn", label: "Warn" },
-  { id: "fail", label: "Fail" },
   { id: "blocked", label: "Blocked" },
 ]
 
@@ -133,20 +130,25 @@ export function InvoicesPage() {
   }, [canView, canCreate])
 
   const validationCounts = React.useMemo(() => {
-    const m = new Map<string, number>()
-    if (!rows) return m
+    let pass = 0
+    let blocked = 0
+    if (!rows) return { pass, blocked }
     for (const r of rows) {
-      const k = normalizedValidation(r) ?? "__none__"
-      m.set(k, (m.get(k) ?? 0) + 1)
+      const k = normalizedValidation(r)
+      if (k === "pass") pass += 1
+      else if (k === "warn" || k === "fail" || k === "blocked") blocked += 1
     }
-    return m
+    return { pass, blocked }
   }, [rows])
 
   const filtered = React.useMemo(() => {
     if (!rows) return []
     if (validationTab === "all") return rows
-    if (validationTab === "not_validated") return rows.filter((r) => normalizedValidation(r) === null)
-    return rows.filter((r) => normalizedValidation(r) === validationTab)
+    if (validationTab === "pass") return rows.filter((r) => normalizedValidation(r) === "pass")
+    return rows.filter((r) => {
+      const k = normalizedValidation(r)
+      return k === "warn" || k === "fail" || k === "blocked"
+    })
   }, [rows, validationTab])
 
   return (
@@ -184,9 +186,9 @@ export function InvoicesPage() {
               const n =
                 t.id === "all"
                   ? (rows?.length ?? 0)
-                  : t.id === "not_validated"
-                    ? (validationCounts.get("__none__") ?? 0)
-                    : (validationCounts.get(t.id) ?? 0)
+                  : t.id === "pass"
+                    ? validationCounts.pass
+                    : validationCounts.blocked
               return (
                 <Button
                   key={t.id}

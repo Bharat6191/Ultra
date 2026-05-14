@@ -195,7 +195,9 @@ export function AppLoginPage() {
           {step === "password" ? (
             <form onSubmit={onSubmitPassword} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Email or username</Label>
+                <Label htmlFor="username" showRequired>
+                  Email or username
+                </Label>
                 <Input
                   id="username"
                   type="text"
@@ -210,7 +212,9 @@ export function AppLoginPage() {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password" showRequired>
+                    Password
+                  </Label>
                   <Link
                     to="/forgot-password"
                     className="text-xs text-primary underline-offset-2 hover:underline"
@@ -232,7 +236,9 @@ export function AppLoginPage() {
 
               {policy?.captcha_enabled ? (
                 <div className="space-y-2">
-                  <Label htmlFor="captcha">Captcha token</Label>
+                  <Label htmlFor="captcha" showRequired>
+                    Captcha token
+                  </Label>
                   <Input
                     id="captcha"
                     value={captchaToken}
@@ -251,7 +257,9 @@ export function AppLoginPage() {
           ) : (
             <form onSubmit={onSubmitOtp} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="otp">6-digit code</Label>
+                <Label htmlFor="otp" showRequired>
+                  6-digit code
+                </Label>
                 <Input
                   id="otp"
                   inputMode="numeric"

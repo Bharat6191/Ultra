@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -129,6 +130,35 @@ function lineTaxableExVat(ln: BillableLine, invoiceQty: number): number | null {
     }
   }
   return lineExTax(ln, invoiceQty)
+}
+
+/** Approved ex-VAT cap for this work order line (matches backend ``WorkOrderItem.taxable_value``). */
+function approvedLineCapExVat(ln: BillableLine): number {
+  const v = ln.approved_line_taxable_ex_vat
+  if (Number.isFinite(v)) return v
+  const p = ln.planned_contract_value
+  return Number.isFinite(p ?? NaN) ? (p as number) : 0
+}
+
+type LineCommercialGate = "pending" | "pass" | "line_cap" | "wo_cap"
+
+function lineCommercialGate(
+  ln: BillableLine,
+  lineTaxable: number | null,
+  woDraftSum: Map<number, number>,
+  woCapSum: Map<number, number>,
+  woPriorSum: Map<number, number>,
+): LineCommercialGate {
+  if (lineTaxable == null || lineTaxable <= 0) return "pending"
+  const prev = ln.previously_invoiced_value != null && Number.isFinite(ln.previously_invoiced_value) ? ln.previously_invoiced_value : 0
+  const lineCap = approvedLineCapExVat(ln)
+  if (lineCap > 0 && q2Money(prev + lineTaxable) > q2Money(lineCap)) return "line_cap"
+  const wid = ln.work_order_id
+  const cap = woCapSum.get(wid) ?? 0
+  const prior = woPriorSum.get(wid) ?? 0
+  const draft = woDraftSum.get(wid) ?? 0
+  if (cap > 0 && q2Money(prior + draft) > q2Money(cap)) return "wo_cap"
+  return "pass"
 }
 
 export function InvoiceCreatePage() {
@@ -303,6 +333,33 @@ export function InvoiceCreatePage() {
     return lines
   }, [billableByItemId, preflight, selectedLineIds])
 
+  const woCommercialSums = React.useMemo(() => {
+    const woCapSum = new Map<number, number>()
+    const woPriorSum = new Map<number, number>()
+    if (!preflight) return { woCapSum, woPriorSum }
+    for (const l of preflight.lines) {
+      const wid = l.work_order_id
+      woCapSum.set(wid, q2Money((woCapSum.get(wid) ?? 0) + approvedLineCapExVat(l)))
+      const prev =
+        l.previously_invoiced_value != null && Number.isFinite(l.previously_invoiced_value) ? l.previously_invoiced_value : 0
+      woPriorSum.set(wid, q2Money((woPriorSum.get(wid) ?? 0) + prev))
+    }
+    return { woCapSum, woPriorSum }
+  }, [preflight])
+
+  const woDraftTaxSum = React.useMemo(() => {
+    const m = new Map<number, number>()
+    for (const ln of selectedInvoiceLines) {
+      const inp = lineInputs[ln.work_order_item_id]
+      const q = billQtyPiecesForLine(ln, inp)
+      const ex = q != null && q > 0 ? lineTaxableExVat(ln, q) : null
+      if (ex == null || !Number.isFinite(ex) || ex <= 0) continue
+      const wid = ln.work_order_id
+      m.set(wid, q2Money((m.get(wid) ?? 0) + ex))
+    }
+    return m
+  }, [selectedInvoiceLines, lineInputs])
+
   function defaultInvoiceQtyFromCompletion(ln: BillableLine): string {
     if (ln.progress_type === "percentage") {
       const cp = ln.completed_percentage
@@ -356,7 +413,7 @@ export function InvoiceCreatePage() {
 
   const { count: draftLineCount, gross: draftGross } = totalsPreview()
 
-  const lineDetailColSpan = 10
+  const lineDetailColSpan = 11
 
   const contractorName = React.useMemo(() => {
     const id = Number(form.contractor_id)
@@ -532,7 +589,7 @@ export function InvoiceCreatePage() {
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
-            <Label>Contractor</Label>
+            <Label showRequired>Contractor</Label>
             <select
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none"
               value={form.contractor_id}
@@ -547,7 +604,7 @@ export function InvoiceCreatePage() {
             </select>
           </div>
           <div className="grid gap-1.5">
-            <Label>Plant</Label>
+            <Label showRequired>Plant</Label>
             <select
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none"
               value={form.org_unit_id}
@@ -563,7 +620,7 @@ export function InvoiceCreatePage() {
             </select>
           </div>
           <div className="grid gap-1.5">
-            <Label>Invoice number</Label>
+            <Label showRequired>Invoice number</Label>
             <Input
               value={form.invoice_number}
               onChange={(e) => {
@@ -574,7 +631,7 @@ export function InvoiceCreatePage() {
             />
           </div>
           <div className="grid gap-1.5">
-            <Label>Invoice date</Label>
+            <Label showRequired>Invoice date</Label>
             <Input type="date" value={form.invoice_date} onChange={(e) => setForm((f) => ({ ...f, invoice_date: e.target.value }))} />
           </div>
         </CardContent>
@@ -599,7 +656,7 @@ export function InvoiceCreatePage() {
           ) : (
             <>
               <div className="grid gap-1.5">
-                <Label>Work order</Label>
+                <Label showRequired>Work order</Label>
                 <select
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none"
                   value={selectedWoId === "" ? "" : String(selectedWoId)}
@@ -618,7 +675,7 @@ export function InvoiceCreatePage() {
                 </select>
               </div>
               <div className="grid gap-1.5">
-                <Label>Line item</Label>
+                <Label showRequired>Line item</Label>
                 <div className="flex gap-2">
                   <select
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none"
@@ -673,6 +730,7 @@ export function InvoiceCreatePage() {
                         <Table>
                           <TableHeader>
                             <TableRow className="bg-muted/50">
+                              <TableHead className="w-[128px]">Value check</TableHead>
                               <TableHead className="w-[120px]">Work order</TableHead>
                               <TableHead>Line item</TableHead>
                               <TableHead className="w-[88px] text-right">WT (kg)</TableHead>
@@ -710,9 +768,35 @@ export function InvoiceCreatePage() {
                                     <div className="text-[10px] text-muted-foreground">per unit</div>
                                   </div>
                                 )
+                              const gate = lineCommercialGate(
+                                ln,
+                                baseEx,
+                                woDraftTaxSum,
+                                woCommercialSums.woCapSum,
+                                woCommercialSums.woPriorSum,
+                              )
                               return (
                                 <React.Fragment key={ln.work_order_item_id}>
                                   <TableRow>
+                                    <TableCell className="align-middle">
+                                      {gate === "pass" ? (
+                                        <Badge variant="success" className="font-normal">
+                                          Passed
+                                        </Badge>
+                                      ) : gate === "line_cap" ? (
+                                        <Badge variant="destructive" className="max-w-[118px] whitespace-normal text-left font-normal leading-snug">
+                                          Blocked · over line total
+                                        </Badge>
+                                      ) : gate === "wo_cap" ? (
+                                        <Badge variant="destructive" className="max-w-[118px] whitespace-normal text-left font-normal leading-snug">
+                                          Blocked · over WO total
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant="secondary" className="font-normal">
+                                          —
+                                        </Badge>
+                                      )}
+                                    </TableCell>
                                     <TableCell className="text-xs font-mono">{ln.work_order_number}</TableCell>
                                     <TableCell className="text-xs">
                                       <div className="flex flex-wrap items-center gap-1.5">

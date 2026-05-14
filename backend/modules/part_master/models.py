@@ -47,6 +47,9 @@ class PartMaster(Base):
     labour_headcount: Mapped[int | None] = mapped_column(Integer, nullable=True)
     standard_man_hours: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
 
+    labour_cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    man_days: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+
     base_rate: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     rate_unit_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
 

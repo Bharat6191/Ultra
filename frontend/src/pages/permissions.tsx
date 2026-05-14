@@ -158,7 +158,9 @@ export function PermissionsPage() {
               </DialogHeader>
               <div className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="feature_id">Feature ID</Label>
+                  <Label htmlFor="feature_id" showRequired>
+                    Feature ID
+                  </Label>
                   <Input
                     id="feature_id"
                     inputMode="numeric"
@@ -179,7 +181,9 @@ export function PermissionsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="action">Action</Label>
+                  <Label htmlFor="action" showRequired>
+                    Action
+                  </Label>
                   <Input
                     id="action"
                     value={action}

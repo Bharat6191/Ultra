@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { getJson } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 export type OrgUnitLite = { id: number; name: string }
@@ -261,7 +262,9 @@ export function WorkOrderExecutionHeader(props: {
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <div className="grid gap-1.5">
-        <Label htmlFor="wo-title">Title</Label>
+        <Label htmlFor="wo-title" showRequired={editable}>
+          Title
+        </Label>
         <Input
           id="wo-title"
           placeholder="e.g. Site welding package Q2"
@@ -281,7 +284,9 @@ export function WorkOrderExecutionHeader(props: {
         />
       </div>
       <div className="grid gap-1.5">
-        <Label htmlFor="wo-plant">Plant</Label>
+        <Label htmlFor="wo-plant" showRequired={editable && plantLabel === undefined}>
+          Plant
+        </Label>
         {plantLabel !== undefined ? (
           <div className={cn(selectCls, "flex h-10 items-center text-muted-foreground")}>{plantLabel || "—"}</div>
         ) : (
@@ -297,7 +302,9 @@ export function WorkOrderExecutionHeader(props: {
       </div>
       {showWorkDate ? (
         <div className="grid gap-1.5">
-          <Label htmlFor="wo-work-date">Work date (rate pricing)</Label>
+          <Label htmlFor="wo-work-date" showRequired={workDateEditable}>
+            Work date (rate pricing)
+          </Label>
           {workDateEditable ? (
             <Input
               id="wo-work-date"
@@ -329,10 +336,15 @@ function needsWeightPerPiece(pm: PartMasterLite | undefined): boolean {
   return String(pm.pricing_method ?? "").toLowerCase() === "weight_based" && String(pm.rate_unit_type ?? "").toLowerCase() === "per_kg"
 }
 
-function estimateLineAmount(line: ExecutionDraftLine, pm: PartMasterLite | undefined): number {
+function estimateLineAmount(
+  line: ExecutionDraftLine,
+  pm: PartMasterLite | undefined,
+  resolvedRate?: number,
+): number {
   if (!pm || line.progress_type !== "quantity") return NaN
   const qtyN = parseDecimal(line.qty)
-  const rateN = parseDecimal(pm.base_rate)
+  const rateN =
+    resolvedRate != null && Number.isFinite(resolvedRate) ? resolvedRate : parseDecimal(pm.base_rate)
   if (!Number.isFinite(qtyN) || !Number.isFinite(rateN)) return NaN
   if (needsWeightPerPiece(pm)) {
     const wstr =
@@ -357,6 +369,8 @@ export function WorkOrderExecutionTable(props: {
   onLinesChange: (lines: ExecutionDraftLine[]) => void
   detailRows?: ExecutionDetailRow[]
   contractorSummaryLabel?: string
+  /** ISO YYYY-MM-DD; in edit mode, Rate / Taxable preview uses the same resolution as save (negotiated window vs Part Master). */
+  pricingWorkDate?: string
 }) {
   const {
     mode,
@@ -370,9 +384,72 @@ export function WorkOrderExecutionTable(props: {
     onLinesChange,
     detailRows,
     contractorSummaryLabel,
+    pricingWorkDate,
   } = props
   const pms = filteredPartMasters(partMasters, org_unit_id)
   const isEdit = mode === "edit"
+  const [ratePreviewByPartId, setRatePreviewByPartId] = React.useState<
+    Record<string, { resolved_rate: number; rate_source: string }>
+  >({})
+
+  const sortedPartIdsKey = React.useMemo(
+    () =>
+      [...new Set(lines.map((l) => l.part_master_id).filter(Boolean))]
+        .sort()
+        .join("\u001e"),
+    [lines],
+  )
+
+  React.useEffect(() => {
+    const valid =
+      isEdit && Boolean(contractorId) && Boolean(pricingWorkDate?.trim()) && Boolean(sortedPartIdsKey)
+    if (valid) return
+    let cancelled = false
+    const tid = window.setTimeout(() => {
+      if (!cancelled) setRatePreviewByPartId({})
+    }, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(tid)
+    }
+  }, [isEdit, contractorId, pricingWorkDate, sortedPartIdsKey])
+
+  React.useEffect(() => {
+    if (!isEdit || !contractorId || !pricingWorkDate?.trim()) return
+    const ids = sortedPartIdsKey.split("\u001e").filter(Boolean)
+    if (ids.length === 0) return
+    let cancelled = false
+    const tid = window.setTimeout(() => {
+      void (async () => {
+        const next: Record<string, { resolved_rate: number; rate_source: string }> = {}
+        await Promise.all(
+          ids.map(async (pid) => {
+            try {
+              const qs = new URLSearchParams({
+                contractor_id: contractorId,
+                part_master_id: pid,
+                work_date: pricingWorkDate.trim(),
+              })
+              const r = await getJson<{ resolved_rate: string | number; rate_source: string }>(
+                `/work-orders/rate-preview?${qs.toString()}`,
+              )
+              const rateN = parseDecimal(r.resolved_rate)
+              if (Number.isFinite(rateN)) {
+                next[pid] = { resolved_rate: rateN, rate_source: r.rate_source }
+              }
+            } catch {
+              // Missing key → fall back to Part Master base_rate in the row renderer.
+            }
+          }),
+        )
+        if (!cancelled) setRatePreviewByPartId(next)
+      })()
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(tid)
+    }
+  }, [isEdit, contractorId, pricingWorkDate, sortedPartIdsKey])
   const hasCompletion = !isEdit && (detailRows ?? []).some((r) => Boolean(r.completionCell))
   const hideContractorColumn = !isEdit && contractorSummaryLabel !== undefined
   const viewTableFixed = !isEdit && hasCompletion
@@ -429,7 +506,7 @@ export function WorkOrderExecutionTable(props: {
       <CardContent className="overflow-x-auto p-0 px-px pb-4 sm:p-6 sm:pt-0 [&_[data-slot=exec-scroll]]:px-4 sm:[&_[data-slot=exec-scroll]]:px-0">
         {isEdit ? (
           <div className="grid max-w-md gap-1.5 border-b px-4 py-4 sm:px-6">
-            <Label>Contractor</Label>
+            <Label showRequired={isEdit}>Contractor</Label>
             <select
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
               value={contractorId}
@@ -588,10 +665,16 @@ export function WorkOrderExecutionTable(props: {
               ? lines.map((line, idx) => {
                   const pm = pickPartMaster(pms, line.part_master_id)
                   const showWt = needsWeightPerPiece(pm)
-                  const invN = estimateLineAmount(line, pm)
+                  const preview = line.part_master_id ? ratePreviewByPartId[line.part_master_id] : undefined
+                  const resolvedForLine = preview?.resolved_rate
+                  const invN = estimateLineAmount(line, pm, resolvedForLine)
                   const invShown = Number.isFinite(invN) ? fmtMoney(invN) : "—"
                   const unitShown = pm?.unit_type ?? "—"
-                  const rateN = pm ? parseDecimal(pm.base_rate) : NaN
+                  const baseN = pm ? parseDecimal(pm.base_rate) : NaN
+                  const rateN =
+                    resolvedForLine != null && Number.isFinite(resolvedForLine)
+                      ? resolvedForLine
+                      : baseN
                   const rateShown = pm ? fmtMoney(rateN) : "—"
 
                   return (

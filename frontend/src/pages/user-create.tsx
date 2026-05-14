@@ -201,7 +201,9 @@ export function UserCreatePage() {
           <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="create-full-name">Full name</Label>
+                <Label htmlFor="create-full-name" showRequired>
+                  Full name
+                </Label>
                 <Input id="create-full-name" autoComplete="name" {...form.register("full_name")} />
                 {form.formState.errors.full_name?.message ? (
                   <p className="text-xs text-destructive">{form.formState.errors.full_name.message}</p>
@@ -209,7 +211,9 @@ export function UserCreatePage() {
               </div>
 
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="create-username">Username</Label>
+                <Label htmlFor="create-username" showRequired>
+                  Username
+                </Label>
                 <Input id="create-username" autoComplete="username" {...form.register("username")} />
                 {form.formState.errors.username?.message ? (
                   <p className="text-xs text-destructive">{form.formState.errors.username.message}</p>
@@ -217,7 +221,9 @@ export function UserCreatePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="create-phone">Phone</Label>
+                <Label htmlFor="create-phone" showRequired>
+                  Phone
+                </Label>
                 <Input id="create-phone" autoComplete="tel" {...form.register("phone")} />
                 {form.formState.errors.phone?.message ? (
                   <p className="text-xs text-destructive">{form.formState.errors.phone.message}</p>
@@ -225,7 +231,9 @@ export function UserCreatePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="create-email">Email</Label>
+                <Label htmlFor="create-email" showRequired>
+                  Email
+                </Label>
                 <Input id="create-email" type="email" autoComplete="email" {...form.register("email")} />
                 {form.formState.errors.email?.message ? (
                   <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
@@ -269,7 +277,7 @@ export function UserCreatePage() {
               </div>
 
               <div className="space-y-2 sm:col-span-2">
-                <Label>Plant</Label>
+                <Label showRequired>Plant</Label>
                 <select className="h-9 w-full rounded-md border bg-background px-2 text-sm" {...form.register("org_unit_id")}>
                   <option value="">Select a plant…</option>
                   {(plants ?? []).map((p) => (
@@ -284,7 +292,7 @@ export function UserCreatePage() {
               </div>
 
               <div className="space-y-2 sm:col-span-2">
-                <Label>Roles</Label>
+                <Label showRequired>Roles</Label>
                 <p className="text-xs text-muted-foreground">Select every role this user should have (permissions combine).</p>
                 <div className="mt-2 max-h-52 space-y-2 overflow-y-auto rounded-md border border-input bg-muted/20 p-3">
                   {rolesForPlant(roles, plantId).length === 0 ? (

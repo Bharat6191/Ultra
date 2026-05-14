@@ -52,6 +52,8 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
   billing_basis: "Billing basis",
   allow_manual_amount_override: "Allow manual amount override",
   weight_per_piece: "Weight per unit",
+  labour_cost: "Labour cost",
+  man_days: "Man days",
   labour_headcount: "Labour count",
   standard_man_hours: "Standard man-hours",
   base_rate: "Base rate",
@@ -133,13 +135,11 @@ function emptyEditForm(): {
   description: string
   unit_type: string
   pricing_method: string
-  billing_basis: string
-  allow_manual_amount_override: boolean
   weight_per_piece: string
+  labour_cost: string
+  man_days: string
   base_rate: string
   rate_unit_type: string
-  labour_headcount: string
-  standard_man_hours: string
   effective_from: string
   effective_to: string
   notes: string
@@ -153,13 +153,11 @@ function emptyEditForm(): {
     description: "",
     unit_type: "pcs",
     pricing_method: "piece_based",
-    billing_basis: "PCS",
-    allow_manual_amount_override: false,
     weight_per_piece: "",
+    labour_cost: "",
+    man_days: "",
     base_rate: "",
     rate_unit_type: "per_piece",
-    labour_headcount: "",
-    standard_man_hours: "",
     effective_from: "",
     effective_to: "",
     notes: "",
@@ -176,13 +174,11 @@ function hydrateFormFromRow(r: PartMasterPublic) {
     description: r.description ?? "",
     unit_type: r.unit_type,
     pricing_method: r.pricing_method,
-    billing_basis: r.billing_basis ?? (r.pricing_method === "weight_based" ? "WEIGHT" : "PCS"),
-    allow_manual_amount_override: Boolean(r.allow_manual_amount_override),
     weight_per_piece: sanitizeDecimalString(r.weight_per_piece != null ? String(r.weight_per_piece) : ""),
+    labour_cost: sanitizeDecimalString(r.labour_cost != null ? String(r.labour_cost) : ""),
+    man_days: sanitizeDecimalString(r.man_days != null ? String(r.man_days) : ""),
     base_rate: sanitizeDecimalString(String(r.base_rate)),
     rate_unit_type: r.rate_unit_type,
-    labour_headcount: r.labour_headcount != null ? String(r.labour_headcount) : "",
-    standard_man_hours: sanitizeDecimalString(r.standard_man_hours != null ? String(r.standard_man_hours) : ""),
     effective_from: r.effective_from?.slice(0, 10) ?? "",
     effective_to: r.effective_to ? r.effective_to.slice(0, 10) : "",
     notes: r.notes ?? "",
@@ -199,8 +195,18 @@ function sanitizeDecimalString(raw: string): string {
   return t.slice(0, dot + 1) + t.slice(dot + 1).replace(/\./g, "")
 }
 
-function sanitizeIntString(raw: string): string {
-  return raw.replace(/\D/g, "")
+function roundMoney2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+function computeRatePerKg(weightKg: string, labourCost: string, manDays: string): number | null {
+  const wn = Number(sanitizeDecimalString(weightKg.trim()))
+  const lc = Number(sanitizeDecimalString(labourCost.trim()))
+  const md = Number(sanitizeDecimalString(manDays.trim()))
+  if (!Number.isFinite(wn) || wn <= 0) return null
+  if (!Number.isFinite(lc) || lc <= 0) return null
+  if (!Number.isFinite(md) || md <= 0) return null
+  return roundMoney2((md * lc) / wn)
 }
 
 export function PartMasterDetailPage() {
@@ -268,6 +274,12 @@ export function PartMasterDetailPage() {
     [audits],
   )
 
+  const weightBased = form.pricing_method === "weight_based"
+  const derivedRatePerKg = React.useMemo(
+    () => (weightBased ? computeRatePerKg(form.weight_per_piece, form.labour_cost, form.man_days) : null),
+    [weightBased, form.weight_per_piece, form.labour_cost, form.man_days],
+  )
+
   async function save() {
     if (!row || !canUpdate) return
     if (!form.part_code.trim() || !form.part_name.trim()) {
@@ -278,43 +290,41 @@ export function PartMasterDetailPage() {
       toast.error("Select a plant")
       return
     }
-    const br = Number(sanitizeDecimalString(form.base_rate.trim()))
-    if (!Number.isFinite(br) || br <= 0) {
-      toast.error("Enter a valid base rate greater than zero")
-      return
-    }
     const w = sanitizeDecimalString(form.weight_per_piece.trim())
+    const labourCostStr = sanitizeDecimalString(form.labour_cost.trim())
+    const manDaysStr = sanitizeDecimalString(form.man_days.trim())
+    let br: number
     if (form.pricing_method === "weight_based") {
       const wn = Number(w)
       if (!w || !Number.isFinite(wn) || wn <= 0) {
         toast.error("Weight (kg) is required for weight-based parts")
         return
       }
-    }
-    const lh = form.labour_headcount.trim()
-    const smh = sanitizeDecimalString(form.standard_man_hours.trim())
-    let labourParsed: number | null = null
-    if (lh) {
-      const n = Number.parseInt(lh, 10)
-      if (!Number.isFinite(n) || n < 0) {
-        toast.error("Labour count must be a non-negative whole number")
+      const lcN = Number(labourCostStr)
+      const mdN = Number(manDaysStr)
+      if (!labourCostStr || !manDaysStr || !Number.isFinite(lcN) || !Number.isFinite(mdN) || lcN <= 0 || mdN <= 0) {
+        toast.error("Labour cost and man days are required for weight-based parts")
         return
       }
-      labourParsed = n
-    }
-    let smhParsed: number | null = null
-    if (smh) {
-      const n = Number(smh)
-      if (!Number.isFinite(n) || n < 0) {
-        toast.error("Man-hours must be a non-negative number")
+      const derived = computeRatePerKg(w, labourCostStr, manDaysStr)
+      if (derived == null || derived <= 0) {
+        toast.error("Could not derive rate per kg from weight, labour cost, and man days")
         return
       }
-      smhParsed = n
+      br = derived
+    } else {
+      const n = Number(sanitizeDecimalString(form.base_rate.trim()))
+      if (!Number.isFinite(n) || n <= 0) {
+        toast.error("Enter a valid base rate greater than zero")
+        return
+      }
+      br = n
     }
     if (!form.effective_from.trim()) {
       toast.error("Effective from date is required")
       return
     }
+    const wb = form.pricing_method === "weight_based"
     try {
       const updated = await patchJson<PartMasterPublic>(`/part-master/${row.id}`, {
         org_unit_id: Number(form.org_unit_id),
@@ -323,13 +333,11 @@ export function PartMasterDetailPage() {
         description: form.description.trim() || null,
         unit_type: form.unit_type.trim(),
         pricing_method: form.pricing_method,
-        billing_basis: form.billing_basis,
-        allow_manual_amount_override: form.allow_manual_amount_override,
         weight_per_piece: w ? Number(w) : null,
+        labour_cost: wb ? Number(labourCostStr) : null,
+        man_days: wb ? Number(manDaysStr) : null,
         base_rate: br,
         rate_unit_type: form.rate_unit_type,
-        labour_headcount: labourParsed,
-        standard_man_hours: smhParsed,
         effective_from: form.effective_from.trim(),
         effective_to: form.effective_to.trim() || null,
         notes: form.notes.trim() || null,
@@ -388,7 +396,6 @@ export function PartMasterDetailPage() {
     )
   }
 
-  const weightBased = form.pricing_method === "weight_based"
   const plantLabel = row.org_unit_name ?? `Plant #${row.org_unit_id}`
   const metadataHint = `${plantLabel}. Saved record: ${row.part_code}. Use Master data tab to edit all fields like on create.`
 
@@ -441,7 +448,7 @@ export function PartMasterDetailPage() {
               </CardHeader>
               <CardContent className="flex flex-1 flex-col gap-4">
                 <div className="grid gap-1.5">
-                  <Label>Plant</Label>
+                  <Label showRequired>Plant</Label>
                   <select
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none disabled:opacity-60"
                     value={form.org_unit_id}
@@ -463,7 +470,9 @@ export function PartMasterDetailPage() {
                   </select>
                 </div>
                 <div className="grid min-w-0 gap-1.5">
-                  <Label htmlFor="pm-code">Part code</Label>
+                  <Label htmlFor="pm-code" showRequired>
+                    Part code
+                  </Label>
                   <Input
                     id="pm-code"
                     className="rounded-xl border-border/60 font-mono"
@@ -474,7 +483,9 @@ export function PartMasterDetailPage() {
                   />
                 </div>
                 <div className="grid min-w-0 gap-1.5">
-                  <Label htmlFor="pm-name">Part name</Label>
+                  <Label htmlFor="pm-name" showRequired>
+                    Part name
+                  </Label>
                   <Input
                     id="pm-name"
                     className="rounded-xl border-border/60"
@@ -501,13 +512,13 @@ export function PartMasterDetailPage() {
               <CardHeader className="shrink-0 space-y-0 pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <CardTitle className="text-base leading-tight">Commercial</CardTitle>
-                  <SectionHint text="Weight-based: rate per kg. Piece-based: billing UOM + rate unit." />
+                  <SectionHint text="Weight-based: labour cost × man days ÷ weight (kg) = rate per kg. Piece-based: billing UOM + rate unit." />
                 </div>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col gap-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="grid min-w-0 gap-1.5">
-                    <Label>Pricing method</Label>
+                    <Label showRequired>Pricing method</Label>
                     <select
                       className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none disabled:opacity-60"
                       value={form.pricing_method}
@@ -518,7 +529,6 @@ export function PartMasterDetailPage() {
                             return {
                               ...f,
                               pricing_method: pm,
-                              billing_basis: "WEIGHT",
                               rate_unit_type: "per_kg",
                               unit_type: f.unit_type.toLowerCase() === "pcs" ? "kg" : f.unit_type,
                             }
@@ -527,8 +537,9 @@ export function PartMasterDetailPage() {
                           return {
                             ...f,
                             pricing_method: pm,
-                            billing_basis: f.billing_basis === "MANUAL" ? "MANUAL" : "PCS",
                             rate_unit_type: ru,
+                            labour_cost: "",
+                            man_days: "",
                           }
                         })
                       }}
@@ -539,7 +550,7 @@ export function PartMasterDetailPage() {
                     </select>
                   </div>
                   <div className="grid min-w-0 gap-1.5">
-                    <Label>Unit type (billing UOM)</Label>
+                    <Label showRequired>Unit type (billing UOM)</Label>
                     <Input
                       value={form.unit_type}
                       onChange={(e) => setForm((f) => ({ ...f, unit_type: e.target.value }))}
@@ -549,61 +560,42 @@ export function PartMasterDetailPage() {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="grid min-w-0 gap-1.5">
-                    <Label>Billing basis</Label>
-                    <select
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none disabled:opacity-60"
-                      value={form.billing_basis}
-                      onChange={(e) => {
-                        const bb = e.target.value
-                        if (bb === "WEIGHT") {
-                          setForm((f) => ({
-                            ...f,
-                            billing_basis: bb,
-                            pricing_method: "weight_based",
-                            rate_unit_type: "per_kg",
-                            unit_type: f.unit_type.toLowerCase() === "pcs" ? "kg" : f.unit_type,
-                          }))
-                          return
-                        }
-                        if (bb === "PCS") {
-                          setForm((f) => {
-                            const ru = f.rate_unit_type === "per_kg" ? "per_piece" : f.rate_unit_type
-                            return { ...f, billing_basis: bb, pricing_method: "piece_based", rate_unit_type: ru }
-                          })
-                          return
-                        }
-                        setForm((f) => {
-                          const ru = f.rate_unit_type === "per_kg" ? "per_piece" : f.rate_unit_type
-                          return { ...f, billing_basis: "MANUAL", pricing_method: "piece_based", rate_unit_type: ru }
-                        })
-                      }}
-                      disabled={!canUpdate}
-                    >
-                      <option value="WEIGHT">Weight (WO max = qty × kg × rate/kg)</option>
-                      <option value="PCS">Pieces / units (WO max = qty × rate)</option>
-                      <option value="MANUAL">Manual (piece-based; optional line amount override)</option>
-                    </select>
-                  </div>
-                  <div className="flex flex-col justify-end gap-2 pb-0.5">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id="pm-manual-amt"
-                        checked={form.allow_manual_amount_override}
-                        onCheckedChange={(v) => setForm((f) => ({ ...f, allow_manual_amount_override: Boolean(v) }))}
-                        disabled={!canUpdate}
-                      />
-                      <Label htmlFor="pm-manual-amt" className="cursor-pointer font-normal leading-snug">
-                        Allow manual amount override on invoice lines (when part policy allows)
-                      </Label>
-                    </div>
-                  </div>
-                </div>
                 {weightBased ? (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="grid min-w-0 gap-1.5">
-                      <Label htmlFor="pm-wt">Weight (kg)</Label>
+                      <Label htmlFor="pm-labour-cost" showRequired>
+                        Labour cost
+                      </Label>
+                      <Input
+                        id="pm-labour-cost"
+                        inputMode="decimal"
+                        value={form.labour_cost}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, labour_cost: sanitizeDecimalString(e.target.value) }))
+                        }
+                        placeholder="e.g. 5000"
+                        disabled={!canUpdate}
+                        className="rounded-xl border-border/60 tabular-nums"
+                      />
+                    </div>
+                    <div className="grid min-w-0 gap-1.5">
+                      <Label htmlFor="pm-man-days" showRequired>
+                        Man days
+                      </Label>
+                      <Input
+                        id="pm-man-days"
+                        inputMode="decimal"
+                        value={form.man_days}
+                        onChange={(e) => setForm((f) => ({ ...f, man_days: sanitizeDecimalString(e.target.value) }))}
+                        placeholder="e.g. 2.5"
+                        disabled={!canUpdate}
+                        className="rounded-xl border-border/60 tabular-nums"
+                      />
+                    </div>
+                    <div className="grid min-w-0 gap-1.5">
+                      <Label htmlFor="pm-wt" showRequired>
+                        Weight (kg)
+                      </Label>
                       <Input
                         id="pm-wt"
                         inputMode="decimal"
@@ -617,16 +609,14 @@ export function PartMasterDetailPage() {
                       />
                     </div>
                     <div className="grid min-w-0 gap-1.5">
-                      <Label htmlFor="pm-rate-kg">Rate per kg</Label>
+                      <Label htmlFor="pm-rate-kg">Rate per kg (calculated)</Label>
                       <Input
                         id="pm-rate-kg"
-                        inputMode="decimal"
-                        value={form.base_rate}
-                        onChange={(e) =>
-                          setForm((f) => ({ ...f, base_rate: sanitizeDecimalString(e.target.value) }))
-                        }
-                        disabled={!canUpdate}
-                        className="rounded-xl border-border/60 font-medium tabular-nums"
+                        readOnly
+                        value={derivedRatePerKg != null ? String(derivedRatePerKg) : ""}
+                        placeholder="man days × labour cost ÷ weight"
+                        disabled
+                        className="rounded-xl border-border/60 bg-muted/40 font-medium tabular-nums"
                       />
                     </div>
                   </div>
@@ -648,7 +638,7 @@ export function PartMasterDetailPage() {
                         />
                       </div>
                       <div className="grid min-w-0 gap-1.5">
-                        <Label>Rate unit</Label>
+                        <Label showRequired>Rate unit</Label>
                         <select
                           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none disabled:opacity-60"
                           value={form.rate_unit_type}
@@ -663,7 +653,9 @@ export function PartMasterDetailPage() {
                       </div>
                     </div>
                     <div className="grid min-w-0 gap-1.5 sm:max-w-sm">
-                      <Label htmlFor="pm-base">Base rate</Label>
+                      <Label htmlFor="pm-base" showRequired>
+                        Base rate
+                      </Label>
                       <Input
                         id="pm-base"
                         inputMode="decimal"
@@ -690,7 +682,9 @@ export function PartMasterDetailPage() {
               <CardContent className="flex flex-1 flex-col gap-3">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="grid min-w-0 gap-1.5">
-                    <Label htmlFor="pm-ef">Effective from</Label>
+                    <Label htmlFor="pm-ef" showRequired>
+                      Effective from
+                    </Label>
                     <Input
                       id="pm-ef"
                       type="date"
@@ -713,7 +707,7 @@ export function PartMasterDetailPage() {
                   </div>
                 </div>
                 <div className="grid min-w-0 gap-1.5 sm:max-w-xs">
-                  <Label>Record status</Label>
+                  <Label showRequired>Record status</Label>
                   <select
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none disabled:opacity-60"
                     value={form.status}
@@ -751,43 +745,6 @@ export function PartMasterDetailPage() {
               </CardContent>
             </Card>
           </div>
-
-          <Card className="min-w-0 rounded-2xl border-border/50 shadow-sm">
-            <CardHeader className="shrink-0 space-y-0 pb-3">
-              <div className="flex items-start justify-between gap-2">
-                <CardTitle className="text-base leading-tight">Labour norms (optional)</CardTitle>
-                <SectionHint text="Planning only; not used in billing math." />
-              </div>
-            </CardHeader>
-            <CardContent className="grid w-full max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="grid w-full max-w-[11rem] gap-1.5">
-                <Label htmlFor="lc">Labour count</Label>
-                <Input
-                  id="lc"
-                  inputMode="numeric"
-                  className="rounded-xl border-border/60 tabular-nums"
-                  value={form.labour_headcount}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, labour_headcount: sanitizeIntString(e.target.value) }))
-                  }
-                  disabled={!canUpdate}
-                />
-              </div>
-              <div className="grid w-full max-w-[11rem] gap-1.5">
-                <Label htmlFor="mh">Standard man-hours</Label>
-                <Input
-                  id="mh"
-                  inputMode="decimal"
-                  className="rounded-xl border-border/60 tabular-nums"
-                  value={form.standard_man_hours}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, standard_man_hours: sanitizeDecimalString(e.target.value) }))
-                  }
-                  disabled={!canUpdate}
-                />
-              </div>
-            </CardContent>
-          </Card>
 
           <section className="min-w-0 border-t border-border/70 pt-8" aria-labelledby="part-audit-heading">
             <h2 id="part-audit-heading" className="mb-1 text-base font-semibold tracking-tight">

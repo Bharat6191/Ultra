@@ -29,7 +29,21 @@ class ContractorRateCreate(BaseModel):
     )
     effective_from: date
     effective_to: date | None = None
-    remarks: str | None = None
+    remarks: str = Field(
+        ...,
+        min_length=1,
+        description="Required context for approvers (timeline, rationale). Whitespace is trimmed.",
+    )
+
+    @field_validator("remarks", mode="before")
+    @classmethod
+    def _remarks_required_strip(cls, v: object) -> str:
+        if v is None:
+            raise ValueError("remarks is required")
+        s = str(v).strip()
+        if not s:
+            raise ValueError("remarks is required")
+        return s
 
 
 class ContractorRateUpdate(BaseModel):

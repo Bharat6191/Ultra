@@ -166,6 +166,7 @@ export function WorkOrderCreatePage() {
         onContractorId={setContractorId}
         lines={lines}
         onLinesChange={setLines}
+        pricingWorkDate={workDate}
       />
 
       <WorkOrderExecutionFooter

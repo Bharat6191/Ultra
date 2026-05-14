@@ -187,7 +187,7 @@ export function EmailTemplateEditorPage() {
           <CardContent className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Name</Label>
+                <Label showRequired>Name</Label>
                 <input
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={name}
@@ -196,7 +196,7 @@ export function EmailTemplateEditorPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Event</Label>
+                <Label showRequired>Event</Label>
                 <select
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={eventCode}
@@ -213,7 +213,7 @@ export function EmailTemplateEditorPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Subject</Label>
+              <Label showRequired>Subject</Label>
               <input
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 value={subject}
@@ -223,7 +223,7 @@ export function EmailTemplateEditorPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Body (HTML)</Label>
+              <Label showRequired>Body (HTML)</Label>
               <textarea
                 className="min-h-[260px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
                 value={bodyHtml}

@@ -68,7 +68,9 @@ export function ForgotPasswordPage() {
           ) : (
             <form onSubmit={onSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="forgot-email">Email</Label>
+                <Label htmlFor="forgot-email" showRequired>
+                  Email
+                </Label>
                 <Input
                   id="forgot-email"
                   type="email"

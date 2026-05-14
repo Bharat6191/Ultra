@@ -501,6 +501,7 @@ export function WorkOrderDetailPage() {
         onLinesChange={editableDraft ? setDraftLines : () => {}}
         detailRows={editableDraft ? undefined : detailRows}
         contractorSummaryLabel={!editableDraft ? contractorName(row.contractor_id) : undefined}
+        pricingWorkDate={editableDraft ? editWorkDate : undefined}
       />
 
       {showCompletionEngine && allLinesFullyComplete ? (

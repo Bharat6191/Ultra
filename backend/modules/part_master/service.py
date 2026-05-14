@@ -14,6 +14,7 @@ from modules.org_units.hierarchy import collect_plant_ids_under_scope
 from modules.org_units.model import OrgUnit
 from modules.part_master import audit as audit_helpers
 from modules.part_master.models import PartMaster, PartMasterAuditLog, PartMasterVersion
+from modules.part_master.pricing import derive_rate_per_kg_from_labour
 from modules.part_master.schema import PartMasterCreate, PartMasterUpdate
 from modules.users.model import User
 
@@ -25,6 +26,22 @@ def _now_utc() -> datetime:
 class PartMasterService:
     def __init__(self, db: Session) -> None:
         self._db = db
+
+    @staticmethod
+    def _finalize_part_master_commercial(row: PartMaster) -> None:
+        """Normalize billing flags and derive weight-based rate per kg when inputs allow."""
+        row.allow_manual_amount_override = False
+        row.billing_basis = "WEIGHT" if row.pricing_method == "weight_based" else "PCS"
+        if row.pricing_method != "weight_based":
+            return
+        w = row.weight_per_piece
+        lc = row.labour_cost
+        md = row.man_days
+        if w is None or lc is None or md is None:
+            return
+        if w <= 0 or lc <= 0 or md <= 0:
+            return
+        row.base_rate = derive_rate_per_kg_from_labour(labour_cost=lc, man_days=md, weight_kg=w)
 
     def _ensure_plant(self, org_unit_id: int) -> OrgUnit:
         org = self._db.get(OrgUnit, int(org_unit_id))
@@ -78,6 +95,8 @@ class PartMasterService:
             "billing_basis": str(row.billing_basis or "PCS").upper(),
             "allow_manual_amount_override": bool(row.allow_manual_amount_override),
             "weight_per_piece": Decimal(row.weight_per_piece) if row.weight_per_piece is not None else None,
+            "labour_cost": Decimal(row.labour_cost) if row.labour_cost is not None else None,
+            "man_days": Decimal(row.man_days) if row.man_days is not None else None,
             "labour_headcount": int(row.labour_headcount) if row.labour_headcount is not None else None,
             "standard_man_hours": Decimal(row.standard_man_hours) if row.standard_man_hours is not None else None,
             "base_rate": Decimal(row.base_rate or 0),
@@ -199,11 +218,11 @@ class PartMasterService:
             description=(payload.description or None),
             unit_type=payload.unit_type.strip().lower(),
             pricing_method=payload.pricing_method,
-            billing_basis=(
-                (payload.billing_basis or ("WEIGHT" if payload.pricing_method == "weight_based" else "PCS")).strip().upper()
-            ),
-            allow_manual_amount_override=bool(payload.allow_manual_amount_override),
+            billing_basis="PCS",
+            allow_manual_amount_override=False,
             weight_per_piece=Decimal(payload.weight_per_piece) if payload.weight_per_piece is not None else None,
+            labour_cost=Decimal(payload.labour_cost) if payload.labour_cost is not None else None,
+            man_days=Decimal(payload.man_days) if payload.man_days is not None else None,
             labour_headcount=int(payload.labour_headcount) if payload.labour_headcount is not None else None,
             standard_man_hours=Decimal(payload.standard_man_hours)
             if payload.standard_man_hours is not None
@@ -219,6 +238,8 @@ class PartMasterService:
             created_by=actor_user_id,
         )
         self._db.add(row)
+        self._db.flush()
+        self._finalize_part_master_commercial(row)
         self._db.flush()
 
         audit_helpers.write_part_master_audit(
@@ -290,16 +311,16 @@ class PartMasterService:
         if "standard_man_hours" in upd:
             sm = upd["standard_man_hours"]
             row.standard_man_hours = None if sm is None else Decimal(str(sm))
+        if "labour_cost" in upd:
+            lc = upd["labour_cost"]
+            row.labour_cost = None if lc is None else Decimal(str(lc))
+        if "man_days" in upd:
+            md = upd["man_days"]
+            row.man_days = None if md is None else Decimal(str(md))
         if "base_rate" in upd and upd["base_rate"] is not None:
             row.base_rate = Decimal(str(upd["base_rate"]))
         if "rate_unit_type" in upd and upd["rate_unit_type"] is not None:
             row.rate_unit_type = str(upd["rate_unit_type"]).strip().lower()
-        if "billing_basis" in upd and upd["billing_basis"] is not None:
-            row.billing_basis = str(upd["billing_basis"]).strip().upper()
-        elif "pricing_method" in upd and upd["pricing_method"] is not None:
-            row.billing_basis = "WEIGHT" if row.pricing_method == "weight_based" else "PCS"
-        if "allow_manual_amount_override" in upd and upd["allow_manual_amount_override"] is not None:
-            row.allow_manual_amount_override = bool(upd["allow_manual_amount_override"])
         if "effective_from" in upd and upd["effective_from"] is not None:
             row.effective_from = upd["effective_from"]
         if "effective_to" in upd:
@@ -308,16 +329,11 @@ class PartMasterService:
             row.notes = upd["notes"] or None
         if "status" in upd and upd["status"] is not None:
             row.status = str(upd["status"]).strip().lower()
+        self._finalize_part_master_commercial(row)
         if row.pricing_method == "weight_based" and row.rate_unit_type != "per_kg":
             raise ConflictError("weight_based parts must use rate_unit_type per_kg (rate per kg).")
         if row.pricing_method == "piece_based" and row.rate_unit_type == "per_kg":
             raise ConflictError("piece_based parts cannot use per_kg; use weight_based or a different rate unit.")
-        if row.billing_basis == "WEIGHT" and row.pricing_method != "weight_based":
-            raise ConflictError("billing_basis WEIGHT requires pricing_method weight_based.")
-        if row.billing_basis == "PCS" and row.pricing_method != "piece_based":
-            raise ConflictError("billing_basis PCS requires pricing_method piece_based.")
-        if row.billing_basis == "MANUAL" and row.pricing_method != "piece_based":
-            raise ConflictError("billing_basis MANUAL requires pricing_method piece_based.")
 
         if "is_active" in upd and upd["is_active"] is not None:
             new_active = bool(upd["is_active"])
