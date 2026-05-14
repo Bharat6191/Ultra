@@ -36,10 +36,10 @@ export type ExecutionDetailRow = {
   contractor_label: string
   job_label: string
   qty_display: string
-  unit_display: string
-  rate_display: string
-  invoice_display: string
-  remarks_display: string
+  /** Weight + unit of measure in one column (e.g. "4,245 kg" or "box"). */
+  unit_profile_display: string
+  rate_display: React.ReactNode
+  invoice_display: React.ReactNode
   /** Optional inline completion editor/rendering for active work orders */
   completionCell?: React.ReactNode
 }
@@ -117,6 +117,97 @@ function parseDecimal(v: string | number | null | undefined): number {
   if (v === null || v === undefined) return NaN
   const n = typeof v === "number" ? v : Number(String(v).replace(/,/g, ""))
   return n
+}
+
+/** Compact qty / % (e.g. 1.000 → 1). */
+export function formatExecutionQtyDisplay(v: string | number | null | undefined): string {
+  if (v === null || v === undefined) return "—"
+  const raw = String(v).trim()
+  if (raw === "") return "—"
+  const n = typeof v === "number" ? v : Number(raw.replace(/,/g, ""))
+  if (!Number.isFinite(n)) return raw
+  if (raw.includes("%")) return raw
+  const t = Math.round(n * 10000) / 10000
+  if (Math.abs(t - Math.round(t)) < 1e-9) return String(Math.round(t))
+  return String(t).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")
+}
+
+export function formatExecutionWeightKg(weightStr: string): string {
+  const n = Number(String(weightStr).replace(/,/g, ""))
+  if (!Number.isFinite(n)) return `${weightStr} kg`
+  return `${n.toLocaleString(undefined, { maximumFractionDigits: 3, minimumFractionDigits: 0 })} kg`
+}
+
+/** Human-readable rate / taxable basis (e.g. wt/kg). */
+export function executionPricingBasisLabel(pricingMethod?: string | null, rateUnitType?: string | null): string {
+  const pm = String(pricingMethod ?? "").trim().toLowerCase()
+  const ru = String(rateUnitType ?? "").trim().toLowerCase()
+  if (pm === "weight_based" && ru === "per_kg") return "wt/kg"
+  if (pm === "piece_based" && ru === "per_box") return "pc/box"
+  if (pm || ru) return [pm.replace(/_/g, " "), ru.replace(/_/g, " ")].filter(Boolean).join(" · ")
+  return ""
+}
+
+export function executionRateSourceLabel(raw: string): string {
+  const s = String(raw ?? "").trim().toLowerCase()
+  if (s === "master" || s === "part_master") return "list"
+  if (s === "negotiated" || s === "contractor") return "negotiated"
+  return String(raw ?? "").trim() || "—"
+}
+
+function breakdownFormulaHint(breakdown: Record<string, unknown> | null | undefined): string | null {
+  if (!breakdown) return null
+  const f = breakdown.formula
+  if (typeof f !== "string" || !f.trim()) return null
+  return f.trim().replace(/\s+/g, " ")
+}
+
+/** Stacked rate: bold amount + muted basis line (enterprise table style). */
+export function executionDetailRateCell(args: {
+  rateMoney: string
+  rateSource: string
+  pricingMethod?: string | null
+  rateUnitType?: string | null
+}): React.ReactNode {
+  const pricing = executionPricingBasisLabel(args.pricingMethod, args.rateUnitType)
+  const src = executionRateSourceLabel(args.rateSource)
+  const sub = [pricing || null, src].filter(Boolean).join(" · ")
+  const full = sub || args.rateSource
+  return (
+    <div className="ml-auto block w-full max-w-full text-right align-middle leading-tight">
+      <div className="tabular-nums text-sm font-semibold text-foreground">{args.rateMoney}</div>
+      {sub ? (
+        <div className="truncate text-[10px] leading-snug text-muted-foreground" title={full}>
+          {sub}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/** Stacked taxable: bold amount + muted calculation / source line. */
+export function executionDetailTaxableCell(args: {
+  money: string
+  rateSource: string
+  pricingMethod?: string | null
+  rateUnitType?: string | null
+  calculationBreakdown?: Record<string, unknown> | null
+}): React.ReactNode {
+  const formula = breakdownFormulaHint(args.calculationBreakdown ?? null)
+  const basis = formula ?? executionPricingBasisLabel(args.pricingMethod, args.rateUnitType)
+  const src = executionRateSourceLabel(args.rateSource)
+  const sub = [basis || null, src].filter(Boolean).join(" · ")
+  const full = sub || src
+  return (
+    <div className="ml-auto block w-full max-w-full text-right align-middle leading-tight">
+      <div className="tabular-nums text-sm font-semibold text-foreground">{args.money}</div>
+      {sub ? (
+        <div className="line-clamp-2 text-[10px] leading-snug text-muted-foreground" title={full}>
+          {sub}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export function WorkOrderExecutionHeader(props: {
@@ -254,12 +345,28 @@ export function WorkOrderExecutionTable(props: {
   lines: ExecutionDraftLine[]
   onLinesChange: (lines: ExecutionDraftLine[]) => void
   detailRows?: ExecutionDetailRow[]
+  contractorSummaryLabel?: string
 }) {
-  const { mode, loading, org_unit_id, contractors, partMasters, contractorId, onContractorId, lines, onLinesChange, detailRows } = props
+  const {
+    mode,
+    loading,
+    org_unit_id,
+    contractors,
+    partMasters,
+    contractorId,
+    onContractorId,
+    lines,
+    onLinesChange,
+    detailRows,
+    contractorSummaryLabel,
+  } = props
   const pms = filteredPartMasters(partMasters, org_unit_id)
   const isEdit = mode === "edit"
   const hasCompletion = !isEdit && (detailRows ?? []).some((r) => Boolean(r.completionCell))
-  const viewColCount = hasCompletion ? 9 : 8
+  const hideContractorColumn = !isEdit && contractorSummaryLabel !== undefined
+  const viewTableFixed = !isEdit && hasCompletion
+  /** View: SR, [Contractor], Part, Qty, Unit (merged), Rate, Taxable, [Completion] */
+  const viewColCount = (hideContractorColumn ? 0 : !isEdit ? 1 : 0) + 6 + (hasCompletion ? 1 : 0)
 
   function updateLine(key: string, patch: Partial<ExecutionDraftLine>) {
     onLinesChange(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -269,7 +376,7 @@ export function WorkOrderExecutionTable(props: {
     onLinesChange(lines.filter((l) => l.key !== key))
   }
 
-  const th = "whitespace-normal px-2 py-2 text-left align-bottom text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+  const th = "whitespace-nowrap px-2 py-2 text-left align-middle text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
 
   return (
     <Card>
@@ -277,8 +384,23 @@ export function WorkOrderExecutionTable(props: {
         <div className="space-y-1">
           <CardTitle className="text-base font-semibold tracking-tight">Execution sheet</CardTitle>
           <CardDescription>
-            One contractor per work order. Lines are Part Master parts; unit rate and taxable value resolve from negotiated
-            rates (or Part Master base). Weight is required only for weight-based per-kg pricing.
+            {isEdit ? (
+              <>
+                One contractor per work order. Lines are Part Master parts; unit rate and taxable value resolve from
+                negotiated rates (or Part Master base). Weight is required only for weight-based per-kg pricing.
+              </>
+            ) : contractorSummaryLabel !== undefined ? (
+              <>
+                <span className="font-medium text-foreground">{contractorSummaryLabel || "—"}</span>
+                {/* <span className="text-muted-foreground"> · </span> */}
+                {/* <span>Negotiated or list rates and taxable values follow the saved snapshot.</span> */}
+              </>
+            ) : (
+              <>
+                One contractor per work order. Lines are Part Master parts; unit rate and taxable value resolve from
+                negotiated rates (or Part Master base). Weight is required only for weight-based per-kg pricing.
+              </>
+            )}
           </CardDescription>
         </div>
         {isEdit ? (
@@ -293,7 +415,7 @@ export function WorkOrderExecutionTable(props: {
           </Button>
         ) : null}
       </CardHeader>
-      <CardContent className="overflow-x-auto p-0 px-px pb-4 sm:p-6 sm:pt-0">
+      <CardContent className="overflow-x-auto p-0 px-px pb-4 sm:p-6 sm:pt-0 [&_[data-slot=exec-scroll]]:px-4 sm:[&_[data-slot=exec-scroll]]:px-0">
         {isEdit ? (
           <div className="grid max-w-md gap-1.5 border-b px-4 py-4 sm:px-6">
             <Label>Contractor</Label>
@@ -312,25 +434,126 @@ export function WorkOrderExecutionTable(props: {
             </select>
           </div>
         ) : null}
-        <table className="w-full min-w-[920px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className={th}>SR</th>
-              {isEdit ? null : <th className={th}>Contractor</th>}
-              <th className={th}>Part</th>
-              <th className={cn(th, "w-20")}>Qty</th>
-              {isEdit ? <th className={cn(th, "w-24")}>Wt / pc</th> : null}
-              <th className={cn(th, "w-24")}>Unit</th>
-              <th className={cn(th, "w-28 text-right tabular-nums")}>Unit rate</th>
-              <th className={cn(th, "w-32 text-right tabular-nums")}>Taxable (est.)</th>
-              {hasCompletion ? <th className={cn(th, "min-w-[360px]")}>Completion</th> : null}
-              <th className={th}>Remarks</th>
-              {isEdit ? <th className={cn(th, "w-20 text-right")} /> : null}
-            </tr>
-          </thead>
-          <tbody>
+        <div
+          data-slot="exec-scroll"
+          className="relative w-full max-h-[min(72vh,880px)] overflow-x-auto overflow-y-auto rounded-lg border border-border/50 bg-card"
+        >
+          <table
+            className={cn(
+              "w-full border-collapse text-sm align-middle",
+              isEdit || viewTableFixed ? "table-fixed" : "table-auto",
+            )}
+          >
+            <thead className="sticky top-0 z-20 border-b border-border/60 bg-muted/95 shadow-[0_1px_0_0_hsl(var(--border)/0.6)] backdrop-blur-sm supports-[backdrop-filter]:bg-muted/80">
+              <tr>
+                <th
+                  className={cn(
+                    th,
+                    isEdit ? "w-8 tabular-nums" : viewTableFixed ? (hideContractorColumn ? "w-[4%] tabular-nums" : "w-[3%] tabular-nums") : "tabular-nums",
+                  )}
+                >
+                  SR
+                </th>
+                {isEdit || hideContractorColumn ? null : (
+                  <th className={cn(th, viewTableFixed ? "w-[11%] truncate" : "max-w-[8rem] truncate")}>Contractor</th>
+                )}
+                <th
+                  className={cn(
+                    th,
+                    isEdit
+                      ? "min-w-0 w-[52%]"
+                      : viewTableFixed
+                        ? hideContractorColumn
+                          ? "w-[16%] min-w-0 truncate"
+                          : "w-[12%] min-w-0 truncate"
+                        : "min-w-[8rem] max-w-[14rem] truncate",
+                  )}
+                >
+                  Part
+                </th>
+                <th
+                  className={cn(
+                    th,
+                    isEdit
+                      ? "w-12 text-right tabular-nums"
+                      : viewTableFixed
+                        ? hideContractorColumn
+                          ? "w-[6%] text-right tabular-nums"
+                          : "w-[5%] text-right tabular-nums"
+                        : "text-right tabular-nums",
+                  )}
+                >
+                  Qty
+                </th>
+                {isEdit ? (
+                  <>
+                    <th className={cn(th, "w-16")}>Wt / pc</th>
+                    <th className={cn(th, "w-12")}>Unit</th>
+                  </>
+                ) : (
+                  <th
+                    className={cn(
+                      th,
+                      viewTableFixed
+                        ? hideContractorColumn
+                          ? "w-[8%] text-right tabular-nums"
+                          : "w-[7%] text-right tabular-nums"
+                        : "text-right tabular-nums",
+                    )}
+                  >
+                    Wt / unit
+                  </th>
+                )}
+                <th
+                  className={cn(
+                    th,
+                    isEdit
+                      ? "w-20 text-right tabular-nums"
+                      : viewTableFixed
+                        ? hideContractorColumn
+                          ? "w-[11%] text-right tabular-nums"
+                          : "w-[10%] text-right tabular-nums"
+                        : "text-right tabular-nums",
+                  )}
+                >
+                  Rate
+                </th>
+                <th
+                  className={cn(
+                    th,
+                    isEdit
+                      ? "w-24 text-right tabular-nums"
+                      : viewTableFixed
+                        ? hideContractorColumn
+                          ? "w-[21%] text-right tabular-nums"
+                          : "w-[18%] text-right tabular-nums"
+                        : "text-right tabular-nums",
+                  )}
+                >
+                  Taxable
+                </th>
+                {hasCompletion ? (
+                  <th
+                    className={cn(
+                      th,
+                      isEdit
+                        ? "w-[36%] text-right"
+                        : viewTableFixed
+                          ? hideContractorColumn
+                            ? "w-[34%] text-right"
+                            : "w-[34%] text-right"
+                          : "text-right",
+                    )}
+                  >
+                    Completion
+                  </th>
+                ) : null}
+                {isEdit ? <th className={cn(th, "w-16 text-right")} /> : null}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/50">
             {!isEdit && (detailRows?.length ?? 0) === 0 ? (
-              <tr className="border-b border-border/60">
+              <tr>
                 <td colSpan={viewColCount} className="px-3 py-10 text-center text-sm text-muted-foreground">
                   No execution lines on this work order.
                 </td>
@@ -347,9 +570,12 @@ export function WorkOrderExecutionTable(props: {
                   const rateShown = pm ? fmtMoney(rateN) : "—"
 
                   return (
-                    <tr key={line.key} className="border-b border-border/60">
+                    <tr
+                      key={line.key}
+                      className="transition-colors odd:bg-background even:bg-muted/[0.14] hover:bg-muted/30"
+                    >
                       <td className="px-2 py-2 align-middle tabular-nums text-muted-foreground">{idx + 1}</td>
-                      <td className="min-w-[180px] px-2 py-2 align-middle">
+                      <td className="min-w-0 px-2 py-2 align-middle">
                         <select
                           className="h-9 w-full max-w-[280px] rounded-md border border-input bg-background px-2 text-xs outline-none"
                           value={line.part_master_id}
@@ -378,7 +604,7 @@ export function WorkOrderExecutionTable(props: {
                           ))}
                         </select>
                       </td>
-                      <td className="px-2 py-2 align-middle">
+                      <td className="px-2 py-2 align-middle text-right tabular-nums text-muted-foreground">
                         <Input
                           className="h-9 tabular-nums"
                           inputMode="decimal"
@@ -405,15 +631,6 @@ export function WorkOrderExecutionTable(props: {
                       <td className="px-2 py-2 align-middle tabular-nums text-muted-foreground">{unitShown}</td>
                       <td className="px-2 py-2 align-middle text-right tabular-nums text-muted-foreground">{rateShown}</td>
                       <td className="px-2 py-2 align-middle text-right tabular-nums text-muted-foreground">{invShown}</td>
-                      <td className="min-w-[120px] px-2 py-2 align-middle">
-                        <Input
-                          className="h-9"
-                          placeholder="Optional"
-                          value={line.remarks}
-                          onChange={(e) => updateLine(line.key, { remarks: e.target.value })}
-                          disabled={loading}
-                        />
-                      </td>
                       <td className="px-2 py-2 align-middle text-right">
                         <button
                           type="button"
@@ -429,21 +646,37 @@ export function WorkOrderExecutionTable(props: {
                 })
               : (detailRows ?? []).map((dr) => (
                   <React.Fragment key={dr.sr}>
-                    <tr className="border-b border-border/60">
-                      <td className="px-2 py-2 align-middle tabular-nums text-muted-foreground">{dr.sr}</td>
-                      <td className="px-2 py-2 align-middle">{dr.contractor_label}</td>
-                      <td className="px-2 py-2 align-middle">{dr.job_label}</td>
-                      <td className="px-2 py-2 align-middle tabular-nums">{dr.qty_display}</td>
-                      <td className="px-2 py-2 align-middle tabular-nums text-muted-foreground">{dr.unit_display}</td>
-                      <td className="px-2 py-2 align-middle text-right tabular-nums text-muted-foreground">{dr.rate_display}</td>
-                      <td className="px-2 py-2 align-middle text-right tabular-nums text-muted-foreground">{dr.invoice_display}</td>
-                      {hasCompletion ? <td className="px-2 py-2 align-middle">{dr.completionCell ?? null}</td> : null}
-                      <td className="px-2 py-2 align-middle text-sm text-muted-foreground">{dr.remarks_display || "—"}</td>
+                    <tr
+                      className={cn(
+                        "transition-colors odd:bg-background even:bg-muted/[0.12] hover:bg-muted/25",
+                        "has-[[data-completion-dirty='true']]:bg-amber-500/[0.06] has-[[data-completion-dirty='true']]:ring-1 has-[[data-completion-dirty='true']]:ring-inset has-[[data-completion-dirty='true']]:ring-amber-400/35",
+                      )}
+                    >
+                      <td className="px-2 py-2 align-middle tabular-nums text-xs text-muted-foreground">{dr.sr}</td>
+                      {hideContractorColumn ? null : (
+                        <td className="min-w-0 truncate px-2 py-2 align-middle text-xs" title={dr.contractor_label}>
+                          {dr.contractor_label}
+                        </td>
+                      )}
+                      <td
+                        className="min-w-0 max-w-full truncate px-2 py-2 align-middle font-mono text-xs font-semibold text-foreground"
+                        title={dr.job_label}
+                      >
+                        {dr.job_label}
+                      </td>
+                      <td className="px-2 py-2 align-middle text-right text-xs tabular-nums font-medium text-foreground">{dr.qty_display}</td>
+                      <td className="px-2 py-2 align-middle text-right text-xs tabular-nums text-muted-foreground">{dr.unit_profile_display}</td>
+                      <td className="px-2 py-2 align-middle text-right text-xs">{dr.rate_display}</td>
+                      <td className="px-2 py-2 align-middle text-right text-xs tabular-nums">{dr.invoice_display}</td>
+                      {hasCompletion ? (
+                        <td className="min-w-0 px-2 py-2 align-middle">{dr.completionCell ?? null}</td>
+                      ) : null}
                     </tr>
                   </React.Fragment>
                 ))}
           </tbody>
         </table>
+        </div>
       </CardContent>
     </Card>
   )
@@ -477,9 +710,11 @@ export function WorkOrderExecutionFooter(props: {
       <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
         {tip ? <p className="max-w-xl text-sm text-muted-foreground">{tip}</p> : <div />}
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" disabled={busy} onClick={() => onCancel?.()}>
-            Cancel
-          </Button>
+          {onCancel ? (
+            <Button type="button" variant="outline" disabled={busy} onClick={() => onCancel()}>
+              Cancel
+            </Button>
+          ) : null}
           {showSave ? (
             <Button type="button" disabled={busy} onClick={() => onSave?.()}>
               {busy ? "Saving…" : saveLabel}

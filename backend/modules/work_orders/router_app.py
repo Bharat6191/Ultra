@@ -315,6 +315,30 @@ def add_progress(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@router.post(
+    "/work-orders/{work_order_id:int}/complete",
+    response_model=WorkOrderPublic,
+    status_code=status.HTTP_200_OK,
+    dependencies=[
+        Depends(require_any_permission("work_orders.manage_completion", "work_orders.track_completion"))
+    ],
+)
+def complete_work_order(
+    work_order_id: int,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> WorkOrderPublic:
+    """Close the work order once every line item is at 100% saved completion."""
+    try:
+        row = svc.close_active_work_order(work_order_id, actor_user_id=int(current.subject))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return WorkOrderPublic.model_validate(_to_public(db, row))
+
+
 @router.get(
     "/work-orders/items/{work_order_item_id:int}/completion-history",
     response_model=list[WorkOrderItemProgressHistoryEntry],

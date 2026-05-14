@@ -2,6 +2,10 @@ import * as React from "react"
 
 import type { ContractorLite, ExecutionDetailRow, OrgUnitLite } from "@/components/work-orders/work-order-execution-ui"
 import {
+  executionDetailRateCell,
+  executionDetailTaxableCell,
+  formatExecutionQtyDisplay,
+  formatExecutionWeightKg,
   WorkOrderExecutionHeader,
   WorkOrderExecutionTable,
 } from "@/components/work-orders/work-order-execution-ui"
@@ -37,6 +41,8 @@ type WorkOrderPublic = {
     resolved_rate: string | number
     rate_source: string
     notes?: string | null
+    weight_per_piece_snapshot?: string | number | null
+    pricing_snapshot?: { calculation_breakdown?: Record<string, unknown> } | null
   }[]
 }
 
@@ -60,37 +66,81 @@ function buildDetailRows(row: WorkOrderPublic, contractorName: (id: number) => s
     const qtyDisplay =
       it.progress_type === "percentage"
         ? it.planned_percentage != null && String(it.planned_percentage) !== ""
-          ? `${it.planned_percentage}%`
+          ? (() => {
+              const s = formatExecutionQtyDisplay(it.planned_percentage)
+              return s.includes("%") ? s : `${s}%`
+            })()
           : "—"
         : it.planned_quantity != null && String(it.planned_quantity) !== ""
-          ? String(it.planned_quantity)
+          ? formatExecutionQtyDisplay(it.planned_quantity)
           : "—"
 
     const rateN = parseNum(it.resolved_rate)
-    const pmHint =
-      it.pricing_method && it.rate_unit_type ? `${it.pricing_method} / ${it.rate_unit_type}` : (it.pricing_method ?? it.rate_unit_type ?? "")
-    const rateDisplay = pmHint ? `${fmtMoney(rateN)} (${it.rate_source}) · ${pmHint}` : `${fmtMoney(rateN)} (${it.rate_source})`
+    const rateDisplay = Number.isFinite(rateN)
+      ? executionDetailRateCell({
+          rateMoney: fmtMoney(rateN),
+          rateSource: String(it.rate_source ?? ""),
+          pricingMethod: it.pricing_method,
+          rateUnitType: it.rate_unit_type,
+        })
+      : "—"
 
+    const bdBreakdown =
+      it.pricing_snapshot?.calculation_breakdown &&
+      typeof it.pricing_snapshot.calculation_breakdown === "object"
+        ? (it.pricing_snapshot.calculation_breakdown as Record<string, unknown>)
+        : null
     const tv = parseNum(it.taxable_value)
-    let invoiceDisplay = "—"
-    if (Number.isFinite(tv)) invoiceDisplay = fmtMoney(tv)
-    else if (it.progress_type === "quantity") {
+    let invoiceDisplay: React.ReactNode = "—"
+    if (Number.isFinite(tv)) {
+      invoiceDisplay = executionDetailTaxableCell({
+        money: fmtMoney(tv),
+        rateSource: String(it.rate_source ?? ""),
+        pricingMethod: it.pricing_method,
+        rateUnitType: it.rate_unit_type,
+        calculationBreakdown: bdBreakdown,
+      })
+    } else if (it.progress_type === "quantity") {
       const q = parseNum(it.planned_quantity)
-      if (Number.isFinite(q) && Number.isFinite(rateN)) invoiceDisplay = fmtMoney(q * rateN)
+      if (Number.isFinite(q) && Number.isFinite(rateN)) {
+        invoiceDisplay = executionDetailTaxableCell({
+          money: fmtMoney(q * rateN),
+          rateSource: String(it.rate_source ?? ""),
+          pricingMethod: it.pricing_method,
+          rateUnitType: it.rate_unit_type,
+          calculationBreakdown: bdBreakdown,
+        })
+      }
     }
 
-    const lineLabel =
-      it.part_code || it.part_name ? `${it.part_code ?? "—"} · ${it.part_name ?? "—"}` : "—"
+    const job_label = it.part_code?.trim() ? it.part_code.trim() : "—"
+
+    const bd = it.pricing_snapshot?.calculation_breakdown
+    const bdObj = bd && typeof bd === "object" && bd !== null ? (bd as Record<string, unknown>) : null
+    let weightStr: string | null =
+      it.weight_per_piece_snapshot != null && String(it.weight_per_piece_snapshot).trim() !== ""
+        ? String(it.weight_per_piece_snapshot).trim()
+        : null
+    if (!weightStr && bdObj?.weight_per_piece != null && String(bdObj.weight_per_piece).trim() !== "") {
+      weightStr = String(bdObj.weight_per_piece).trim()
+    }
+    const weightBased =
+      String(it.pricing_method ?? "").toLowerCase() === "weight_based" &&
+      String(it.rate_unit_type ?? "").toLowerCase() === "per_kg"
+    const unitKg = String(it.unit_type ?? "").toLowerCase() === "kg"
+    const showWeightHint = Boolean(weightStr && (weightBased || unitKg))
+
+    const unitProfileDisplay =
+      showWeightHint && weightStr ? formatExecutionWeightKg(weightStr) : it.unit_type?.trim() ? it.unit_type : "—"
 
     out.push({
       sr,
       contractor_label: contractorName(row.contractor_id),
-      job_label: lineLabel,
+      job_label,
       qty_display: qtyDisplay,
-      unit_display: it.unit_type ?? "—",
+      unit_profile_display: unitProfileDisplay,
       rate_display: rateDisplay,
       invoice_display: invoiceDisplay,
-      remarks_display: it.notes?.trim() ? it.notes : "—",
     })
   }
   return out
@@ -363,6 +413,7 @@ export function WorkOrderApprovalReview(props: {
         lines={[]}
         onLinesChange={() => {}}
         detailRows={detailRows}
+        contractorSummaryLabel={contractorName(row.contractor_id)}
       />
     </div>
   )

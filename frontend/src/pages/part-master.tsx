@@ -131,9 +131,9 @@ export function PartMasterPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Part master</h1>
-          <p className="text-sm text-muted-foreground">
+          {/* <p className="text-sm text-muted-foreground">
             Commercial baselines: unit logic, pricing method, and effective rates per plant.
-          </p>
+          </p> */}
         </div>
         {canCreate ? (
           <Button asChild>
@@ -195,7 +195,7 @@ export function PartMasterPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Parts</CardTitle>
-          <CardDescription>Active and historical part master rows for the selected filters.</CardDescription>
+          {/* <CardDescription>Active and historical part master rows for the selected filters.</CardDescription> */}
         </CardHeader>
         <CardContent>
           {loading ? (

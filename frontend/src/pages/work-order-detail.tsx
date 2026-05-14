@@ -11,7 +11,11 @@ import type {
 } from "@/components/work-orders/work-order-execution-ui"
 import {
   buildWorkOrderLinesForApi,
+  executionDetailRateCell,
+  executionDetailTaxableCell,
   flattenWorkOrderToDraftLines,
+  formatExecutionQtyDisplay,
+  formatExecutionWeightKg,
   newDraftLine,
   WorkOrderExecutionFooter,
   WorkOrderExecutionHeader,
@@ -137,6 +141,7 @@ export function WorkOrderDetailPage() {
 
   const [submitBusy, setSubmitBusy] = React.useState(false)
   const [saveDraftBusy, setSaveDraftBusy] = React.useState(false)
+  const [completeBusy, setCompleteBusy] = React.useState(false)
 
   const [partMasters, setPartMasters] = React.useState<PartMasterLite[]>([])
   const [pmsLoading, setPmsLoading] = React.useState(false)
@@ -260,6 +265,21 @@ export function WorkOrderDetailPage() {
     }
   }
 
+  async function completeWorkOrder() {
+    if (!row) return
+    if (!confirm("Mark this work order complete? It will be closed.")) return
+    setCompleteBusy(true)
+    try {
+      await postJson(`/work-orders/${row.id}/complete`, {})
+      toast.success("Work order completed.")
+      await load()
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Could not complete work order.")
+    } finally {
+      setCompleteBusy(false)
+    }
+  }
+
   const detailRows = React.useMemo(() => {
     if (!row?.items?.length) return []
     let sr = 0
@@ -271,23 +291,51 @@ export function WorkOrderDetailPage() {
       const qtyDisplay =
         it.progress_type === "percentage"
           ? it.planned_percentage != null && String(it.planned_percentage) !== ""
-            ? `${it.planned_percentage}%`
+            ? (() => {
+                const s = formatExecutionQtyDisplay(it.planned_percentage)
+                return s.includes("%") ? s : `${s}%`
+              })()
             : "—"
           : it.planned_quantity != null && String(it.planned_quantity) !== ""
-            ? String(it.planned_quantity)
+            ? formatExecutionQtyDisplay(it.planned_quantity)
             : "—"
 
       const rateN = parseNum(it.resolved_rate)
-      const pmHint =
-        it.pricing_method && it.rate_unit_type ? `${it.pricing_method} / ${it.rate_unit_type}` : (it.pricing_method ?? it.rate_unit_type ?? "")
-      const rateDisplay = pmHint ? `${fmtMoney(rateN)} (${it.rate_source}) · ${pmHint}` : `${fmtMoney(rateN)} (${it.rate_source})`
+      const rateDisplay = Number.isFinite(rateN)
+        ? executionDetailRateCell({
+            rateMoney: fmtMoney(rateN),
+            rateSource: String(it.rate_source ?? ""),
+            pricingMethod: it.pricing_method,
+            rateUnitType: it.rate_unit_type,
+          })
+        : "—"
 
       const tv = parseNum(it.taxable_value)
-      let invoiceDisplay = "—"
-      if (Number.isFinite(tv)) invoiceDisplay = fmtMoney(tv)
-      else if (it.progress_type === "quantity") {
+      const bdBreakdown =
+        it.pricing_snapshot?.calculation_breakdown &&
+        typeof it.pricing_snapshot.calculation_breakdown === "object"
+          ? (it.pricing_snapshot.calculation_breakdown as Record<string, unknown>)
+          : null
+      let invoiceDisplay: React.ReactNode = "—"
+      if (Number.isFinite(tv)) {
+        invoiceDisplay = executionDetailTaxableCell({
+          money: fmtMoney(tv),
+          rateSource: String(it.rate_source ?? ""),
+          pricingMethod: it.pricing_method,
+          rateUnitType: it.rate_unit_type,
+          calculationBreakdown: bdBreakdown,
+        })
+      } else if (it.progress_type === "quantity") {
         const q = parseNum(it.planned_quantity)
-        if (Number.isFinite(q) && Number.isFinite(rateN)) invoiceDisplay = fmtMoney(q * rateN)
+        if (Number.isFinite(q) && Number.isFinite(rateN)) {
+          invoiceDisplay = executionDetailTaxableCell({
+            money: fmtMoney(q * rateN),
+            rateSource: String(it.rate_source ?? ""),
+            pricingMethod: it.pricing_method,
+            rateUnitType: it.rate_unit_type,
+            calculationBreakdown: bdBreakdown,
+          })
+        }
       }
 
       const completionItem: LineWithCompletion = {
@@ -301,26 +349,35 @@ export function WorkOrderDetailPage() {
         completion: it.completion ?? fallbackLineCompletion(it),
       }
 
-      const lineLabel =
-        it.part_code || it.part_name
-          ? `${it.part_code ?? "—"} · ${it.part_name ?? "—"}`
-          : "—"
+      const job_label = it.part_code?.trim() ? it.part_code.trim() : "—"
 
       const bd = it.pricing_snapshot?.calculation_breakdown
-      const breakdownHint =
-        bd && typeof bd === "object" && "formula" in bd
-          ? ` (${String((bd as { formula?: string }).formula ?? "")})`
-          : ""
+      const bdObj = bd && typeof bd === "object" && bd !== null ? (bd as Record<string, unknown>) : null
+
+      let weightStr: string | null =
+        it.weight_per_piece_snapshot != null && String(it.weight_per_piece_snapshot).trim() !== ""
+          ? String(it.weight_per_piece_snapshot).trim()
+          : null
+      if (!weightStr && bdObj?.weight_per_piece != null && String(bdObj.weight_per_piece).trim() !== "") {
+        weightStr = String(bdObj.weight_per_piece).trim()
+      }
+      const weightBased =
+        String(it.pricing_method ?? "").toLowerCase() === "weight_based" &&
+        String(it.rate_unit_type ?? "").toLowerCase() === "per_kg"
+      const unitKg = String(it.unit_type ?? "").toLowerCase() === "kg"
+      const showWeightHint = Boolean(weightStr && (weightBased || unitKg))
+
+      const unitProfileDisplay =
+        showWeightHint && weightStr ? formatExecutionWeightKg(weightStr) : it.unit_type?.trim() ? it.unit_type : "—"
 
       out.push({
         sr,
         contractor_label: contractorName(headCid),
-        job_label: `${lineLabel}${breakdownHint}`.trim(),
+        job_label,
         qty_display: qtyDisplay,
-        unit_display: it.unit_type ?? "—",
+        unit_profile_display: unitProfileDisplay,
         rate_display: rateDisplay,
         invoice_display: invoiceDisplay,
-        remarks_display: it.notes?.trim() ? it.notes : "—",
         completionCell:
           row.status === "active" && canManageCompletion && !editableDraft ? (
             <WorkOrderLineCompletionInline
@@ -366,6 +423,16 @@ export function WorkOrderDetailPage() {
       setSaveDraftBusy(false)
     }
   }
+
+  const allLinesFullyComplete = React.useMemo(() => {
+    if (!row?.items?.length) return false
+    for (const it of row.items) {
+      const comp = it.completion ?? fallbackLineCompletion(it)
+      const cp = comp.completed_percentage
+      if (typeof cp !== "number" || !Number.isFinite(cp) || cp < 99.99) return false
+    }
+    return true
+  }, [row?.items])
 
   if (loading) return <div className="text-sm text-muted-foreground">Loading…</div>
   if (!row) {
@@ -432,20 +499,29 @@ export function WorkOrderDetailPage() {
         lines={editableDraft ? draftLines : []}
         onLinesChange={editableDraft ? setDraftLines : () => {}}
         detailRows={editableDraft ? undefined : detailRows}
+        contractorSummaryLabel={!editableDraft ? contractorName(row.contractor_id) : undefined}
       />
 
+      {showCompletionEngine && allLinesFullyComplete ? (
+        <Card>
+          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-end">
+            <Button
+              type="button"
+              className="shrink-0 sm:min-w-[11rem]"
+              disabled={completeBusy}
+              onClick={() => void completeWorkOrder()}
+            >
+              {completeBusy ? "Working…" : "Complete work order"}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <WorkOrderExecutionFooter
-        busy={submitBusy || saveDraftBusy}
+        busy={submitBusy || saveDraftBusy || completeBusy}
         showSave={editableDraft}
         showSubmit={showSubmitButton}
-        tip={
-          editableDraft
-            ? "Work date drives which approved negotiated rate applies to each line (inclusive window). Change it and save to re-price lines. Choose the contractor once, then edit part lines."
-            : showCompletionEngine
-              ? "Active work order: update completion per line — invoice lines cannot exceed the latest saved completion. After approval, the approved work order value is fixed; cumulative invoices (ex. tax) cannot exceed that total (with validation tolerance)."
-              : "Rates shown are governed (negotiated where applicable)."
-        }
-        onCancel={() => navigate("/dashboard/work-orders")}
+        tip={null}
         onSave={() => void saveDraft()}
         onSubmitApproval={() => void submit()}
       />
@@ -466,7 +542,7 @@ export function WorkOrderDetailPage() {
                     Approved work order value (ex. tax)
                   </div>
                   <div className="mt-1 font-medium tabular-nums">{fmtMoney(parseNum(row.approved_value_total))}</div>
-                  <p className="mt-1 text-xs text-muted-foreground">Set when the work order was approved; not editable here.</p>
+                  {/* <p className="mt-1 text-xs text-muted-foreground">Set when the work order was approved; not editable here.</p> */}
                 </div>
                 <div className="rounded-md border px-3 py-2">
                   <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Invoiced to date (ex. tax)</div>
@@ -483,9 +559,9 @@ export function WorkOrderDetailPage() {
               </div>
             ) : null}
             <div>
-              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {/* <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Invoices linked to this work order
-              </div>
+              </div> */}
               {linkedInvoices.length === 0 ? (
                 <p className="text-muted-foreground">
                   No invoices yet. Create one from Invoices → New and select lines from this work order.

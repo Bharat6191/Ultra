@@ -102,9 +102,9 @@ export function WorkOrdersPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-medium">Work orders</h2>
-          <p className="text-sm text-muted-foreground">
+          {/* <p className="text-sm text-muted-foreground">
             Assign operational work to a contractor with Part Master lines, track completion, and govern downstream invoicing.
-          </p>
+          </p> */}
         </div>
         {canCreate ? (
           <Button asChild type="button">
@@ -124,11 +124,11 @@ export function WorkOrdersPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Work orders</CardTitle>
+          {/* <CardTitle className="text-sm font-medium">Work orders</CardTitle>
           <CardDescription>
             <strong>Draft</strong> means not yet live (including returned edits)—not the same as <strong>In approval</strong>, which
             is waiting on approvers in <strong>My tasks</strong>. <strong>Completed</strong> lists closed work orders.
-          </CardDescription>
+          </CardDescription> */}
           <div className="mt-3 flex flex-wrap gap-2">
             {WO_TABS.map((t) => (
               <Button

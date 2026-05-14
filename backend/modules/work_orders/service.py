@@ -242,6 +242,34 @@ class WorkOrderService:
         self._db.commit()
         return wo
 
+    def close_active_work_order(self, work_order_id: int, *, actor_user_id: int) -> WorkOrder:
+        """Mark an active work order as closed after every line reports 100% completion."""
+        wo = self.get(work_order_id)
+        if str(wo.status) != "active":
+            raise ConflictError('Only an "active" work order can be completed (closed).')
+        items = list(wo.items or [])
+        if not items:
+            raise ConflictError("Work order has no line items.")
+        for it in items:
+            proj = self.item_completion_projection(it)
+            cp = proj.get("completed_percentage")
+            if cp is None or float(cp) < 99.99:
+                raise ConflictError(
+                    "Every line item must be saved at 100% completion before you can complete the work order."
+                )
+        old_status = str(wo.status)
+        wo.status = "closed"
+        audit_helpers.write_audit(
+            self._db,
+            work_order_id=int(wo.id),
+            action=audit_helpers.ACTION_CLOSED,
+            actor_user_id=actor_user_id,
+            old_value={"status": old_status},
+            new_value={"status": "closed"},
+        )
+        self._db.commit()
+        return self.get(work_order_id)
+
     def hard_delete(self, work_order_id: int, *, actor_user_id: int) -> None:
         """
         Permanently remove a work order and its children from the database.

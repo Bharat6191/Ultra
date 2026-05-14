@@ -1,4 +1,5 @@
 import * as React from "react"
+import { History, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -57,6 +58,17 @@ function parseNum(v: string | number | null | undefined): number {
   return typeof v === "number" ? v : Number(String(v).replace(/,/g, ""))
 }
 
+function parseEntry(s: string): number {
+  const t = s.trim().replace(/,/g, "")
+  if (t === "") return NaN
+  return Number(t)
+}
+
+const completionHistoryDialogClass = cn(
+  "flex h-full max-h-[100dvh] w-full max-w-md flex-col gap-0 overflow-hidden rounded-none border border-border/80 p-0 shadow-xl outline-none sm:rounded-l-xl",
+  "fixed inset-y-0 top-0 right-0 left-auto z-50 translate-x-0 translate-y-0",
+)
+
 function barTone(pct: number): string {
   if (pct <= 0) return "bg-zinc-200 dark:bg-zinc-700"
   if (pct >= 100) return "bg-emerald-500"
@@ -81,7 +93,6 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
         : NaN
   const denomOk = Number.isFinite(approved) && approved > 0
 
-  const [qtyStr, setQtyStr] = React.useState("")
   const [pctStr, setPctStr] = React.useState("")
   const [remarks, setRemarks] = React.useState("")
   const [saving, setSaving] = React.useState(false)
@@ -93,62 +104,13 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
     typeof c.completed_percentage === "number" && Number.isFinite(c.completed_percentage)
       ? Math.min(100, Math.max(0, c.completed_percentage))
       : 0
-  const syncFromQty = React.useCallback(
-    (raw: string) => {
-      setQtyStr(raw)
-      const q = Number(String(raw).replace(/,/g, ""))
-      if (!raw.trim() || !denomOk) {
-        if (!raw.trim()) setPctStr("")
-        return
-      }
-      if (!Number.isFinite(q)) {
-        setPctStr("")
-        return
-      }
-      const pct = (q / (approved as number)) * 100
-      setPctStr(Number.isFinite(pct) ? String(Math.round(pct * 100) / 100) : "")
-    },
-    [denomOk, approved],
-  )
-
-  const syncFromPct = React.useCallback(
-    (raw: string) => {
-      setPctStr(raw)
-      const p = Number(String(raw).replace(/,/g, ""))
-      if (!Number.isFinite(p) || !denomOk) return
-      const q = ((approved as number) * p) / 100
-      setQtyStr(String(Math.round(q * 1000) / 1000))
-    },
-    [denomOk, approved],
-  )
 
   React.useEffect(() => {
-    if (!denomOk && item.progress_type === "percentage" && !(c.approved_quantity && approved > 0)) {
-      if (typeof c.completed_percentage === "number" && Number.isFinite(c.completed_percentage)) {
-        setPctStr(String(c.completed_percentage))
-      } else {
-        setPctStr("")
-      }
-      setQtyStr("")
-      return
-    }
-
-    const cq = typeof c.completed_quantity === "number" && Number.isFinite(c.completed_quantity) ? c.completed_quantity : null
     const cp =
       typeof c.completed_percentage === "number" && Number.isFinite(c.completed_percentage) ? c.completed_percentage : null
-    if (cq !== null) setQtyStr(String(cq))
-    else setQtyStr("")
     if (cp !== null) setPctStr(String(cp))
-    else if (cq !== null && denomOk) setPctStr((((cq as number) / (approved as number)) * 100).toFixed(2))
     else setPctStr("")
-  }, [
-    approved,
-    c.completed_quantity,
-    c.completed_percentage,
-    denomOk,
-    item.progress_type,
-    item.id,
-  ])
+  }, [c.completed_percentage, item.id])
 
   async function loadHistory() {
     setHistoryLoading(true)
@@ -163,17 +125,16 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
   }
 
   async function save() {
-    const qtyTrim = qtyStr.trim()
     const pctTrim = pctStr.trim()
-    if (!qtyTrim && !pctTrim) {
-      toast.error("Enter completed quantity or completion %.")
+    if (!pctTrim) {
+      toast.error("Enter completion %.")
       return
     }
     setSaving(true)
     try {
       await postJson(`/work-orders/items/${item.id}/progress`, {
-        completed_quantity: qtyTrim !== "" ? qtyTrim : null,
-        completed_percentage: pctTrim !== "" ? pctTrim : null,
+        completed_quantity: null,
+        completed_percentage: pctTrim,
         remarks: remarks.trim() || null,
       })
       toast.success("Completion updated.")
@@ -216,33 +177,17 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          {(item.progress_type === "quantity" || (item.progress_type === "percentage" && denomOk)) ? (
-            <div className="grid gap-1.5">
-              <Label htmlFor={`cq-${item.id}`} className="text-xs">
-                Completed qty ({item.unit_type})
-              </Label>
-              <Input
-                id={`cq-${item.id}`}
-                inputMode="decimal"
-                className="h-9 tabular-nums"
-                value={qtyStr}
-                onChange={(e) => syncFromQty(e.target.value)}
-              />
-            </div>
-          ) : null}
-          <div className="grid gap-1.5">
-            <Label htmlFor={`cp-${item.id}`} className="text-xs">
-              Completion %
-            </Label>
-            <Input
-              id={`cp-${item.id}`}
-              inputMode="decimal"
-              className="h-9 tabular-nums"
-              value={pctStr}
-              onChange={(e) => syncFromPct(e.target.value)}
-            />
-          </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor={`cp-${item.id}`} className="text-xs">
+            Completion %
+          </Label>
+          <Input
+            id={`cp-${item.id}`}
+            inputMode="decimal"
+            className="h-9 tabular-nums"
+            value={pctStr}
+            onChange={(e) => setPctStr(e.target.value)}
+          />
         </div>
 
         <div className="grid gap-1.5">
@@ -272,49 +217,69 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
           </Button>
           <Dialog open={historyOpen} onOpenChange={(open) => { setHistoryOpen(open); if (open) void loadHistory() }}>
             <DialogTrigger asChild>
-              <Button type="button" size="sm" variant="outline">
-                History
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                title="Completion history"
+                aria-label="Open completion history"
+              >
+                <History className="size-4" />
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Completion history</DialogTitle>
-                <DialogDescription>Line item #{item.id} — cumulative snapshots with prior values.</DialogDescription>
-              </DialogHeader>
-              {historyLoading ? (
-                <p className="text-sm text-muted-foreground">Loading…</p>
-              ) : (
-                <ul className="space-y-3 text-sm">
-                  {(history ?? []).length === 0 ? (
-                    <li className="text-muted-foreground">No completion updates yet.</li>
-                  ) : (
-                    (history ?? []).map((h, idx) => (
-                      <li key={`${h.id}-${idx}`} className="rounded-md border bg-muted/30 px-3 py-2">
-                        <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
-                          <span>{h.updated_by_name ?? `#${h.updated_by ?? ""}`}</span>
-                          <span>{h.updated_at ? new Date(h.updated_at).toLocaleString() : "—"}</span>
-                        </div>
-                        <div className="mt-1 tabular-nums text-foreground">
-                          Qty: {h.completed_quantity ?? "—"} · %:{" "}
-                          {typeof h.completed_percentage === "number" ? h.completed_percentage.toFixed(2) : "—"}
-                        </div>
-                        {(h.previous_completed_quantity !== null ||
-                          h.previous_completed_percentage !== null) ? (
-                          <div className="mt-1 text-[11px] text-muted-foreground">
-                            Prev:{" "}
-                            {h.previous_completed_quantity ?? "—"} qty /{" "}
-                            {h.previous_completed_percentage != null ? `${h.previous_completed_percentage}%` : "—"}
-
+            <DialogContent className={completionHistoryDialogClass} showCloseButton={true}>
+              <div className="border-b border-border/60 px-4 py-3 pr-12">
+                <DialogHeader className="space-y-1 text-left">
+                  <DialogTitle className="text-base">Completion history</DialogTitle>
+                  <DialogDescription>
+                    SR {lineSr} · {item.part_code ?? `Item #${item.id}`} · {contractorLabel}
+                  </DialogDescription>
+                </DialogHeader>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+                {historyLoading ? (
+                  <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading…
+                  </div>
+                ) : (
+                  <ul className="space-y-3 text-sm">
+                    {(history ?? []).length === 0 ? (
+                      <li className="text-muted-foreground">No completion updates yet.</li>
+                    ) : (
+                      (history ?? []).map((h, idx) => (
+                        <li key={`${h.id}-${idx}`} className="rounded-lg border border-border/60 bg-card px-3 py-2.5 shadow-sm">
+                          <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">
+                              {h.updated_by_name ?? `#${h.updated_by ?? ""}`}
+                            </span>
+                            <span className="tabular-nums">
+                              {h.updated_at ? new Date(h.updated_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—"}
+                            </span>
                           </div>
-                        ) : null}
-                        {h.remarks?.trim() ? (
-                          <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{h.remarks}</p>
-                        ) : null}
-                      </li>
-                    ))
-                  )}
-                </ul>
-              )}
+                          <div className="mt-1.5 tabular-nums text-foreground">
+                            Qty: {h.completed_quantity ?? "—"} · %:{" "}
+                            {typeof h.completed_percentage === "number" ? h.completed_percentage.toFixed(2) : "—"}
+                          </div>
+                          {(h.previous_completed_quantity !== null ||
+                            h.previous_completed_percentage !== null) ? (
+                            <div className="mt-1 text-[11px] text-muted-foreground">
+                              Prev:{" "}
+                              {h.previous_completed_quantity ?? "—"} qty /{" "}
+                              {h.previous_completed_percentage != null ? `${h.previous_completed_percentage}%` : "—"}
+                            </div>
+                          ) : null}
+                          {h.remarks?.trim() ? (
+                            <p className="mt-2 whitespace-pre-wrap border-t border-border/50 pt-2 text-xs text-muted-foreground">
+                              {h.remarks}
+                            </p>
+                          ) : null}
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                )}
+              </div>
             </DialogContent>
           </Dialog>
         </div>
@@ -323,7 +288,7 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
   )
 }
 
-export function WorkOrderLineCompletionInline({ item, onSaved }: LineEditorProps) {
+export function WorkOrderLineCompletionInline({ item, contractorLabel, lineSr, onSaved }: LineEditorProps) {
   const c = item.completion
   const fromPlan = parseNum(item.planned_quantity)
   const approved =
@@ -333,69 +298,36 @@ export function WorkOrderLineCompletionInline({ item, onSaved }: LineEditorProps
         ? fromPlan
         : NaN
   const denomOk = Number.isFinite(approved) && approved > 0
+  const qtyBlocked = !denomOk && item.progress_type === "quantity"
 
-  const [qtyStr, setQtyStr] = React.useState("")
   const [pctStr, setPctStr] = React.useState("")
-  const [remarks, setRemarks] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [historyOpen, setHistoryOpen] = React.useState(false)
   const [history, setHistory] = React.useState<HistoryEntry[] | null>(null)
   const [historyLoading, setHistoryLoading] = React.useState(false)
 
-  const displayPct =
-    typeof c.completed_percentage === "number" && Number.isFinite(c.completed_percentage)
-      ? Math.min(100, Math.max(0, c.completed_percentage))
-      : null
+  const serverPct =
+    typeof c.completed_percentage === "number" && Number.isFinite(c.completed_percentage) ? c.completed_percentage : null
 
-  const syncFromQty = React.useCallback(
-    (raw: string) => {
-      setQtyStr(raw)
-      const q = Number(String(raw).replace(/,/g, ""))
-      if (!raw.trim() || !denomOk) {
-        if (!raw.trim()) setPctStr("")
-        return
-      }
-      if (!Number.isFinite(q)) {
-        setPctStr("")
-        return
-      }
-      const pct = (q / (approved as number)) * 100
-      setPctStr(Number.isFinite(pct) ? String(Math.round(pct * 100) / 100) : "")
-    },
-    [denomOk, approved],
-  )
-
-  const syncFromPct = React.useCallback(
-    (raw: string) => {
-      setPctStr(raw)
-      const p = Number(String(raw).replace(/,/g, ""))
-      if (!Number.isFinite(p) || !denomOk) return
-      const q = ((approved as number) * p) / 100
-      setQtyStr(String(Math.round(q * 1000) / 1000))
-    },
-    [denomOk, approved],
-  )
+  const parsedPct = parseEntry(pctStr)
 
   React.useEffect(() => {
-    if (!denomOk && item.progress_type === "percentage" && !(c.approved_quantity && approved > 0)) {
-      if (typeof c.completed_percentage === "number" && Number.isFinite(c.completed_percentage)) {
-        setPctStr(String(c.completed_percentage))
-      } else {
-        setPctStr("")
-      }
-      setQtyStr("")
-      return
-    }
-
-    const cq = typeof c.completed_quantity === "number" && Number.isFinite(c.completed_quantity) ? c.completed_quantity : null
-    const cp =
-      typeof c.completed_percentage === "number" && Number.isFinite(c.completed_percentage) ? c.completed_percentage : null
-    if (cq !== null) setQtyStr(String(cq))
-    else setQtyStr("")
-    if (cp !== null) setPctStr(String(cp))
-    else if (cq !== null && denomOk) setPctStr((((cq as number) / (approved as number)) * 100).toFixed(2))
+    if (qtyBlocked) return
+    if (serverPct != null && Number.isFinite(serverPct)) setPctStr(String(serverPct))
     else setPctStr("")
-  }, [approved, c.completed_quantity, c.completed_percentage, denomOk, item.progress_type, item.id])
+  }, [serverPct, item.id, qtyBlocked])
+
+  const baselinePct = serverPct != null && Number.isFinite(serverPct) ? String(serverPct) : ""
+  const dirty = pctStr.trim() !== baselinePct.trim()
+
+  const canSave =
+    !qtyBlocked &&
+    pctStr.trim() !== "" &&
+    Number.isFinite(parsedPct) &&
+    parsedPct >= 0 &&
+    parsedPct <= 100 + 1e-9
+
+  const saveDisabled = saving || !canSave
 
   async function loadHistory() {
     setHistoryLoading(true)
@@ -410,21 +342,15 @@ export function WorkOrderLineCompletionInline({ item, onSaved }: LineEditorProps
   }
 
   async function save() {
-    const qtyTrim = qtyStr.trim()
-    const pctTrim = pctStr.trim()
-    if (!qtyTrim && !pctTrim) {
-      toast.error("Enter completed quantity or completion %.")
-      return
-    }
+    if (qtyBlocked || saveDisabled) return
     setSaving(true)
     try {
       await postJson(`/work-orders/items/${item.id}/progress`, {
-        completed_quantity: qtyTrim !== "" ? qtyTrim : null,
-        completed_percentage: pctTrim !== "" ? pctTrim : null,
-        remarks: remarks.trim() || null,
+        completed_quantity: null,
+        completed_percentage: pctStr.trim(),
+        remarks: null,
       })
-      toast.success("Completion updated.")
-      setRemarks("")
+      toast.success("Completion saved.")
       onSaved()
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Could not save completion.")
@@ -434,86 +360,108 @@ export function WorkOrderLineCompletionInline({ item, onSaved }: LineEditorProps
   }
 
   return (
-    <div className="rounded-md border border-border/60 bg-background px-2 py-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[11px] text-muted-foreground">
-          Appr: <span className="font-medium tabular-nums text-foreground">{denomOk ? approved : "—"}</span> {item.unit_type}
-          <span className="mx-2 text-muted-foreground/60">•</span>
-          Rem:{" "}
-          <span className="font-medium tabular-nums text-foreground">
-            {typeof c.remaining_quantity === "number" ? c.remaining_quantity : "—"}
-          </span>
-        </div>
-        <div className="text-[11px] text-muted-foreground tabular-nums">
-          {displayPct != null ? `${displayPct.toFixed(1)}%` : "—"}
-        </div>
-      </div>
-
-      <div className="mt-2 grid grid-cols-12 items-center gap-2">
-        <div className="col-span-4">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Completed qty</div>
-          {(item.progress_type === "quantity" || (item.progress_type === "percentage" && denomOk)) ? (
+    <div
+      data-completion-dirty={dirty ? "true" : undefined}
+      role="group"
+      aria-label={`Completion line ${lineSr}`}
+      className="flex w-full min-w-0 items-center justify-end gap-0"
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" || e.nativeEvent.isComposing || qtyBlocked) return
+        e.preventDefault()
+        if (!saveDisabled) void save()
+      }}
+    >
+      {qtyBlocked ? (
+        <span className="text-sm text-muted-foreground">—</span>
+      ) : (
+        <div className="inline-flex h-11 max-w-full overflow-hidden rounded-lg border-2 border-border/80 bg-background shadow-md">
+          <div className="relative flex min-w-0 items-stretch border-r border-border/60">
             <Input
               inputMode="decimal"
-              className="h-8 tabular-nums"
-              value={qtyStr}
-              onChange={(e) => syncFromQty(e.target.value)}
-              placeholder="0"
-            />
-          ) : (
-            <div className="h-8 rounded-md border bg-muted/20 px-2 text-xs leading-8 text-muted-foreground">—</div>
-          )}
-        </div>
-
-        <div className="col-span-3">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">%</div>
-          <Input inputMode="decimal" className="h-8 tabular-nums" value={pctStr} onChange={(e) => syncFromPct(e.target.value)} placeholder="0" />
-        </div>
-
-        <div className="col-span-5">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Remarks</div>
-          <Input className="h-8" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Optional" />
-        </div>
-
-        <div className="col-span-12 flex flex-wrap items-center justify-between gap-2 pt-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" size="sm" className="h-8 px-3" onClick={() => void save()} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
-            <Dialog
-              open={historyOpen}
-              onOpenChange={(open) => {
-                setHistoryOpen(open)
-                if (open) void loadHistory()
+              className="h-11 w-[4.5rem] min-w-[3.5rem] rounded-none border-0 bg-transparent py-0 pr-7 pl-1 text-center text-base font-semibold tabular-nums leading-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              value={pctStr}
+              onChange={(e) => setPctStr(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowUp") {
+                  e.preventDefault()
+                  const base = Number.isFinite(parsedPct) ? parsedPct : serverPct ?? 0
+                  setPctStr(String(Math.min(100, Math.round((base + (e.shiftKey ? 1 : 0.5)) * 10) / 10)))
+                } else if (e.key === "ArrowDown") {
+                  e.preventDefault()
+                  const base = Number.isFinite(parsedPct) ? parsedPct : serverPct ?? 0
+                  setPctStr(String(Math.max(0, Math.round((base - (e.shiftKey ? 1 : 0.5)) * 10) / 10)))
+                }
               }}
-            >
-              <DialogTrigger asChild>
-                <Button type="button" size="sm" variant="outline" className="h-8 px-3">
-                  History
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Completion history</DialogTitle>
-                  <DialogDescription>Most recent updates for this line item.</DialogDescription>
+              placeholder="0"
+              aria-label="Completion percent"
+            />
+            <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
+              %
+            </span>
+          </div>
+          <Button
+            type="button"
+            variant="default"
+            className="h-11 shrink-0 rounded-none border-0 px-4 text-sm font-semibold shadow-none"
+            onClick={() => void save()}
+            disabled={saveDisabled}
+          >
+            {saving ? <Loader2 className="size-5 animate-spin" aria-label="Saving" /> : "Save"}
+          </Button>
+          <Dialog
+            open={historyOpen}
+            onOpenChange={(open) => {
+              setHistoryOpen(open)
+              if (open) void loadHistory()
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button
+                type="button"
+                variant="secondary"
+                className="size-11 shrink-0 rounded-none border-0 border-l border-border/60 bg-muted/40 p-0 hover:bg-muted/70"
+                title="Completion history"
+                aria-label="Open completion history"
+              >
+                <History className="size-5 text-muted-foreground" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className={completionHistoryDialogClass} showCloseButton={true}>
+              <div className="border-b border-border/60 px-4 py-3 pr-12">
+                <DialogHeader className="space-y-1 text-left">
+                  <DialogTitle className="text-base">Completion history</DialogTitle>
+                  <DialogDescription>
+                    SR {lineSr} · {item.part_code ?? `Item #${item.id}`}
+                    {contractorLabel ? ` · ${contractorLabel}` : ""}
+                  </DialogDescription>
                 </DialogHeader>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
                 {historyLoading ? (
-                  <div className="py-6 text-sm text-muted-foreground">Loading…</div>
+                  <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading…
+                  </div>
                 ) : (
                   <ul className="space-y-3">
                     {(history ?? []).length === 0 ? (
                       <li className="text-sm text-muted-foreground">No history yet.</li>
                     ) : (
                       (history ?? []).map((h) => (
-                        <li key={h.id} className="rounded-lg border p-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                            <span className="font-medium tabular-nums">
-                              {h.completed_quantity ?? "—"} qty · {h.completed_percentage != null ? `${h.completed_percentage}%` : "—"}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
+                        <li key={h.id} className="rounded-lg border border-border/60 bg-card px-3 py-2.5 text-sm shadow-sm">
+                          <div className="flex flex-wrap items-start justify-between gap-2 text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">
                               {h.updated_by_name ?? (h.updated_by != null ? `#${h.updated_by}` : "—")}
-                              {h.updated_at ? ` · ${new Date(h.updated_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}` : ""}
                             </span>
+                            <span className="tabular-nums">
+                              {h.updated_at
+                                ? new Date(h.updated_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+                                : "—"}
+                            </span>
+                          </div>
+                          <div className="mt-1.5 tabular-nums text-foreground">
+                            Qty: {h.completed_quantity ?? "—"} · %:{" "}
+                            {typeof h.completed_percentage === "number" ? h.completed_percentage.toFixed(2) : "—"}
                           </div>
                           {(h.previous_completed_quantity !== null || h.previous_completed_percentage !== null) ? (
                             <div className="mt-1 text-[11px] text-muted-foreground">
@@ -521,30 +469,21 @@ export function WorkOrderLineCompletionInline({ item, onSaved }: LineEditorProps
                               {h.previous_completed_percentage != null ? `${h.previous_completed_percentage}%` : "—"}
                             </div>
                           ) : null}
-                          {h.remarks?.trim() ? <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{h.remarks}</p> : null}
+                          {h.remarks?.trim() ? (
+                            <p className="mt-2 whitespace-pre-wrap border-t border-border/50 pt-2 text-xs text-muted-foreground">
+                              {h.remarks}
+                            </p>
+                          ) : null}
                         </li>
                       ))
                     )}
                   </ul>
                 )}
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          <div className="text-[11px] text-muted-foreground">
-            {c.last_updated_at || c.last_updated_by_name ? (
-              <>
-                Last: {c.last_updated_by_name ?? (c.last_updated_by != null ? `#${c.last_updated_by}` : "—")}
-                {c.last_updated_at
-                  ? ` · ${new Date(c.last_updated_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}`
-                  : ""}
-              </>
-            ) : (
-              <>Last: —</>
-            )}
-          </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
-      </div>
+      )}
     </div>
   )
 }

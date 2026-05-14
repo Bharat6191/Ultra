@@ -322,3 +322,48 @@ def test_second_invoice_blocked_when_exceeding_work_order_total(db):
             ),
             actor_user_id=actor,
         )
+
+
+def test_close_work_order_requires_full_completion(db):
+    actor = _first_user(db)
+    org = _first_plant(db)
+    contractor = _first_contractor(db)
+    pm = _first_part_master_for_org(db, int(org.id))
+
+    wo = WorkOrderService(db).create(
+        WorkOrderCreate(
+            org_unit_id=int(org.id),
+            contractor_id=int(contractor.id),
+            title="Close test WO",
+            description=None,
+            work_date=date.today(),
+            items=[
+                WorkOrderItemCreate(
+                    part_master_id=int(pm.id),
+                    progress_type="quantity",
+                    planned_quantity=Decimal("2"),
+                    planned_percentage=None,
+                    weight_per_piece=Decimal("1"),
+                    notes=None,
+                )
+            ],
+        ),
+        actor_user_id=actor,
+    )
+    svc_w = WorkOrderService(db)
+    wo2 = svc_w.submit_for_approval(int(wo.id), actor_user_id=actor)
+    if str(wo2.status) == "pending_approval":
+        wo2 = svc_w.finalize_approval(int(wo2.id), approver_user_id=actor, approval_request_id=wo2.approval_request_id)
+    assert str(wo2.status) == "active"
+    item_id = int(wo2.items[0].id)
+
+    with pytest.raises(ConflictError, match="100%"):
+        svc_w.close_active_work_order(int(wo2.id), actor_user_id=actor)
+
+    svc_w.add_progress(
+        item_id,
+        WorkOrderItemProgressCreate(completed_quantity=None, completed_percentage=Decimal("100"), remarks=None),
+        actor_user_id=actor,
+    )
+    closed = svc_w.close_active_work_order(int(wo2.id), actor_user_id=actor)
+    assert str(closed.status) == "closed"

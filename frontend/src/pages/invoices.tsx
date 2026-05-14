@@ -5,7 +5,7 @@ import { Plus } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
@@ -154,11 +154,7 @@ export function InvoicesPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-medium">Invoices</h2>
-          <p className="text-sm text-muted-foreground">
-            Invoices are checked against work orders, completion, negotiated rates, and caps; use validation tabs to
-            triage pass, warn, fail, and blocked. Workflow status stays in the table (draft, submitted, approved—no
-            payment step here).
-          </p>
+          
         </div>
         {canCreate ? (
           <Button asChild type="button">
@@ -178,11 +174,11 @@ export function InvoicesPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Invoices</CardTitle>
-          <CardDescription>
-            Tabs filter by validation engine outcome. Blocked / fail usually need fixes or exception approval before an
-            invoice can progress.
-          </CardDescription>
+          {/* <CardTitle className="text-sm font-medium">Invoices</CardTitle> */}
+          {/* <CardDescription> */}
+            {/* Tabs filter by validation engine outcome. Blocked / fail usually need fixes or exception approval before an */}
+            {/* invoice can progress. */}
+          {/* </CardDescription> */}
           <div className="mt-3 flex flex-wrap gap-2">
             {INVOICE_VALIDATION_TABS.map((t) => {
               const n =
