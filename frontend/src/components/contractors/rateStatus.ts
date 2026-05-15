@@ -42,6 +42,8 @@ export function rateStatusVariant(status: string | null | undefined): StatusVari
       return "error"
     case "expired":
       return "secondary"
+    case "draft":
+      return "info"
     default:
       return "outline"
   }

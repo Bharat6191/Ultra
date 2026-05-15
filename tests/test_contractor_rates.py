@@ -342,7 +342,7 @@ def test_upload_opening_evidence_conflict_after_non_opening_round(
         NegotiationRoundCreate(
             proposed_rate=None,
             counter_rate=Decimal("95"),
-            remarks=None,
+            remarks="Counter offer",
             round_summary="Counter",
             apply_to_negotiated_rate=True,
         ),
@@ -419,6 +419,7 @@ def test_round1_proposal_above_initial_lifts_initial_rate(
             part_master_id=int(rm.id),
             negotiated_rate=Decimal("105"),  # internal target
             effective_from=date.today(),
+            remarks="round1 lift test",
         ),
         actor_user_id=int(actor.id),
     )
@@ -442,9 +443,10 @@ def test_round1_proposal_above_initial_lifts_initial_rate(
 # ---------- Negotiation rounds ----------
 
 
-def test_multiple_rounds_increment_round_number_and_audit(
+def test_draft_negotiate_revises_round_one_in_place(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
+    """While draft, negotiate updates round 1 — it does not create round 2."""
     rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
     svc = ContractorRateService(db)
     rate = svc.create_rate(
@@ -453,6 +455,7 @@ def test_multiple_rounds_increment_round_number_and_audit(
             part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today(),
+            remarks="draft revise test",
         ),
         actor_user_id=int(actor.id),
     )
@@ -475,12 +478,12 @@ def test_multiple_rounds_increment_round_number_and_audit(
         actor_user_id=int(actor.id),
     )
     refreshed = svc.get_rate(int(rate.id))
-    assert refreshed.current_round == 2
-    rounds = sorted(refreshed.negotiation_logs, key=lambda r: r.round_number)
-    assert [r.round_number for r in rounds] == [1, 2]
-    assert rounds[0].proposed_rate == Decimal("85.00")
-    assert rounds[1].counter_rate == Decimal("80.00")
-    # Round 2 applied -> negotiated_rate is now 80, savings recomputed.
+    assert refreshed.current_round == 1
+    assert len(refreshed.negotiation_logs) == 1
+    rnd = refreshed.negotiation_logs[0]
+    assert int(rnd.round_number) == 1
+    assert rnd.proposed_rate == Decimal("85.00")
+    assert rnd.counter_rate == Decimal("80.00")
     assert refreshed.negotiated_rate == Decimal("80.00")
     actions = [
         a.action
@@ -490,9 +493,91 @@ def test_multiple_rounds_increment_round_number_and_audit(
             )
         ).all()
     ]
-    assert actions.count(ACTION_NEGOTIATION_ADDED) == 2
-    # An UPDATED row must exist for the round-2 application of the counter rate.
+    assert actions.count(ACTION_NEGOTIATION_ADDED) == 0
     assert "UPDATED" in actions
+
+
+def test_draft_negotiate_prunes_erroneous_round_two(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    """Legacy round-2 rows in draft are removed; edits stay on round 1."""
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    svc = ContractorRateService(db)
+    rate = svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            part_master_id=int(rm.id),
+            negotiated_rate=Decimal("125"),
+            effective_from=date.today(),
+            remarks="prune test",
+        ),
+        actor_user_id=int(actor.id),
+    )
+    # Simulate mistaken round 2 from older behaviour.
+    stray = NegotiationLog(
+        contractor_rate_id=int(rate.id),
+        round_number=2,
+        counter_rate=Decimal("127"),
+        proposed_rate=None,
+        round_summary="Stale",
+        created_by=int(actor.id),
+    )
+    db.add(stray)
+    row = svc.get_rate(int(rate.id))
+    row.current_round = 2
+    db.commit()
+
+    svc.add_negotiation_round(
+        int(rate.id),
+        NegotiationRoundCreate(
+            counter_rate=Decimal("120"),
+            remarks="prune revise",
+            apply_to_negotiated_rate=True,
+        ),
+        actor_user_id=int(actor.id),
+    )
+    refreshed = svc.get_rate(int(rate.id))
+    assert refreshed.current_round == 1
+    assert len(refreshed.negotiation_logs) == 1
+    assert int(refreshed.negotiation_logs[0].round_number) == 1
+    assert refreshed.negotiation_logs[0].counter_rate == Decimal("120.00")
+
+
+def test_rejected_negotiation_adds_round_two(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    """After rejection, a new negotiate call starts round 2 (not an in-place draft edit)."""
+    rm = _make_part(
+        db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
+    )
+    svc = ContractorRateService(db)
+    rate = svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            part_master_id=int(rm.id),
+            negotiated_rate=Decimal("90"),
+            effective_from=date.today(),
+            remarks="rejected round test",
+        ),
+        actor_user_id=int(actor.id),
+    )
+    row = svc.get_rate(int(rate.id))
+    row.status = "rejected"
+    db.commit()
+    svc.add_negotiation_round(
+        int(rate.id),
+        NegotiationRoundCreate(
+            counter_rate=Decimal("82"),
+            remarks="revised after rejection",
+            apply_to_negotiated_rate=True,
+        ),
+        actor_user_id=int(actor.id),
+    )
+    refreshed = svc.get_rate(int(rate.id))
+    assert refreshed.current_round == 2
+    rounds = sorted(refreshed.negotiation_logs, key=lambda r: r.round_number)
+    assert [int(r.round_number) for r in rounds] == [1, 2]
+    assert rounds[1].counter_rate == Decimal("82.00")
 
 
 def test_round_requires_at_least_one_value(

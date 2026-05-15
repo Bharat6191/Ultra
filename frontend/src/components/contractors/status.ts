@@ -40,7 +40,14 @@ export const CONTRACTOR_PLANT_ROLE_OPTIONS: { value: string; label: string }[] =
   { value: "restricted", label: "Restricted" },
 ]
 
-export type StatusVariant = "default" | "secondary" | "success" | "warning" | "error" | "outline"
+export type StatusVariant =
+  | "default"
+  | "secondary"
+  | "success"
+  | "warning"
+  | "error"
+  | "info"
+  | "outline"
 
 export function statusVariant(status: string | null | undefined): StatusVariant {
   switch ((status ?? "").toLowerCase()) {

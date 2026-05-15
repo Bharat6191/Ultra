@@ -179,7 +179,7 @@ export function NegotiatedRateDetailPage() {
           {canCancelNow ? (
             <Button
               size="sm"
-              variant="ghost"
+              variant="destructive"
               onClick={cancelRate}
               disabled={actionBusy}
             >

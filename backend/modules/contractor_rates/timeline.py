@@ -38,6 +38,15 @@ _FIELD_LABELS: dict[str, str] = {
     "remarks": "Remarks",
 }
 
+_STATUS_LABELS: dict[str, str] = {
+    "draft": "Draft",
+    "pending_approval": "Pending approval",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "cancelled": "Cancelled",
+    "expired": "Expired",
+}
+
 _MONEY_FIELDS = frozenset(
     {
         "negotiated_rate",
@@ -75,6 +84,8 @@ def _format_field_value(field: str, value: Any) -> str | None:
     if field == "savings_percentage":
         d = _parse_decimal(value)
         return f"{d:.2f}%" if d is not None else str(value)
+    if field == "status" and isinstance(value, str):
+        return _STATUS_LABELS.get(value, value.replace("_", " ").title())
     return str(value)
 
 
@@ -133,7 +144,16 @@ class ContractorRateTimelineService:
         raw.extend(self._approval_events(rate))
 
         raw.sort(key=lambda e: (e["occurred_at"] or datetime.min, e.get("_sort_key", "")))
-        return _normalize_timeline(raw, base_rate=base_rate)
+        approved_by_name = self._user_name(rate.approved_by)
+        rejected_by_name = self._user_name(rate.rejected_by)
+        events = _normalize_timeline(
+            raw,
+            base_rate=base_rate,
+            approved_by_name=approved_by_name,
+            rejected_by_name=rejected_by_name,
+        )
+        events.reverse()
+        return events
 
     def _audit_events(self, contractor_rate_id: int) -> list[dict[str, Any]]:
         rows = self._db.scalars(
@@ -359,7 +379,75 @@ def _apply_created_highlights(
         highlights["effective_to"] = str(new_value["effective_to"])
 
 
-def _enrich_event(evt: dict[str, Any], *, base_rate: Any, seen_rejection: bool) -> dict[str, Any] | None:
+def _resolve_actor_name(
+    evt: dict[str, Any],
+    *,
+    approved_by_name: str | None,
+    rejected_by_name: str | None,
+) -> str | None:
+    name = evt.get("actor_name")
+    if name:
+        return name
+    action = str(evt.get("action", "")).upper()
+    kind = evt.get("kind")
+    if action in ("APPROVED", "RATE_ACTIVATED") or (
+        kind == "approval" and action == "APPROVE"
+    ):
+        return approved_by_name
+    if action in ("REJECTED", "REJECT"):
+        return rejected_by_name
+    return None
+
+
+def _merge_approver_onto_activation_events(raw: list[dict[str, Any]]) -> None:
+    """Copy approver identity from approval rows onto RATE_ACTIVATED before dedupe drops them."""
+    activations = [
+        e
+        for e in raw
+        if e.get("kind") == "audit" and str(e.get("action", "")).upper() == "RATE_ACTIVATED"
+    ]
+    if not activations:
+        return
+    activation = activations[-1]
+    act_ts = activation.get("occurred_at")
+    window = timedelta(seconds=120)
+
+    def _near_activation(ts: datetime | None) -> bool:
+        if ts is None or act_ts is None:
+            return False
+        return abs((ts - act_ts).total_seconds()) <= window.total_seconds()
+
+    donor: dict[str, Any] | None = None
+    for evt in reversed(raw):
+        if evt is activation:
+            continue
+        if not _near_activation(evt.get("occurred_at")):
+            continue
+        kind = evt.get("kind")
+        action = str(evt.get("action", "")).upper()
+        if kind == "audit" and action == "APPROVED":
+            donor = evt
+            break
+        if kind == "approval" and action == "APPROVE":
+            donor = evt
+            break
+    if donor is None:
+        return
+    if not activation.get("actor_name") and donor.get("actor_name"):
+        activation["actor_user_id"] = donor.get("actor_user_id")
+        activation["actor_name"] = donor.get("actor_name")
+    if donor.get("description") and not activation.get("description"):
+        activation["description"] = donor.get("description")
+
+
+def _enrich_event(
+    evt: dict[str, Any],
+    *,
+    base_rate: Any,
+    seen_rejection: bool,
+    approved_by_name: str | None = None,
+    rejected_by_name: str | None = None,
+) -> dict[str, Any] | None:
     """Return enriched public event or None to drop."""
     action = str(evt["action"]).upper()
     kind = evt["kind"]
@@ -385,7 +473,13 @@ def _enrich_event(evt: dict[str, Any], *, base_rate: Any, seen_rejection: bool) 
                 effective_base = metadata["base_rate"]
 
         elif action in ("UPDATED", "VALIDITY_CHANGED"):
-            title = "Validity updated" if action == "VALIDITY_CHANGED" else "Changes made"
+            if action == "VALIDITY_CHANGED":
+                title = "Validity updated"
+            elif metadata.get("via") == "draft_round_revision":
+                rnd = metadata.get("round_number")
+                title = f"Round {rnd} updated" if rnd is not None else "Round updated"
+            else:
+                title = "Changes made"
             meta_fields = metadata.get("fields")
             if meta_fields:
                 keys = list(meta_fields)
@@ -407,6 +501,7 @@ def _enrich_event(evt: dict[str, Any], *, base_rate: Any, seen_rejection: bool) 
             title = "Resubmitted for approval" if seen_rejection else "Submitted for approval"
             is_resubmit = seen_rejection
             comment = None
+            # Title-only milestone — status/rate diffs stay in raw audit, not the business timeline.
 
         elif action == "REJECTED":
             comment = metadata.get("comment") or comment
@@ -417,8 +512,13 @@ def _enrich_event(evt: dict[str, Any], *, base_rate: Any, seen_rejection: bool) 
             title = "Approved"
 
         elif action == "RATE_ACTIVATED":
-            title = "Rate activated"
-            comment = None
+            via = str(metadata.get("via") or "").lower()
+            if via in ("approval_finalized", "auto_approved"):
+                title = "Approved"
+                action = "APPROVED"
+            else:
+                title = "Rate activated"
+                comment = None
             if new_value.get("negotiated_rate"):
                 highlights["negotiated_rate"] = _format_money(new_value["negotiated_rate"])
             if new_value.get("effective_from"):
@@ -464,10 +564,16 @@ def _enrich_event(evt: dict[str, Any], *, base_rate: Any, seen_rejection: bool) 
     elif kind == "approval":
         step = payload.get("approval_step")
         if action == "APPROVE":
-            title = f"Approved (step {step})" if step else "Approved"
+            title = "Approved" if step is None else f"Approved (step {step})"
         else:
             title = f"Rejected (step {step})" if step else "Rejected"
         comment = payload.get("comment") or comment
+
+    actor_name = _resolve_actor_name(
+        evt,
+        approved_by_name=approved_by_name,
+        rejected_by_name=rejected_by_name,
+    )
 
     public_payload: dict[str, Any] = {}
     if changes:
@@ -506,7 +612,13 @@ def _enrich_event(evt: dict[str, Any], *, base_rate: Any, seen_rejection: bool) 
     }
 
 
-def _normalize_timeline(raw: list[dict[str, Any]], *, base_rate: Any) -> list[dict[str, Any]]:
+def _normalize_timeline(
+    raw: list[dict[str, Any]],
+    *,
+    base_rate: Any,
+    approved_by_name: str | None = None,
+    rejected_by_name: str | None = None,
+) -> list[dict[str, Any]]:
     """Filter duplicates and enrich for the UI."""
     raw = [
         e
@@ -514,6 +626,7 @@ def _normalize_timeline(raw: list[dict[str, Any]], *, base_rate: Any) -> list[di
         if not (e.get("kind") == "audit" and e.get("action") in _SKIP_AUDIT)
     ]
     raw = _merge_creation_with_opening_round(raw)
+    _merge_approver_onto_activation_events(raw)
 
     # Drop audit APPROVED when activation follows shortly (approval_finalized path).
     activation_times = [
@@ -581,7 +694,13 @@ def _normalize_timeline(raw: list[dict[str, Any]], *, base_rate: Any) -> list[di
     seen_rejection = False
     out: list[dict[str, Any]] = []
     for evt in deduped:
-        enriched = _enrich_event(evt, base_rate=base_rate, seen_rejection=seen_rejection)
+        enriched = _enrich_event(
+            evt,
+            base_rate=base_rate,
+            seen_rejection=seen_rejection,
+            approved_by_name=approved_by_name,
+            rejected_by_name=rejected_by_name,
+        )
         if enriched is None:
             continue
         action = str(enriched.get("action", "")).upper()

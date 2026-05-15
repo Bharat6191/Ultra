@@ -564,7 +564,7 @@ export function ContractorRatesPanel({
                         {canUpdate && (r.status === "draft" || r.status === "pending_approval") ? (
                           <Button
                             size="sm"
-                            variant="ghost"
+                            variant="destructive"
                             onClick={() => void cancelRate(r)}
                           >
                             Cancel
@@ -890,20 +890,29 @@ export function RateDetailPanel({
             {RATE_STEPPER_STEPS.map((step, i) => {
               const reached = !isTerminal && stepIdx >= i
               const current = !isTerminal && stepIdx === i
+              const draftActive = current && step.key === "draft"
               return (
                 <React.Fragment key={step.key}>
                   <li className="flex items-center gap-2">
                     <span
                       className={`grid size-6 place-items-center rounded-full text-xs font-semibold ring-2 ${
-                        reached
-                          ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                          : "bg-gray-50 text-gray-500 ring-gray-200"
+                        draftActive
+                          ? "bg-sky-50 text-sky-700 ring-sky-200"
+                          : reached
+                            ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                            : "bg-gray-50 text-gray-500 ring-gray-200"
                       }`}
                     >
                       {reached ? <CheckCircle2 className="size-3.5" /> : i + 1}
                     </span>
                     <span
-                      className={`text-xs ${current ? "font-semibold text-foreground" : "text-muted-foreground"}`}
+                      className={`text-xs ${
+                        draftActive
+                          ? "font-semibold text-sky-800"
+                          : current
+                            ? "font-semibold text-foreground"
+                            : "text-muted-foreground"
+                      }`}
                     >
                       {step.label}
                     </span>
@@ -1039,7 +1048,7 @@ export function RateDetailPanel({
         </CardContent>
       </Card>
 
-      <ContractorRateTimeline rateId={rate.id} />
+      <ContractorRateTimeline rateId={rate.id} refreshKey={rate.updated_at} />
     </div>
   )
 }

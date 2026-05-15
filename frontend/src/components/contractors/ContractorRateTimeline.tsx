@@ -227,12 +227,21 @@ function TimelineChanges({ changes }: { changes: TimelineChange[] }) {
   )
 }
 
-export function ContractorRateTimeline({ rateId }: { rateId: number }) {
+export function ContractorRateTimeline({
+  rateId,
+  refreshKey,
+}: {
+  rateId: number
+  /** Bumps when the parent rate row changes (submit, negotiate, etc.) so the log refetches. */
+  refreshKey?: string | number | null
+}) {
   const [events, setEvents] = React.useState<RateTimelineEvent[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     let cancelled = false
+    setEvents(null)
+    setError(null)
     ;(async () => {
       try {
         const rows = await getJson<RateTimelineEvent[]>(`/contractor-rates/${rateId}/timeline`)
@@ -244,7 +253,7 @@ export function ContractorRateTimeline({ rateId }: { rateId: number }) {
     return () => {
       cancelled = true
     }
-  }, [rateId])
+  }, [rateId, refreshKey])
 
   return (
     <Card>
@@ -325,7 +334,19 @@ export function ContractorRateTimeline({ rateId }: { rateId: number }) {
                       <span className="grid h-5 w-5 place-items-center rounded-full bg-gray-100 text-[10px] font-semibold text-gray-600">
                         {actorInitials(evt.actor_name)}
                       </span>
-                      <span>{evt.actor_name ?? "System"}</span>
+                      <span>
+                        {(() => {
+                          const a = evt.action.toUpperCase()
+                          const name = evt.actor_name
+                          if (a === "APPROVED" || (a === "APPROVE" && evt.kind === "approval")) {
+                            return name ? `Approved by ${name}` : "Approved"
+                          }
+                          if (a === "REJECTED" || (a === "REJECT" && evt.kind === "approval")) {
+                            return name ? `Rejected by ${name}` : "Rejected"
+                          }
+                          return name ?? "System"
+                        })()}
+                      </span>
                     </div>
                   </div>
                 </li>

@@ -527,6 +527,91 @@ class ContractorRateService:
 
     # --- negotiation rounds ---
 
+    def _round_one_log(self, row: ContractorRate) -> NegotiationLog | None:
+        for log in row.negotiation_logs or []:
+            if int(log.round_number or 0) == 1:
+                return log
+        return None
+
+    def _in_place_negotiation_status(self, row: ContractorRate) -> bool:
+        """Negotiate updates round 1 until the first approval cycle completes (rejection → round 2)."""
+        return row.status in ("draft", "pending_approval")
+
+    def _prune_extra_draft_rounds(self, row: ContractorRate) -> None:
+        """Remove spurious round 2+ rows created before in-place draft edits were enforced."""
+        if row.status != "draft":
+            return
+        for log in list(row.negotiation_logs or []):
+            if int(log.round_number or 0) > 1:
+                self._db.delete(log)
+        row.current_round = 1
+
+    def _revise_draft_round_one(
+        self,
+        row: ContractorRate,
+        log: NegotiationLog,
+        payload: NegotiationRoundCreate,
+        *,
+        actor_user_id: int | None,
+    ) -> NegotiationLog:
+        """Update round 1 in place during draft (not a new round)."""
+        if payload.proposed_rate is None and payload.counter_rate is None:
+            raise ConflictError(
+                "At least one of proposed_rate or counter_rate is required for a round."
+            )
+
+        before_lift = audit_helpers.snapshot_rate(row)
+        initial_lifted = False
+        if (
+            payload.proposed_rate is not None
+            and (
+                row.initial_rate is None
+                or Decimal(payload.proposed_rate) > Decimal(row.initial_rate)
+            )
+        ):
+            row.initial_rate = Decimal(payload.proposed_rate)
+            initial_lifted = True
+
+        if payload.proposed_rate is not None:
+            log.proposed_rate = Decimal(payload.proposed_rate)
+        if payload.counter_rate is not None:
+            log.counter_rate = Decimal(payload.counter_rate)
+        if payload.remarks is not None:
+            log.remarks = payload.remarks or None
+        if payload.round_summary and payload.round_summary.strip():
+            log.round_summary = payload.round_summary.strip()
+
+        rate_changed = False
+        if payload.apply_to_negotiated_rate:
+            new_rate = payload.counter_rate or payload.proposed_rate
+            if new_rate is not None and Decimal(new_rate) != Decimal(row.negotiated_rate):
+                row.negotiated_rate = Decimal(new_rate)
+                rate_changed = True
+
+        if rate_changed or initial_lifted:
+            row.savings_amount, row.savings_percentage = self._calc_savings(
+                row.initial_rate, Decimal(row.negotiated_rate)
+            )
+            after = audit_helpers.snapshot_rate(row)
+            old_d, new_d = audit_helpers.diff_dicts(before_lift, after)
+            if old_d or new_d:
+                audit_helpers.write_audit(
+                    self._db,
+                    contractor_rate_id=int(row.id),
+                    action=audit_helpers.ACTION_UPDATED,
+                    actor_user_id=actor_user_id,
+                    old_value=old_d or None,
+                    new_value=new_d or None,
+                    metadata={
+                        "via": "draft_round_revision",
+                        "round_number": 1,
+                    },
+                )
+        row.current_round = 1
+        self._prune_extra_draft_rounds(row)
+        self._db.commit()
+        return log
+
     def add_negotiation_round(
         self,
         rate_id: int,
@@ -545,7 +630,20 @@ class ContractorRateService:
                 "At least one of proposed_rate or counter_rate is required for a round."
             )
 
-        next_round = int(row.current_round or 0) + 1
+        if self._in_place_negotiation_status(row):
+            draft_round = self._round_one_log(row)
+            if draft_round is not None:
+                return self._revise_draft_round_one(
+                    row, draft_round, payload, actor_user_id=actor_user_id
+                )
+            next_round = 1
+        elif row.status == "rejected":
+            next_round = max(int(row.current_round or 0) + 1, 2)
+        else:
+            raise ConflictError(
+                "Negotiation rounds can only be added while draft, pending approval, or rejected."
+            )
+
         log = NegotiationLog(
             contractor_rate_id=int(row.id),
             round_number=next_round,
@@ -763,6 +861,7 @@ class ContractorRateService:
         approval_request_id: int | None = None
 
         if wf is not None:
+            before_status = row.status
             row.status = "pending_approval"
             req = ApprovalEngineService(self._db).create_request_for_entity(
                 workflow=wf,
@@ -796,7 +895,14 @@ class ContractorRateService:
                 contractor_rate_id=int(row.id),
                 action=audit_helpers.ACTION_SENT_FOR_APPROVAL,
                 actor_user_id=actor_user_id,
-                new_value={"status": "pending_approval"},
+                old_value={
+                    "status": before_status,
+                    "negotiated_rate": str(row.negotiated_rate),
+                },
+                new_value={
+                    "status": "pending_approval",
+                    "negotiated_rate": str(row.negotiated_rate),
+                },
                 metadata={"approval_request_id": approval_request_id},
             )
             self._db.commit()

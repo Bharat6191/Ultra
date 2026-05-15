@@ -307,6 +307,13 @@ def add_negotiation_round(
     svc: Annotated[ContractorRateService, Depends(_get_rate_service)],
     current: Annotated[CurrentUser, Depends(get_current_user)],
 ) -> NegotiationRoundPublic:
+    remarks = (payload.remarks or "").strip()
+    if not remarks:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Remarks are required for a negotiation round.",
+        )
+    payload = payload.model_copy(update={"remarks": remarks})
     try:
         row = svc.add_negotiation_round(rate_id, payload, actor_user_id=int(current.subject))
     except NotFoundError as exc:

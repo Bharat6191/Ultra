@@ -93,13 +93,21 @@ export function NegotiatedRateNegotiatePage() {
       toast.error("Enter a valid agreed rate")
       return
     }
+    if (!remarks.trim()) {
+      toast.error("Remarks are required")
+      return
+    }
+    if (attachments.length < 1) {
+      toast.error("Add at least one attachment")
+      return
+    }
     setSaving(true)
     setSaveError(null)
     try {
       const round = await postJson<NegotiationRoundResponse>(`/contractor-rates/${rate.id}/negotiate`, {
         proposed_rate: null,
         counter_rate: agreedRate,
-        remarks: remarks.trim() ? remarks : null,
+        remarks: remarks.trim(),
         apply_to_negotiated_rate: true,
       })
       for (const f of attachments) {
@@ -107,10 +115,15 @@ export function NegotiatedRateNegotiatePage() {
         fd.append("file", f, f.name)
         await postForm(`/contractor-rates/${rate.id}/negotiation-logs/${round.id}/attachments`, fd)
       }
+      const draftUpdate = rate.status === "draft"
       toast.success(
         attachments.length
-          ? `Negotiation round saved (${attachments.length} attachment${attachments.length === 1 ? "" : "s"})`
-          : "Negotiation round saved",
+          ? draftUpdate
+            ? `Round 1 updated (${attachments.length} attachment${attachments.length === 1 ? "" : "s"})`
+            : `Round saved (${attachments.length} file${attachments.length === 1 ? "" : "s"})`
+          : draftUpdate
+            ? "Round 1 updated"
+            : "Negotiation round saved",
       )
       navigate(`/dashboard/negotiated-rates/${rate.id}`)
     } catch (e) {
@@ -166,6 +179,13 @@ export function NegotiatedRateNegotiatePage() {
   const previewVsBase = rate
     ? computeVsBaseTolerance(agreedN, rate.base_rate)
     : null
+  const inPlaceRound = rate.status === "draft" || rate.status === "pending_approval"
+  const contextRoundLabel = inPlaceRound ? "1 (in place)" : `${rate.current_round + 1} (next)`
+  const canSave =
+    Number.isFinite(agreedN) &&
+    agreedN > 0 &&
+    !!remarks.trim() &&
+    attachments.length >= 1
 
   if (!canRound) {
     return (
@@ -239,7 +259,7 @@ export function NegotiatedRateNegotiatePage() {
             ) : null}
             <div className="flex justify-between gap-2 border-t pt-2 text-xs text-muted-foreground">
               <span>Round</span>
-              <span>{rate.current_round + 1} (next)</span>
+              <span>{contextRoundLabel}</span>
             </div>
             <div className="flex justify-between gap-2 border-t pt-2">
               <span className="text-muted-foreground">Effective from</span>
@@ -260,7 +280,9 @@ export function NegotiatedRateNegotiatePage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Agreed rate & evidence</CardTitle>
             <CardDescription>
-              One rate field, optional remarks, and optional evidence files (multiple uploads allowed).
+              {rate.status === "draft"
+                ? "Updates round 1 in place while this negotiation is still a draft. Remarks and at least one attachment are required. A new round starts only after rejection from approval."
+                : "Records the next negotiation round after rejection. Remarks and attachments are required."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -282,8 +304,11 @@ export function NegotiatedRateNegotiatePage() {
               />
             ) : null}
             <div className="grid gap-1">
-              <Label>Remarks</Label>
+              <Label htmlFor="neg-negotiate-remarks" showRequired>
+                Remarks
+              </Label>
               <Textarea
+                id="neg-negotiate-remarks"
                 rows={4}
                 placeholder="Notes for the timeline and approvers…"
                 value={remarks}
@@ -292,12 +317,11 @@ export function NegotiatedRateNegotiatePage() {
             </div>
             <div className="grid gap-2">
               <div className="flex flex-wrap items-end justify-between gap-2">
-                <div className="grid gap-1">
-                  <Label>Attachments (optional)</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Select multiple files at once, or add another batch. Each file is stored on this
-                    negotiation round.
-                  </p>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="neg-negotiate-file-btn" showRequired>
+                    Attachments
+                  </Label>
+                  <SectionHint text="Add at least one PDF or image for this round. Files are stored on the negotiation log and shown on the timeline." />
                 </div>
                 {attachments.length > 0 ? (
                   <Button
@@ -338,6 +362,7 @@ export function NegotiatedRateNegotiatePage() {
                   }}
                 />
                 <Button
+                  id="neg-negotiate-file-btn"
                   type="button"
                   variant="outline"
                   size="sm"
@@ -395,8 +420,8 @@ export function NegotiatedRateNegotiatePage() {
             </div>
             {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
             <div className="flex flex-wrap gap-2">
-              <Button type="button" disabled={saving} onClick={() => void submit()}>
-                {saving ? "Saving…" : "Save round"}
+              <Button type="button" disabled={!canSave || saving} onClick={() => void submit()}>
+                {saving ? "Saving…" : rate.status === "draft" ? "Update round 1" : "Save round"}
               </Button>
               <Button type="button" variant="outline" asChild>
                 <Link to={`/dashboard/negotiated-rates/${rate.id}`}>Cancel</Link>
