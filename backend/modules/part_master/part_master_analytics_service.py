@@ -19,7 +19,7 @@ from modules.invoices.models import Invoice, InvoiceLine
 from modules.org_units.model import OrgUnit
 from modules.part_master.models import PartMaster, PartMasterAuditLog
 from modules.users.model import User
-from modules.work_orders.models import WorkOrder, WorkOrderItem
+from modules.work_orders.models import WorkOrder, WorkOrderItem, WorkOrderItemProgress
 
 from modules.part_master.part_master_analytics_schema import (
     KpiCard,
@@ -34,6 +34,7 @@ from modules.part_master.part_master_analytics_schema import (
     PartNegotiationBundle,
     PartWorkOrderAnalytics,
     PartWorkOrderMonthly,
+    PartWorkOrderRow,
 )
 
 
@@ -129,6 +130,34 @@ class PartMasterAnalyticsService:
                     seen_pair.add(key)
                     active_ct[cid] += 1
         return dict(active_ct), dict(value_sum)
+
+    def _item_completion_pct(self, item: WorkOrderItem) -> Decimal | None:
+        latest: WorkOrderItemProgress | None = None
+        if item.progress:
+            latest = max(
+                item.progress,
+                key=lambda p: (
+                    p.created_at or datetime.min.replace(tzinfo=timezone.utc),
+                    int(p.id),
+                ),
+            )
+        if latest is not None and latest.completed_percentage is not None:
+            return Decimal(str(latest.completed_percentage))
+        if (
+            latest is not None
+            and latest.completed_quantity is not None
+            and item.planned_quantity is not None
+        ):
+            pq = Decimal(str(item.planned_quantity))
+            if pq > 0:
+                return Decimal(str(latest.completed_quantity)) / pq * Decimal("100")
+        return None
+
+    def _wo_completion_for_part(self, items: list[WorkOrderItem]) -> Decimal | None:
+        pcts = [p for p in (self._item_completion_pct(it) for it in items) if p is not None]
+        if not pcts:
+            return None
+        return sum(pcts) / Decimal(len(pcts))
 
     def get_summary(self, part_master_id: int, flt: PartAnalyticsFilters) -> PartMasterAnalyticsSummary:
         pm = self._ensure(part_master_id)
@@ -432,24 +461,37 @@ class PartMasterAnalyticsService:
 
         invoiced = Decimal("0")
         pending_inv = Decimal("0")
+        inv_by_wo: dict[int, tuple[Decimal, Decimal]] = defaultdict(lambda: (Decimal("0"), Decimal("0")))
         if wo_ids:
             inv_rows = list(
                 self._db.execute(
-                    select(Invoice.status, func.coalesce(func.sum(InvoiceLine.amount), 0))
+                    select(
+                        WorkOrderItem.work_order_id,
+                        Invoice.status,
+                        func.coalesce(func.sum(InvoiceLine.amount), 0),
+                    )
                     .join(InvoiceLine, InvoiceLine.invoice_id == Invoice.id)
                     .join(WorkOrderItem, WorkOrderItem.id == InvoiceLine.work_order_item_id)
-                    .where(WorkOrderItem.part_master_id == int(part_master_id), WorkOrderItem.work_order_id.in_(wo_ids))
-                    .group_by(Invoice.status)
+                    .where(
+                        WorkOrderItem.part_master_id == int(part_master_id),
+                        WorkOrderItem.work_order_id.in_(wo_ids),
+                    )
+                    .group_by(WorkOrderItem.work_order_id, Invoice.status)
                 ).all()
             )
-            for st, amt in inv_rows:
+            for wo_id, st, amt in inv_rows:
                 a = Decimal(str(amt))
-                if str(st).lower() in ("approved", "paid"):
+                st_l = str(st).lower()
+                cur_inv, cur_pend = inv_by_wo[int(wo_id)]
+                if st_l in ("approved", "paid"):
                     invoiced += a
-                if str(st).lower() in ("draft", "submitted", "blocked", "pending_exception_approval"):
+                    inv_by_wo[int(wo_id)] = (cur_inv + a, cur_pend)
+                elif st_l in ("draft", "submitted", "blocked", "pending_exception_approval"):
                     pending_inv += a
+                    inv_by_wo[int(wo_id)] = (cur_inv, cur_pend + a)
 
         total_qty = Decimal("0")
+        wo_rows: list[PartWorkOrderRow] = []
         for w in wos:
             st = str(w.status).lower()
             totals[st] += 1
@@ -485,6 +527,30 @@ class PartMasterAnalyticsService:
             qty_trend[mkey] += line_qty
             by_month_qty[mkey] += line_qty
 
+            co = self._db.get(Contractor, int(w.contractor_id))
+            wo_inv, wo_pend = inv_by_wo.get(int(w.id), (Decimal("0"), Decimal("0")))
+            comp = self._wo_completion_for_part(items_map.get(int(w.id), []))
+            st_l = str(w.status).lower()
+            end_dt = w.updated_at.date() if st_l == "closed" and w.updated_at else None
+            wo_rows.append(
+                PartWorkOrderRow(
+                    work_order_id=int(w.id),
+                    work_order_number=str(w.work_order_number),
+                    contractor_id=int(w.contractor_id),
+                    contractor_name=str(co.name) if co else str(w.contractor_id),
+                    quantity=line_qty,
+                    wo_value=line_val,
+                    invoiced_value=wo_inv,
+                    pending_value=wo_pend,
+                    status=st_l,
+                    completion_pct=comp,
+                    start_date=w.work_date,
+                    end_date=end_dt,
+                )
+            )
+
+        wo_rows.sort(key=lambda r: r.work_order_number, reverse=True)
+
         months = sorted(set(by_month_c) | set(by_month_x) | set(value_trend.keys()) | set(qty_trend.keys()))
         tail = months[-24:]
         by_month_list = [
@@ -515,6 +581,7 @@ class PartMasterAnalyticsService:
             qty_trend=qtrend,
             total_consumption_qty=total_qty,
             avg_order_quantity=avg_qty,
+            rows=wo_rows,
         )
 
     def get_commercial(self, part_master_id: int, flt: PartAnalyticsFilters) -> PartCommercialInsights:

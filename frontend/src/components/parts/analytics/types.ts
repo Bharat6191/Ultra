@@ -76,6 +76,21 @@ export type PartNegotiationBundle = {
 
 export type PartWorkOrderMonthly = { month: string; created: number; completed: number; quantity: string | number }
 
+export type PartWorkOrderRow = {
+  work_order_id: number
+  work_order_number: string
+  contractor_id: number
+  contractor_name: string
+  quantity: string | number
+  wo_value: string | number
+  invoiced_value: string | number
+  pending_value: string | number
+  status: string
+  completion_pct: string | number | null
+  start_date: string | null
+  end_date: string | null
+}
+
 export type PartWorkOrderAnalytics = {
   totals_by_status: Record<string, number>
   by_plant: { plant_id: number; plant_name: string; count: number; value: number }[]
@@ -89,6 +104,7 @@ export type PartWorkOrderAnalytics = {
   qty_trend: { month: string; quantity: number }[]
   total_consumption_qty: string | number
   avg_order_quantity: string | number | null
+  rows: PartWorkOrderRow[]
 }
 
 export type PartCommercialInsights = {

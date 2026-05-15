@@ -104,6 +104,21 @@ class PartWorkOrderMonthly(BaseModel):
     quantity: Decimal
 
 
+class PartWorkOrderRow(BaseModel):
+    work_order_id: int
+    work_order_number: str
+    contractor_id: int
+    contractor_name: str
+    quantity: Decimal
+    wo_value: Decimal
+    invoiced_value: Decimal
+    pending_value: Decimal
+    status: str
+    completion_pct: Decimal | None
+    start_date: date | None
+    end_date: date | None
+
+
 class PartWorkOrderAnalytics(BaseModel):
     totals_by_status: dict[str, int]
     by_plant: list[dict[str, Any]]
@@ -117,6 +132,7 @@ class PartWorkOrderAnalytics(BaseModel):
     qty_trend: list[dict[str, Any]]
     total_consumption_qty: Decimal
     avg_order_quantity: Decimal | None
+    rows: list[PartWorkOrderRow] = Field(default_factory=list)
 
 
 class PartCommercialInsights(BaseModel):
