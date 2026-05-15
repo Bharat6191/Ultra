@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { SectionHint } from "@/components/ui/section-hint"
-import { formatMoney } from "@/components/contractors/rateStatus"
+import { computeVsBaseTolerance, formatMoney } from "@/components/contractors/rateStatus"
+import { VsBaseToleranceBadge } from "@/components/contractors/VsBaseToleranceBadge"
 import { ApiError, getJson, postForm, postJson } from "@/lib/api"
 import { hasPermission, isSuperuser } from "@/lib/permissions"
 import type { ContractorRatePublic } from "@/components/contractors/ContractorRatesPanel"
@@ -161,6 +162,11 @@ export function NegotiatedRateNegotiatePage() {
     )
   }
 
+  const agreedN = Number(agreedRate)
+  const previewVsBase = rate
+    ? computeVsBaseTolerance(agreedN, rate.base_rate)
+    : null
+
   if (!canRound) {
     return (
       <div className="w-full min-w-0 space-y-4">
@@ -268,6 +274,13 @@ export function NegotiatedRateNegotiatePage() {
                 onChange={(e) => setAgreedRate(e.target.value)}
               />
             </div>
+            {previewVsBase ? (
+              <VsBaseToleranceBadge
+                negotiated={agreedN}
+                baseRate={rate.base_rate}
+                tolerance={previewVsBase}
+              />
+            ) : null}
             <div className="grid gap-1">
               <Label>Remarks</Label>
               <Textarea

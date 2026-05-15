@@ -261,11 +261,13 @@ def test_upload_opening_evidence_seeds_round_and_stores_files(
             part_master_id=int(rm.id),
             negotiated_rate=Decimal("100"),
             effective_from=date.today(),
+            remarks="Opening test",
         ),
         actor_user_id=int(actor.id),
     )
-    assert int(rate.current_round) == 0
-    assert not list(rate.negotiation_logs or [])
+    assert int(rate.current_round) == 1
+    assert len(rate.negotiation_logs or []) == 1
+    assert int(rate.negotiation_logs[0].round_number) == 1
     log, attachments = svc.upload_opening_evidence(
         int(rate.id),
         [("one.txt", b"a", "text/plain"), ("two.txt", b"b", "text/plain")],
@@ -292,6 +294,7 @@ def test_upload_opening_evidence_appends_more_files_to_same_opening_round(
             part_master_id=int(rm.id),
             negotiated_rate=Decimal("100"),
             effective_from=date.today(),
+            remarks="Opening test",
         ),
         actor_user_id=int(actor.id),
     )

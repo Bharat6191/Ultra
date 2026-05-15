@@ -12,7 +12,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { SectionHint } from "@/components/ui/section-hint"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ApiError, getJson, postForm, postJson } from "@/lib/api"
-import { formatMoney, rateStatusLabel } from "@/components/contractors/rateStatus"
+import {
+  computeVsBaseTolerance,
+  formatMoney,
+  rateStatusLabel,
+} from "@/components/contractors/rateStatus"
+import { VsBaseToleranceBadge } from "@/components/contractors/VsBaseToleranceBadge"
 import { hasPermission, isSuperuser } from "@/lib/permissions"
 import {
   EMPTY_RATE_FORM,
@@ -321,10 +326,7 @@ export function NegotiatedRateNewPage() {
         }
       : null
 
-  const previewVsBase =
-    Number.isFinite(baseRate) && Number.isFinite(negRate) && baseRate > 0
-      ? { amount: negRate - baseRate, pct: ((negRate - baseRate) / baseRate) * 100 }
-      : null
+  const previewVsBase = computeVsBaseTolerance(negRate, baseRate)
 
   const canSave =
     effectiveContractorId !== null &&
@@ -628,13 +630,11 @@ export function NegotiatedRateNewPage() {
 
             <div className="grid gap-2">
               <div className="flex flex-wrap items-end justify-between gap-2">
-                <div className="grid gap-1">
+                <div className="flex items-center gap-1.5">
                   <Label htmlFor="neg-file-btn" showRequired>
                     Attachments
                   </Label>
-                  <p className="sr-only">
-                    Multiple files; attached to round 1 as opening evidence after the draft is created.
-                  </p>
+                  <SectionHint text="PDFs or images attach to round 1 as opening evidence when the draft is created. Use Negotiate for files on later rounds." />
                 </div>
                 {attachments.length > 0 ? (
                   <Button
@@ -732,36 +732,19 @@ export function NegotiatedRateNewPage() {
               ) : null}
             </div>
 
-            {previewNegotiationSavings && previewNegotiationSavings.amount > 0 ? (
+            {/* {previewNegotiationSavings && previewNegotiationSavings.amount > 0 ? (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-xs text-emerald-900">
                 Negotiation savings vs opening ask:{" "}
                 <strong>{formatMoney(previewNegotiationSavings.amount)}</strong> (
                 {previewNegotiationSavings.pct.toFixed(1)}%)
               </div>
-            ) : null}
+            ) : null} */}
             {previewVsBase ? (
-              <div
-                className={`flex justify-end rounded-lg border px-3 py-2 ${
-                  previewVsBase.pct > 0
-                    ? "border-red-200/80 bg-red-50/50"
-                    : previewVsBase.pct < 0
-                      ? "border-emerald-200/80 bg-emerald-50/50"
-                      : "border-border bg-muted/30"
-                }`}
-              >
-                <span
-                  className={`text-base font-semibold tabular-nums tracking-tight ${
-                    previewVsBase.pct > 0
-                      ? "text-red-600"
-                      : previewVsBase.pct < 0
-                        ? "text-emerald-600"
-                        : "text-muted-foreground"
-                  }`}
-                >
-                  {previewVsBase.pct > 0 ? "+" : ""}
-                  {previewVsBase.pct.toFixed(2)}%
-                </span>
-              </div>
+              <VsBaseToleranceBadge
+                negotiated={negRate}
+                baseRate={baseRate}
+                tolerance={previewVsBase}
+              />
             ) : null}
 
             {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}

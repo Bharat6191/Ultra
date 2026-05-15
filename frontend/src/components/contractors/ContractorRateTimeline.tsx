@@ -1,5 +1,6 @@
 import * as React from "react"
 import {
+  ArrowRight,
   CheckCircle2,
   CircleX,
   History,
@@ -12,7 +13,15 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getJson } from "@/lib/api"
-import { formatMoney } from "@/components/contractors/rateStatus"
+import { formatMoney, type VsBaseTolerance } from "@/components/contractors/rateStatus"
+import { VsBaseToleranceBadge } from "@/components/contractors/VsBaseToleranceBadge"
+
+export type TimelineChange = {
+  field: string
+  label: string
+  old: string | null
+  new: string | null
+}
 
 export type RateTimelineEvent = {
   occurred_at: string | null
@@ -22,7 +31,34 @@ export type RateTimelineEvent = {
   actor_name: string | null
   title: string
   description: string | null
-  payload: Record<string, unknown> | null
+  payload: {
+    changes?: TimelineChange[]
+    highlights?: Record<string, string>
+    comment?: string
+    is_resubmit?: boolean
+    round_number?: number
+    proposed_rate?: string | null
+    counter_rate?: string | null
+    remarks?: string | null
+    delta_from_prior_round?: string
+    vs_base_tolerance?: VsBaseTolerance & {
+      amount_display: string
+      pct_display: string
+    }
+  } | null
+}
+
+function apiVsBaseTolerance(
+  raw: NonNullable<RateTimelineEvent["payload"]>["vs_base_tolerance"],
+): VsBaseTolerance | null {
+  if (!raw) return null
+  return {
+    amount: Number(raw.amount),
+    pct: Number(raw.pct),
+    amount_display: raw.amount_display,
+    pct_display: raw.pct_display,
+    tone: raw.tone,
+  }
 }
 
 function formatTimestamp(ts: string | null): string {
@@ -53,7 +89,6 @@ function eventIcon(action: string) {
     case "CREATED":
       return Sparkles
     case "ROUND":
-    case "NEGOTIATION_ADDED":
       return MessagesSquare
     case "SENT_FOR_APPROVAL":
       return Send
@@ -69,6 +104,9 @@ function eventIcon(action: string) {
     case "RATE_DEACTIVATED":
     case "EXPIRED":
       return TimerReset
+    case "UPDATED":
+    case "VALIDITY_CHANGED":
+      return History
     default:
       return History
   }
@@ -108,6 +146,87 @@ const TONE_CLASSES: Record<string, { ring: string; bg: string; text: string }> =
   danger: { ring: "ring-red-200", bg: "bg-red-50", text: "text-red-700" },
 }
 
+const HIGHLIGHT_LABELS: Record<string, string> = {
+  negotiated_rate: "Negotiated rate",
+  proposed_rate: "Proposed rate",
+  counter_rate: "Counter offer",
+  base_rate: "Part base rate",
+  previous_rate: "Previous rate",
+  savings_amount: "Savings vs opening ask",
+  savings_percentage: "Savings %",
+  delta_from_prior_round: "Change from prior round",
+  effective_from: "Effective from",
+  effective_to: "Effective to",
+}
+
+function formatHighlightValue(key: string, value: string): string {
+  if (
+    key.includes("rate") ||
+    key === "savings_amount" ||
+    key === "delta_from_prior_round"
+  ) {
+    if (value.startsWith("₹")) return value
+    return formatMoney(value)
+  }
+  return value
+}
+
+function TimelineHighlights({ highlights }: { highlights: Record<string, string> }) {
+  const entries = Object.entries(highlights).filter(([, v]) => v)
+  if (entries.length === 0) return null
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {entries.map(([key, value]) => (
+        <span
+          key={key}
+          className={`rounded-md px-2.5 py-1 text-sm font-medium ${
+            key === "savings_amount" || key === "savings_percentage"
+              ? "bg-emerald-50 text-emerald-800"
+              : key === "counter_rate"
+                ? "bg-sky-50 text-sky-800"
+                : "bg-gray-100 text-gray-800"
+          }`}
+        >
+          <span className="text-xs font-normal text-muted-foreground">
+            {HIGHLIGHT_LABELS[key] ?? key}:{" "}
+          </span>
+          {formatHighlightValue(key, value)}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function TimelineChanges({ changes }: { changes: TimelineChange[] }) {
+  if (changes.length === 0) return null
+  return (
+    <div className="mt-3 overflow-hidden rounded-lg border text-sm">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b bg-gray-50 text-left text-xs text-muted-foreground">
+            <th className="px-3 py-2 font-medium">Field</th>
+            <th className="px-3 py-2 font-medium">Before</th>
+            <th className="w-8 px-3 py-2" />
+            <th className="px-3 py-2 font-medium">After</th>
+          </tr>
+        </thead>
+        <tbody>
+          {changes.map((ch) => (
+            <tr key={ch.field} className="border-b last:border-0">
+              <td className="px-3 py-2 font-medium text-gray-700">{ch.label}</td>
+              <td className="px-3 py-2 text-muted-foreground">{ch.old ?? "—"}</td>
+              <td className="px-1 py-2 text-muted-foreground">
+                <ArrowRight className="size-3.5" />
+              </td>
+              <td className="px-3 py-2 font-medium text-gray-900">{ch.new ?? "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export function ContractorRateTimeline({ rateId }: { rateId: number }) {
   const [events, setEvents] = React.useState<RateTimelineEvent[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
@@ -130,19 +249,21 @@ export function ContractorRateTimeline({ rateId }: { rateId: number }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Negotiation timeline</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Chronological audit of every change, round, and approval action.
-        </p>
+        <CardTitle className="text-base">Negotiation Log</CardTitle>
+        <p></p>
+        {/* <p className="text-xs text-muted-foreground">
+          Commercial story from opening the negotiation through rounds, changes, approval, and
+          activation.
+        </p> */}
       </CardHeader>
       <CardContent>
         {error ? <div className="text-sm text-destructive">{error}</div> : null}
         {events === null && !error ? (
-          <div className="text-sm text-muted-foreground">Loading timeline…</div>
+          <div className="text-sm text-muted-foreground">Loading…</div>
         ) : null}
         {events && events.length === 0 ? (
           <div className="rounded-lg border border-dashed bg-gray-50 p-6 text-center text-sm text-muted-foreground">
-            No timeline events yet.
+            No activity recorded yet.
           </div>
         ) : null}
         {events && events.length > 0 ? (
@@ -152,9 +273,14 @@ export function ContractorRateTimeline({ rateId }: { rateId: number }) {
               const Icon = eventIcon(evt.action)
               const t = tone(evt.action, evt.kind)
               const cls = TONE_CLASSES[t]
-              const isRound = evt.kind === "negotiation"
+              const payload = evt.payload
+              const comment = payload?.comment ?? evt.description
+              const highlights = payload?.highlights
+              const changes = payload?.changes
+              const vsBaseTolerance = apiVsBaseTolerance(payload?.vs_base_tolerance)
+
               return (
-                <li key={i} className="relative">
+                <li key={`${evt.occurred_at}-${evt.action}-${i}`} className="relative">
                   <span
                     className={`absolute -left-[26px] flex size-6 items-center justify-center rounded-full ring-2 ${cls.ring} ${cls.bg} ${cls.text}`}
                   >
@@ -162,16 +288,11 @@ export function ContractorRateTimeline({ rateId }: { rateId: number }) {
                   </span>
                   <div className="rounded-xl border bg-white p-3 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900">{evt.title}</span>
-                        {evt.kind === "approval" ? (
-                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-600">
-                            Approval
-                          </span>
-                        ) : null}
-                        {isRound ? (
-                          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-sky-700">
-                            Round
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-900">{evt.title}</span>
+                        {payload?.is_resubmit ? (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
+                            Resubmit
                           </span>
                         ) : null}
                       </div>
@@ -179,30 +300,28 @@ export function ContractorRateTimeline({ rateId }: { rateId: number }) {
                         {formatTimestamp(evt.occurred_at)}
                       </span>
                     </div>
-                    {evt.description ? (
-                      <p className="mt-1 text-sm text-muted-foreground">{evt.description}</p>
-                    ) : null}
-                    {isRound && evt.payload ? (
-                      <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-                        {(evt.payload as Record<string, unknown>).proposed_rate ? (
-                          <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">
-                            Proposed{" "}
-                            {formatMoney(
-                              String((evt.payload as Record<string, unknown>).proposed_rate),
-                            )}
-                          </span>
-                        ) : null}
-                        {(evt.payload as Record<string, unknown>).counter_rate ? (
-                          <span className="rounded-md bg-sky-50 px-2 py-1 text-sky-700">
-                            Counter{" "}
-                            {formatMoney(
-                              String((evt.payload as Record<string, unknown>).counter_rate),
-                            )}
-                          </span>
-                        ) : null}
+
+                    {highlights ? <TimelineHighlights highlights={highlights} /> : null}
+                    {vsBaseTolerance ? (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-xs text-muted-foreground">Tolerance</p>
+                        <VsBaseToleranceBadge
+                          negotiated={null}
+                          baseRate={null}
+                          tolerance={vsBaseTolerance}
+                          className="w-fit"
+                        />
                       </div>
                     ) : null}
-                    <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    {changes ? <TimelineChanges changes={changes} /> : null}
+
+                    {comment ? (
+                      <blockquote className="mt-3 rounded-md border-l-2 border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                        {comment}
+                      </blockquote>
+                    ) : null}
+
+                    <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
                       <span className="grid h-5 w-5 place-items-center rounded-full bg-gray-100 text-[10px] font-semibold text-gray-600">
                         {actorInitials(evt.actor_name)}
                       </span>

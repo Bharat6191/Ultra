@@ -17,8 +17,6 @@ import {
   RateDetailPanel,
   type ContractorRatePublic,
 } from "@/components/contractors/ContractorRatesPanel"
-import { RateVersionHistoryButton } from "@/components/contractors/RateVersionHistoryDrawer"
-
 /**
  * Single-rate detail page. The page focuses on **one** negotiated rate: header,
  * stepper, savings, rounds, and timeline. It is intentionally NOT scoped to a
@@ -173,12 +171,6 @@ export function NegotiatedRateDetailPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={rateStatusVariant(rate.status)}>{rateStatusLabel(rate.status)}</Badge>
-          <RateVersionHistoryButton
-            resource="contractor-rates"
-            parentId={rate.id}
-            title={`${rate.part_code ?? "Part"} · ${rate.contractor_name ?? `#${rate.contractor_id}`}`}
-            subtitle={`${rate.org_unit_name ?? "—"}${partSubtitle ? ` · ${partSubtitle.replace(/_/g, " ")}` : ""}`}
-          />
           {canSubmit ? (
             <Button size="sm" onClick={submitForApproval} disabled={actionBusy}>
               <Send className="size-3.5" /> Submit for approval

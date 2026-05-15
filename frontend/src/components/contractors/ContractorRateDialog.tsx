@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { formatMoney } from "@/components/contractors/rateStatus"
+import { computeVsBaseTolerance, formatMoney } from "@/components/contractors/rateStatus"
+import { VsBaseToleranceBadge } from "@/components/contractors/VsBaseToleranceBadge"
 
 export type PartMasterPick = {
   id: number
@@ -130,14 +131,7 @@ export function NewNegotiationDialog({
         }
       : null
 
-  // Vs-base preview: signed. Positive => paying ABOVE the procurement baseline.
-  const previewVsBase =
-    Number.isFinite(baseRate) && Number.isFinite(negRate) && baseRate > 0
-      ? {
-          amount: negRate - baseRate,
-          pct: ((negRate - baseRate) / baseRate) * 100,
-        }
-      : null
+  const previewVsBase = computeVsBaseTolerance(negRate, baseRate)
 
   const canSave =
     effectiveContractorId !== null &&
@@ -327,7 +321,7 @@ export function NewNegotiationDialog({
 
           {previewNegotiationSavings || previewVsBase ? (
             <div className="space-y-2">
-              {previewNegotiationSavings && previewNegotiationSavings.amount > 0 ? (
+              {/* {previewNegotiationSavings && previewNegotiationSavings.amount > 0 ? (
                 <div className="rounded-lg border bg-emerald-50/60 p-3 text-sm text-emerald-900">
                   <div className="flex items-center justify-between">
                     <span>Negotiated down by</span>
@@ -341,47 +335,16 @@ export function NewNegotiationDialog({
                     {formatMoney(negRate)}.
                   </p>
                 </div>
-              ) : null}
+              ) : null} */}
               {previewVsBase ? (
-                <div
-                  className={
-                    "rounded-lg border p-3 text-sm " +
-                    (previewVsBase.amount > 0
-                      ? "bg-amber-50/70 text-amber-900"
-                      : previewVsBase.amount < 0
-                      ? "bg-emerald-50/70 text-emerald-900"
-                      : "bg-gray-50 text-gray-700")
-                  }
-                >
-                  <div className="flex items-center justify-between">
-                    <span>
-                      vs base rate ({formatMoney(baseRate)})
-                    </span>
-                    <Badge
-                      variant={
-                        previewVsBase.amount > 0
-                          ? "warning"
-                          : previewVsBase.amount < 0
-                          ? "success"
-                          : "secondary"
-                      }
-                    >
-                      {previewVsBase.amount > 0
-                        ? `+${formatMoney(previewVsBase.amount)} above base`
-                        : previewVsBase.amount < 0
-                        ? `${formatMoney(Math.abs(previewVsBase.amount))} below base`
-                        : "at base"}{" "}
-                      ({previewVsBase.pct >= 0 ? "+" : ""}
-                      {previewVsBase.pct.toFixed(2)}%)
-                    </Badge>
-                  </div>
-                  {previewVsBase.amount > 0 ? (
-                    <p className="mt-1 text-xs">
-                      The agreed rate is above the procurement baseline. This will show as a
-                      <span className="font-medium"> premium</span> on the dashboard, separate from
-                      negotiation savings.
-                    </p>
-                  ) : null}
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Tolerance</p>
+                  <VsBaseToleranceBadge
+                    negotiated={negRate}
+                    baseRate={baseRate}
+                    tolerance={previewVsBase}
+                    className="w-fit"
+                  />
                 </div>
               ) : null}
             </div>

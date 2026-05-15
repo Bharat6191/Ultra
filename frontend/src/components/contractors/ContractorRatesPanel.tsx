@@ -45,7 +45,9 @@ import {
   rateStepperIndex,
   RATE_STEPPER_STEPS,
 } from "@/components/contractors/rateStatus"
+import { VsBaseToleranceBadge } from "@/components/contractors/VsBaseToleranceBadge"
 import { ContractorRateTimeline } from "@/components/contractors/ContractorRateTimeline"
+import { SectionHint } from "@/components/ui/section-hint"
 
 export type NegotiationAttachmentItem = {
   id: number
@@ -185,13 +187,9 @@ function DraftOpeningEvidenceUploader({
   return (
     <div className="rounded-xl border border-dashed border-emerald-200/80 bg-emerald-50/40 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h4 className="text-sm font-medium text-emerald-950">Evidence before approval</h4>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Add PDFs or images to round 1 while this negotiation is still a draft. After you add further
-            negotiation rounds, use <span className="font-medium">Negotiate</span> to attach files to those
-            rounds.
-          </p>
+          <SectionHint text="Add PDFs or images to round 1 while this negotiation is still a draft. After further negotiation rounds, use Negotiate to attach files to those rounds." />
         </div>
         {staged.length > 0 ? (
           <Button
@@ -944,36 +942,29 @@ export function RateDetailPanel({
             <Fact label="Effective from" value={rate.effective_from} />
             <Fact label="Effective to" value={rate.effective_to ?? "Open"} />
           </div>
-          <p className="text-xs text-muted-foreground">
+          {/* <p className="text-xs text-muted-foreground">
             Work orders use each line&apos;s <strong>work date</strong>: an <strong>approved</strong> negotiated
             rate applies when that date falls between effective from and to (inclusive). Outside that window,
             Part Master pricing applies (or another non-overlapping approved rate that covers the date).
-          </p>
+          </p> */}
 
           {/* Negotiation savings highlight (initial ask -> agreed). */}
-          {rate.savings_amount !== null && Number(rate.savings_amount) > 0 ? (
+          {/* {rate.savings_amount !== null && Number(rate.savings_amount) > 0 ? (
             <div className="rounded-lg border bg-emerald-50/60 p-3 text-sm text-emerald-800">
               Negotiated down by <strong>{formatMoney(rate.savings_amount)}</strong> (
               {formatPercent(rate.savings_percentage)}) from the contractor's opening ask of{" "}
               <strong>{formatMoney(rate.initial_rate)}</strong>.
             </div>
-          ) : null}
+          ) : null} */}
 
-          {/* Vs-base callout — visible whenever the agreed rate sits above
-              the procurement baseline. Kept distinct (amber, not red) so it
-              reads as informational ("you ended up paying X above base")
-              rather than alarming. */}
-          {rate.vs_base_amount !== null && Number(rate.vs_base_amount) > 0 ? (
-            <div className="rounded-lg border bg-amber-50/70 p-3 text-sm text-amber-900">
-              Premium of <strong>{formatMoney(rate.vs_base_amount)}</strong> (
-              {formatPercent(rate.vs_base_percentage)}) above the base rate of{" "}
-              <strong>{formatMoney(rate.base_rate)}</strong>. This is tracked
-              separately from negotiation savings on the dashboard.
-            </div>
-          ) : rate.vs_base_amount !== null && Number(rate.vs_base_amount) < 0 ? (
-            <div className="rounded-lg border bg-emerald-50/40 p-3 text-sm text-emerald-900">
-              Below base by <strong>{formatMoney(Math.abs(Number(rate.vs_base_amount)))}</strong>{" "}
-              ({formatPercent(rate.vs_base_percentage)}).
+          {rate.vs_base_percentage != null && rate.vs_base_percentage !== "" ? (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Tolerance</p>
+              <VsBaseToleranceBadge
+                negotiated={rate.negotiated_rate}
+                baseRate={rate.base_rate}
+                className="w-fit"
+              />
             </div>
           ) : null}
 

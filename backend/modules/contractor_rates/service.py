@@ -439,6 +439,18 @@ class ContractorRateService:
             new_value={"version_number": 1},
             metadata={"reason": audit_helpers.ACTION_CREATED},
         )
+        # Round 1 is the opening negotiation (evidence files attach here later).
+        opening_log = NegotiationLog(
+            contractor_rate_id=int(row.id),
+            round_number=1,
+            proposed_rate=Decimal(payload.negotiated_rate),
+            counter_rate=None,
+            remarks=payload.remarks,
+            round_summary="Opening evidence",
+            created_by=actor_user_id,
+        )
+        self._db.add(opening_log)
+        row.current_round = 1
         self._db.commit()
         return self.get_rate(int(row.id))
 
@@ -611,14 +623,15 @@ class ContractorRateService:
     def seed_opening_evidence_round(
         self, rate_id: int, *, actor_user_id: int | None = None
     ) -> NegotiationLog:
-        """Create round 1 so files can attach to a brand-new draft (current_round 0, no logs)."""
+        """Return round 1 for opening evidence (created with the rate) or seed it for legacy rows."""
         row = self.get_rate(rate_id)
         if row.status != "draft":
             raise ConflictError(
                 "Opening evidence can only be added to draft negotiations that have no rounds yet."
             )
-        if int(row.current_round or 0) != 0:
-            raise ConflictError("This negotiation already has rounds.")
+        existing = self._opening_evidence_log_for_more_files(row)
+        if existing is not None:
+            return existing
         if row.negotiation_logs:
             raise ConflictError("This negotiation already has rounds.")
         payload = NegotiationRoundCreate(

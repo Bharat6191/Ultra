@@ -106,3 +106,60 @@ export function formatPercent(value: number | string | null | undefined): string
   if (!Number.isFinite(n)) return String(value)
   return `${n.toFixed(2)}%`
 }
+
+/** Signed variance vs Part Master base: positive = above base (org loss), negative = below base (org gain). */
+export type VsBaseToleranceTone = "loss" | "gain" | "neutral"
+
+export type VsBaseTolerance = {
+  amount: number
+  pct: number
+  amount_display: string
+  pct_display: string
+  tone: VsBaseToleranceTone
+}
+
+export function computeVsBaseTolerance(
+  negotiated: number | string | null | undefined,
+  baseRate: number | string | null | undefined,
+): VsBaseTolerance | null {
+  const neg = typeof negotiated === "number" ? negotiated : Number(negotiated)
+  const base = typeof baseRate === "number" ? baseRate : Number(baseRate)
+  if (!Number.isFinite(neg) || !Number.isFinite(base) || base <= 0) return null
+  const amount = neg - base
+  const pct = (amount / base) * 100
+  let tone: VsBaseToleranceTone = "neutral"
+  let amount_display = "at base"
+  if (amount > 0) {
+    tone = "loss"
+    amount_display = `+${formatMoney(amount)} above base`
+  } else if (amount < 0) {
+    tone = "gain"
+    amount_display = `${formatMoney(Math.abs(amount))} below base`
+  }
+  const pct_display = `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`
+  return { amount, pct, amount_display, pct_display, tone }
+}
+
+export function vsBaseToleranceToneClasses(
+  tone: VsBaseToleranceTone,
+  variant: "box" | "text" = "text",
+): string {
+  if (variant === "box") {
+    switch (tone) {
+      case "loss":
+        return "border-red-200/80 bg-red-50/50"
+      case "gain":
+        return "border-emerald-200/80 bg-emerald-50/50"
+      default:
+        return "border-border bg-muted/30"
+    }
+  }
+  switch (tone) {
+    case "loss":
+      return "text-red-600"
+    case "gain":
+      return "text-emerald-600"
+    default:
+      return "text-muted-foreground"
+  }
+}
