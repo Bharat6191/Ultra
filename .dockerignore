@@ -1,0 +1,17 @@
+.git
+.gitignore
+.DS_Store
+
+engin
+frontend/node_modules
+frontend/dist
+backend/__pycache__
+backend/**/__pycache__
+scripts/__pycache__
+tests/__pycache__
+
+backend/uploads
+*.pyc
+*.pyo
+*.pyd
+*.log

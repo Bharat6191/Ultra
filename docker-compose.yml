@@ -1,0 +1,94 @@
+name: ultra_demo
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ultra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      POSTGRES_DB: ${POSTGRES_DB:-ultra_demo}
+    volumes:
+      - ultra_demo_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ultra} -d ${POSTGRES_DB:-ultra_demo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ultra_demo_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ultra}:${POSTGRES_PASSWORD:-admin}@db:5432/${POSTGRES_DB:-ultra_demo}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-to-a-long-random-string}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: ${PASSWORD_RESET_TOKEN_EXPIRE_MINUTES:-30}
+      FRONTEND_APP_URL: ${FRONTEND_APP_URL:-http://localhost:8082}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:8082}
+      FRONTEND_ADMIN_URL: ${FRONTEND_ADMIN_URL:-/admin}
+      ENFORCE_SUPERUSER_ON_ADMIN: ${ENFORCE_SUPERUSER_ON_ADMIN:-false}
+      AUTO_SEED_DEMO_DATA: ${AUTO_SEED_DEMO_DATA:-true}
+      SUPERUSER_EMAIL: ${SUPERUSER_EMAIL:-admin@example.com}
+      SUPERUSER_PASSWORD: ${SUPERUSER_PASSWORD:-Admin123!}
+      SUPERUSER_USERNAME: ${SUPERUSER_USERNAME:-admin}
+      SUPERUSER_FULL_NAME: ${SUPERUSER_FULL_NAME:-Ultra Admin}
+      SUPERUSER_PHONE: ${SUPERUSER_PHONE:-+10000000001}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-DemoPass123!}
+      ADMIN_TEST_PASSWORD: ${ADMIN_TEST_PASSWORD:-TestPass123!}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Ultra Workspace}
+    expose:
+      - "8000"
+    volumes:
+      - ultra_demo_uploads:/app/backend/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/docs').read(1)\""]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - ultra_demo_network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-8082}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ultra_demo_network
+
+volumes:
+  ultra_demo_db_data:
+  ultra_demo_uploads:
+
+networks:
+  ultra_demo_network:
+    driver: bridge

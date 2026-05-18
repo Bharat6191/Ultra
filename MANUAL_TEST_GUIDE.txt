@@ -1,0 +1,327 @@
+Ultra local demo flow
+
+Verified against the local DB on 2026-05-14.
+
+1. Start the app
+
+Backend:
+cd /Users/shubhambharambe/Desktop/FE-INVOICE/Ultra
+engin/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --app-dir backend
+
+Frontend:
+cd /Users/shubhambharambe/Desktop/FE-INVOICE/Ultra/frontend
+npm run dev
+
+Open:
+Admin UI: http://localhost:5173/admin/login
+User UI: http://localhost:5173/login
+SQL Admin: http://127.0.0.1:8000/sql-admin
+
+2. Seed data commands
+
+Full local demo seed order:
+
+cd /Users/shubhambharambe/Desktop/FE-INVOICE/Ultra
+./engin/bin/python scripts/seed_manual_test_contractors.py
+./engin/bin/python scripts/seed_admin_test_data.py --password TestPass123!
+./engin/bin/python scripts/seed_manual_test_rates.py
+./engin/bin/python scripts/seed_demo_users.py
+./engin/bin/python scripts/seed_demo_work_orders.py
+./engin/bin/python scripts/seed_demo_completions_and_invoices.py
+
+Notes:
+- `seed_admin_test_data.py` creates the legacy task / ops / finance test users.
+- `seed_demo_users.py` creates the newer persona-based demo users and resets overlapping usernames to password `DemoPass123!`.
+- `seed_demo_completions_and_invoices.py` activates the seeded work orders and creates invoice demo data.
+
+Workflow setup helpers for the current code:
+
+./engin/bin/python scripts/create_work_order_workflow.py
+./engin/bin/python scripts/create_rate_master_workflow.py
+./engin/bin/python scripts/create_invoice_workflow.py
+
+Notes:
+- `create_work_order_workflow.py` maps `work_orders.create`.
+- `create_rate_master_workflow.py` maps negotiated-rate approval via `contractor_rates.create`.
+- `create_invoice_workflow.py` maps invoice exception approval via `invoices.approve_exceptions`.
+- `part_master` itself does not have an approval workflow hook in the current backend code.
+
+Optional clean work order approval story:
+
+This deletes all work orders and invoices, then creates a 2-level approval scenario.
+
+./engin/bin/python scripts/seed_demo_work_order_two_level_scenario.py --yes
+
+3. Login credentials
+
+Superadmin:
+email: admin@example.com
+username: admin
+password: Admin123!
+
+Shared password now used by the persona demo users from `seed_demo_users.py`:
+DemoPass123!
+
+These users currently use `DemoPass123!`:
+- plant_admin / plant.admin@demo.test
+- ctr_manager / ctr.manager@example.test
+- ctr_auditor / ctr.auditor@demo.test
+- rate_admin / rate.admin@demo.test
+- negotiator / negotiator@demo.test
+- rate_approver / rate.approver@example.test
+- wo_approver1 / wo.approver1@demo.test
+- wo_approver2 / wo.approver2@demo.test
+- wf_manager / wf.manager@demo.test
+- task_operator / task.operator@example.test
+- notif_admin / notif.admin@demo.test
+- auditor / auditor@demo.test
+- super_demo / super.demo@demo.test
+- all_access / all.access@demo.test
+
+Legacy users that still use `TestPass123!`:
+- task_manager / task.manager@example.test
+- viewer / viewer@example.test
+- ops_user / ops.user@example.test
+- ops_approver / ops.approver@example.test
+- fin_user / fin.user@example.test
+- fin_approver / fin.approver@example.test
+
+4. Manual test flows
+
+4.1 Superadmin flow
+
+1. Log in at /admin/login with admin@example.com or admin
+2. Open /admin/users
+3. Click Create user
+4. Fill:
+   full name
+   username
+   phone
+   email
+   plant
+   role
+5. Save
+6. Open the created user detail page and verify:
+   role is assigned
+   plant is assigned
+   employee data is visible if filled
+
+4.2 Contractor master flow
+
+Use:
+- ctr_manager / ctr.manager@example.test / DemoPass123!
+
+1. Log in at /login as ctr_manager
+2. Open /dashboard/contractors
+3. Verify seeded contractors are visible:
+   CTR-ACME-001
+   CTR-ZEN-002
+   CTR-ORION-003
+   CTR-DELTA-004
+   CTR-NOVA-005
+4. Open one contractor detail page
+5. Verify these sections:
+   overview
+   plants
+   documents
+   timeline
+   rates
+6. Check that fields are populated:
+   legal name
+   trade name
+   PAN
+   GSTIN
+   CIN
+   contractor type
+   contact person title
+   alternate email
+   alternate phone
+   address
+   notes
+7. In Documents, verify each contractor has:
+   Work Agreement
+   Insurance Certificate
+   Safety Training Record
+   KYC - Address Proof
+8. In Plants, verify mappings exist and some have expiry variations
+9. In Timeline, verify audit entries exist
+
+Create a new contractor:
+
+1. Stay logged in as ctr_manager
+2. Open /dashboard/contractors/new
+3. Fill the form
+4. Save
+5. Verify the new contractor opens in detail page
+6. Add plant mappings
+7. Add documents
+8. Verify the timeline updates
+
+4.3 Part master flow
+
+Use:
+- ctr_manager / ctr.manager@example.test / DemoPass123!
+
+1. Open /dashboard/part-master
+2. Verify seeded rows exist
+3. Open one row and verify:
+   part code
+   part name
+   description
+   pricing method
+   unit type
+   base rate
+   labour headcount
+   standard man hours
+   notes
+
+Example seeded row:
+WELDER-SKILLED-HOUR
+
+4.4 Negotiated rate flow
+
+Create / edit side:
+- ctr_manager / ctr.manager@example.test / DemoPass123!
+
+Approval side:
+- rate_approver / rate.approver@example.test / DemoPass123!
+
+Create / review flow:
+
+1. Log in as ctr_manager
+2. Open /dashboard/negotiated-rates
+3. Verify list loads with dashboard counts
+4. Open an existing pending rate or create a new one
+
+Create new:
+1. Open /dashboard/negotiated-rates/new
+2. Pick a contractor
+3. Pick a Part Master baseline
+4. Enter negotiated rate
+5. Optionally enter initial rate
+6. Optionally upload evidence
+7. Save
+8. Open the created rate detail page
+
+Add another round:
+1. Open /dashboard/negotiated-rates/<rateId>/negotiate
+2. Enter agreed rate
+3. Add remarks
+4. Optionally upload files
+5. Save
+6. Return to detail page and verify round history
+
+Approval:
+1. Log out from ctr_manager
+2. Log in as rate_approver
+3. Open /dashboard/tasks
+4. Verify pending approval tasks are visible
+5. Open a pending task
+6. Review the rate details
+7. Approve or reject
+8. Go back to /dashboard/negotiated-rates
+9. Verify status changed
+
+Current pending rate examples in this local DB:
+2, 5, 8, 11, 14
+
+4.5 Task inbox flow
+
+Use:
+- task_operator / task.operator@example.test / DemoPass123!
+- task_manager / task.manager@example.test / TestPass123!
+
+1. Log in as task_operator
+2. Open /dashboard/tasks
+3. Verify the seeded "Manual check" tasks are visible
+4. Open a task and verify task detail rendering
+
+4.6 Work order and invoice flow
+
+Create / operational view:
+- negotiator / negotiator@demo.test / DemoPass123!
+
+Approver personas:
+- wo_approver1 / wo.approver1@demo.test / DemoPass123!
+- wo_approver2 / wo.approver2@demo.test / DemoPass123!
+
+Current seeded state after `seed_demo_completions_and_invoices.py`:
+- 8 work orders exist
+- all 8 are active
+- 44 completion snapshots were created
+- 1 demo invoice exists
+
+Review flow:
+
+1. Log in as negotiator
+2. Open /dashboard/work-orders
+3. Verify seeded work orders exist and are active
+4. Open a work order detail page
+5. Verify mixed line items and completion data
+6. Open /dashboard/invoices
+7. Verify the seeded invoice exists and links back to work order data
+
+Important:
+If you want a clean pending 2-level approval inbox story for work orders, do not use the completion seed.
+Instead run:
+./engin/bin/python scripts/seed_demo_work_order_two_level_scenario.py --yes
+
+That scenario creates:
+- one WO fully approved
+- one WO rejected then resubmitted and approved
+- one WO rejected at L1
+- one WO pending at L1
+- one WO pending at L2
+
+5. Quick records to check
+
+Plants:
+18  TiM Demo Plant - North
+19  TiM Demo Plant - South
+20  TiM Demo Plant - Bengaluru Hub
+
+Contractors:
+16  CTR-ACME-001
+17  CTR-ZEN-002
+18  CTR-ORION-003
+19  CTR-DELTA-004
+20  CTR-NOVA-005
+
+Current work orders:
+2  WO-18-20260514-0001  Demo WO - negotiator seed #1
+3  WO-18-20260514-0002  Demo WO - negotiator seed #2
+4  WO-18-20260514-0003  Demo WO - negotiator seed #3
+5  WO-18-20260514-0004  Demo WO - multi line #1
+6  WO-18-20260514-0005  Demo WO - multi line #2
+7  WO-18-20260514-0006  Demo WO - multi line #3
+8  WO-18-20260514-0007  Demo WO - kg-job units #1
+9  WO-18-20260514-0008  Demo WO - kg-job units #2
+
+Current invoice:
+1  INV-DEMO-16-30066221
+
+6. Optional reset helpers
+
+Work orders and invoices cleanup:
+cd /Users/shubhambharambe/Desktop/FE-INVOICE/Ultra
+./engin/bin/python scripts/clear_work_orders_and_invoices.py --yes
+
+Rebuild only work order + invoice demo after cleanup:
+./engin/bin/python scripts/seed_demo_work_orders.py
+./engin/bin/python scripts/seed_demo_completions_and_invoices.py
+
+7. What to confirm before closing testing
+
+1. Admin login works
+2. Admin can create user
+3. Persona users can log in with the expected password set
+4. Contractor list and detail load
+5. Contractor fields are populated
+6. Documents show correct statuses
+7. Plant mappings render correctly
+8. Part Master rows show full metadata
+9. Negotiated rate create works
+10. Negotiation round add works
+11. Rate approver sees pending tasks
+12. Manual task inbox loads for task_operator
+13. Work orders and invoices pages load with seeded data
