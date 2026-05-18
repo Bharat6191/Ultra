@@ -6,6 +6,7 @@ import {
   executionDetailTaxableCell,
   formatExecutionQtyDisplay,
   formatExecutionWeightAmount,
+  formatWorkOrderDateTime,
   WorkOrderExecutionHeader,
   WorkOrderExecutionTable,
 } from "@/components/work-orders/work-order-execution-ui"
@@ -24,7 +25,8 @@ type WorkOrderPublic = {
   contractor_id: number
   title: string
   description: string | null
-  work_date: string
+  created_at?: string | null
+  approved_at?: string | null
   status: string
   items?: {
     id: number
@@ -325,7 +327,8 @@ export function WorkOrderApprovalReview(props: {
     typeof fallbackPayload.work_order_number === "string" && fallbackPayload.work_order_number.trim() !== ""
       ? fallbackPayload.work_order_number
       : null
-  const snapDate = typeof fallbackPayload.work_date === "string" ? fallbackPayload.work_date : null
+  const snapCreated =
+    typeof fallbackPayload.created_at === "string" ? fallbackPayload.created_at : null
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading work order…</p>
@@ -353,10 +356,10 @@ export function WorkOrderApprovalReview(props: {
                 <dd>{snapTitle}</dd>
               </div>
             ) : null}
-            {snapDate ? (
+            {snapCreated ? (
               <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                <dt className="text-muted-foreground">Work date</dt>
-                <dd className="tabular-nums">{snapDate}</dd>
+                <dt className="text-muted-foreground">Created</dt>
+                <dd className="tabular-nums">{formatWorkOrderDateTime(snapCreated)}</dd>
               </div>
             ) : null}
             {snapshotPlantLabel ? (
@@ -385,7 +388,9 @@ export function WorkOrderApprovalReview(props: {
         <h3 className="text-base font-semibold tracking-tight">{row.title}</h3>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <Badge variant={workOrderStatusBadgeVariant(row.status)}>{row.status}</Badge>
-          <span className="text-sm text-muted-foreground tabular-nums">Work date: {row.work_date ?? "—"}</span>
+          <span className="text-sm text-muted-foreground tabular-nums">
+            Created: {formatWorkOrderDateTime(row.created_at)}
+          </span>
         </div>
       </div>
 
@@ -400,7 +405,6 @@ export function WorkOrderApprovalReview(props: {
         onReference={() => {}}
         onOrgUnit={() => {}}
         plantLabel={plantLabel}
-        work_date={row.work_date}
       />
 
       <WorkOrderExecutionTable
@@ -425,7 +429,7 @@ type OverridePayload = {
   work_order_number?: string | null
   work_order_title?: string | null
   org_unit_name?: string | null
-  work_date?: string | null
+  created_at?: string | null
   contractor_name?: string | null
   override_rate?: string | null
   override_reason?: string | null
@@ -471,7 +475,7 @@ export function WorkOrderRateOverrideApprovalReview(props: { payload: Record<str
         <h3 className="text-base font-semibold">{p.work_order_title ?? "Requested rate override"}</h3>
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
           {p.org_unit_name ? <span>{p.org_unit_name}</span> : null}
-          {p.work_date ? <span className="tabular-nums">Work date: {p.work_date}</span> : null}
+          {p.created_at ? <span className="tabular-nums">Created: {formatWorkOrderDateTime(p.created_at)}</span> : null}
         </div>
       </div>
 

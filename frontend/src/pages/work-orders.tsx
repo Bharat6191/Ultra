@@ -151,7 +151,7 @@ export function WorkOrdersPage() {
                 <TableHead>WO #</TableHead>
                 <TableHead>Title</TableHead>
                 <TableHead>Plant</TableHead>
-                <TableHead>Date</TableHead>
+                <TableHead>Created</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Open</TableHead>
               </TableRow>
@@ -175,7 +175,13 @@ export function WorkOrdersPage() {
                     <TableCell className="font-medium">{r.work_order_number}</TableCell>
                     <TableCell>{r.title}</TableCell>
                     <TableCell className="text-muted-foreground">{plantName(Number(r.org_unit_id))}</TableCell>
-                    <TableCell className="text-xs tabular-nums">{r.work_date}</TableCell>
+                    <TableCell className="text-xs tabular-nums">
+                      {r.created_at
+                        ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
+                            new Date(r.created_at),
+                          )
+                        : "—"}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={workOrderStatusBadgeVariant(r.status)}>{workOrderStatusLabel(r.status)}</Badge>
                     </TableCell>

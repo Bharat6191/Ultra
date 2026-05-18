@@ -7,6 +7,40 @@ import { Label } from "@/components/ui/label"
 import { getJson } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
+export function formatWorkOrderDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—"
+  try {
+    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso))
+  } catch {
+    return iso
+  }
+}
+
+/** Rate preview for a work order not yet saved (uses today). */
+export function pricingDateForNewWorkOrder(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+/** Negotiated-rate lookup date from work order creation timestamp. */
+export function pricingDateFromCreatedAt(createdAt: string | null | undefined): string {
+  if (!createdAt) return pricingDateForNewWorkOrder()
+  return createdAt.slice(0, 10)
+}
+
+/** View-mode contractor callout under the execution sheet title. */
+export function ExecutionSheetContractorBanner({ name }: { name: string | null | undefined }) {
+  return (
+    <div
+      className="mt-2.5 rounded-lg border border-border/80 bg-muted/40 px-3.5 py-2.5 sm:px-4"
+      role="group"
+      aria-label="Contractor"
+    >
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Contractor</p>
+      <p className="mt-0.5 text-base font-semibold leading-snug tracking-tight text-foreground">{name?.trim() || "—"}</p>
+    </div>
+  )
+}
+
 export type OrgUnitLite = { id: number; name: string }
 export type ContractorLite = { id: number; name: string }
 
@@ -232,9 +266,6 @@ export function WorkOrderExecutionHeader(props: {
   onTitle: (v: string) => void
   onReference: (v: string) => void
   onOrgUnit: (v: string) => void
-  /** ISO date (yyyy-mm-dd). When set, the field is shown; editable only with ``onWorkDate``. */
-  work_date?: string
-  onWorkDate?: (v: string) => void
   /** Detail-only: overrides plant dropdown */
   plantLabel?: string
 }) {
@@ -248,19 +279,14 @@ export function WorkOrderExecutionHeader(props: {
     onTitle,
     onReference,
     onOrgUnit,
-    work_date,
-    onWorkDate,
     plantLabel,
   } = props
 
   const selectCls =
     "h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
 
-  const showWorkDate = work_date !== undefined
-  const workDateEditable = Boolean(editable && onWorkDate)
-
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <div className="grid gap-1.5">
         <Label htmlFor="wo-title" showRequired={editable}>
           Title
@@ -300,33 +326,6 @@ export function WorkOrderExecutionHeader(props: {
           </select>
         )}
       </div>
-      {showWorkDate ? (
-        <div className="grid gap-1.5">
-          <Label htmlFor="wo-work-date" showRequired={workDateEditable}>
-            Work date (rate pricing)
-          </Label>
-          {workDateEditable ? (
-            <Input
-              id="wo-work-date"
-              type="date"
-              value={work_date}
-              onChange={(e) => onWorkDate?.(e.target.value)}
-              disabled={loading}
-              className={selectCls}
-            />
-          ) : (
-            <div className={cn(selectCls, "flex h-10 items-center text-muted-foreground tabular-nums")}>
-              {work_date || "—"}
-            </div>
-          )}
-          {workDateEditable ? (
-            <p className="text-[11px] leading-snug text-muted-foreground">
-              Line rates use the <strong>approved</strong> negotiated rate whose effective window contains this date;
-              otherwise Part Master applies.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -428,7 +427,7 @@ export function WorkOrderExecutionTable(props: {
               const qs = new URLSearchParams({
                 contractor_id: contractorId,
                 part_master_id: pid,
-                work_date: pricingWorkDate.trim(),
+                pricing_date: pricingWorkDate.trim(),
               })
               const r = await getJson<{ resolved_rate: string | number; rate_source: string }>(
                 `/work-orders/rate-preview?${qs.toString()}`,
@@ -469,27 +468,21 @@ export function WorkOrderExecutionTable(props: {
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0 pb-4">
-        <div className="space-y-1">
+        <div className="min-w-0 flex-1">
           <CardTitle className="text-base font-semibold tracking-tight">Execution sheet</CardTitle>
-          <CardDescription>
-            {isEdit ? (
-              <>
-                One contractor per work order. Lines are Part Master parts; unit rate and taxable value resolve from
-                negotiated rates (or Part Master base). Weight is required only for weight-based per-kg pricing.
-              </>
-            ) : contractorSummaryLabel !== undefined ? (
-              <>
-                <span className="font-medium text-foreground">{contractorSummaryLabel || "—"}</span>
-                {/* <span className="text-muted-foreground"> · </span> */}
-                {/* <span>Negotiated or list rates and taxable values follow the saved snapshot.</span> */}
-              </>
-            ) : (
-              <>
-                One contractor per work order. Lines are Part Master parts; unit rate and taxable value resolve from
-                negotiated rates (or Part Master base). Weight is required only for weight-based per-kg pricing.
-              </>
-            )}
-          </CardDescription>
+          {isEdit ? (
+            <CardDescription className="mt-1">
+              One contractor per work order. Lines are Part Master parts; unit rate and taxable value resolve from
+              negotiated rates (or Part Master base). Weight is required only for weight-based per-kg pricing.
+            </CardDescription>
+          ) : contractorSummaryLabel !== undefined ? (
+            <ExecutionSheetContractorBanner name={contractorSummaryLabel} />
+          ) : (
+            <CardDescription className="mt-1">
+              One contractor per work order. Lines are Part Master parts; unit rate and taxable value resolve from
+              negotiated rates (or Part Master base). Weight is required only for weight-based per-kg pricing.
+            </CardDescription>
+          )}
         </div>
         {isEdit ? (
           <Button

@@ -2,16 +2,17 @@ import * as React from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
-import type { ContractorLite, ExecutionDraftLine, OrgUnitLite, PartMasterLite } from "@/components/work-orders/work-order-execution-ui"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import {
   buildWorkOrderLinesForApi,
   newDraftLine,
+  pricingDateForNewWorkOrder,
   WorkOrderExecutionFooter,
   WorkOrderExecutionHeader,
   WorkOrderExecutionTable,
 } from "@/components/work-orders/work-order-execution-ui"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
+import type { ContractorLite, OrgUnitLite, PartMasterLite } from "@/components/work-orders/work-order-execution-ui"
 import { ApiError, getJson, postJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
@@ -30,9 +31,10 @@ export function WorkOrderCreatePage() {
   const [title, setTitle] = React.useState("")
   const [reference, setReference] = React.useState("")
   const [org_unit_id, setOrgUnitId] = React.useState("")
-  const [workDate, setWorkDate] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [contractorId, setContractorId] = React.useState("")
-  const [lines, setLines] = React.useState<ExecutionDraftLine[]>(() => [newDraftLine()])
+  const [lines, setLines] = React.useState(() => [newDraftLine()])
+
+  const pricingWorkDate = React.useMemo(() => pricingDateForNewWorkOrder(), [])
 
   React.useEffect(() => {
     if (!canCreate) return
@@ -64,7 +66,6 @@ export function WorkOrderCreatePage() {
   function validatePayload() {
     if (!org_unit_id) return { error: "Plant is required." as const }
     if (!title.trim()) return { error: "Title is required." as const }
-    if (!workDate.trim()) return { error: "Work date is required." as const }
     const built = buildWorkOrderLinesForApi(contractorId, lines, partMasters)
     if (!built.ok) return { error: built.error }
     return {
@@ -73,7 +74,6 @@ export function WorkOrderCreatePage() {
         contractor_id: built.contractor_id,
         title: title.trim(),
         description: reference.trim() || null,
-        work_date: workDate,
         items: built.items,
       },
     }
@@ -125,9 +125,7 @@ export function WorkOrderCreatePage() {
         <div className="min-w-0">
           <h2 className="text-base font-medium">Create work order</h2>
           <p className="text-sm text-muted-foreground">
-            Execution sheet. Set the <strong>work date</strong> to the period you are pricing — approved
-            negotiated rates apply when this date falls in the rate&apos;s effective window; otherwise Part
-            Master applies.
+            Execution sheet. Line rates use negotiated prices effective on the creation date (set automatically when you save).
           </p>
         </div>
         <Button asChild size="sm" variant="outline">
@@ -149,8 +147,6 @@ export function WorkOrderCreatePage() {
         reference={reference}
         org_unit_id={org_unit_id}
         plants={plants}
-        work_date={workDate}
-        onWorkDate={setWorkDate}
         onTitle={setTitle}
         onReference={setReference}
         onOrgUnit={setOrgUnitId}
@@ -166,7 +162,7 @@ export function WorkOrderCreatePage() {
         onContractorId={setContractorId}
         lines={lines}
         onLinesChange={setLines}
-        pricingWorkDate={workDate}
+        pricingWorkDate={pricingWorkDate}
       />
 
       <WorkOrderExecutionFooter
@@ -179,5 +175,3 @@ export function WorkOrderCreatePage() {
     </div>
   )
 }
-
-export default WorkOrderCreatePage

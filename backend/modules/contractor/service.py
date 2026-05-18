@@ -177,8 +177,11 @@ class ContractorService:
         cin = _strip_or_none(payload.cin)
         contractor_type = _strip_or_none(payload.contractor_type, lower=True)
 
+        contractor_code = _strip_or_none(payload.contractor_code)
+        if not contractor_code:
+            raise ConflictError("contractor_code is required.")
         c = Contractor(
-            contractor_code=_strip_or_none(payload.contractor_code),
+            contractor_code=contractor_code,
             name=payload.name.strip(),
             legal_name=_strip_or_none(payload.legal_name),
             trade_name=_strip_or_none(payload.trade_name),
@@ -267,7 +270,10 @@ class ContractorService:
 
         upd = payload.model_dump(exclude_unset=True)
         if "contractor_code" in upd:
-            c.contractor_code = _strip_or_none(upd["contractor_code"])
+            contractor_code = _strip_or_none(upd["contractor_code"])
+            if not contractor_code:
+                raise ConflictError("contractor_code is required.")
+            c.contractor_code = contractor_code
         if "name" in upd and upd["name"] is not None:
             c.name = str(upd["name"]).strip()
         if "legal_name" in upd:

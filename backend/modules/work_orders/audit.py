@@ -35,8 +35,9 @@ HEADER_FIELDS: tuple[str, ...] = (
     "contractor_id",
     "title",
     "description",
-    "work_date",
     "status",
+    "created_at",
+    "approved_at",
     "approval_request_id",
 )
 

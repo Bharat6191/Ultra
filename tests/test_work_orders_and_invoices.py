@@ -78,7 +78,6 @@ def test_work_order_create_and_invoice_validate(db):
             contractor_id=int(contractor.id),
             title="Test WO",
             description=None,
-            work_date=date.today(),
             items=[
                 WorkOrderItemCreate(
                     part_master_id=int(pm.id),
@@ -141,7 +140,6 @@ def test_work_order_draft_update_replaces_lines(db):
             contractor_id=int(contractor.id),
             title="Draft lines",
             description="ref1",
-            work_date=date.today(),
             items=[
                 WorkOrderItemCreate(
                     part_master_id=int(pm.id),
@@ -189,48 +187,6 @@ def test_work_order_draft_update_replaces_lines(db):
     assert updated.items[0].notes == "note a"
 
 
-def test_work_order_draft_update_work_date_only_reprices_lines(db):
-    """Changing only work_date must re-run negotiated/master resolution on existing lines."""
-    actor = _first_user(db)
-    org = _first_plant(db)
-    contractor = _first_contractor(db)
-    pm = _first_part_master_for_org(db, int(org.id))
-
-    svc = WorkOrderService(db)
-    wo = svc.create(
-        WorkOrderCreate(
-            org_unit_id=int(org.id),
-            contractor_id=int(contractor.id),
-            title="WO date reprice",
-            description=None,
-            work_date=date.today(),
-            items=[
-                WorkOrderItemCreate(
-                    part_master_id=int(pm.id),
-                    progress_type="quantity",
-                    planned_quantity=Decimal("2"),
-                    planned_percentage=None,
-                    weight_per_piece=Decimal("1"),
-                    notes=None,
-                )
-            ],
-        ),
-        actor_user_id=actor,
-    )
-    before_rate = Decimal(str(wo.items[0].resolved_rate))
-    new_day = date(2035, 6, 15)
-    updated = svc.update_draft(
-        int(wo.id),
-        WorkOrderDraftUpdate(work_date=new_day),
-        actor_user_id=actor,
-    )
-    assert updated.work_date == new_day
-    assert len(updated.items) == 1
-    # Still resolves (typically same Part Master rate if no negotiated window covers 2035).
-    assert updated.items[0].resolved_rate is not None
-    assert Decimal(str(updated.items[0].resolved_rate)) == before_rate
-
-
 def test_second_invoice_blocked_when_exceeding_work_order_total(db):
     actor = _first_user(db)
     org = _first_plant(db)
@@ -243,7 +199,6 @@ def test_second_invoice_blocked_when_exceeding_work_order_total(db):
             contractor_id=int(contractor.id),
             title="WO invoice cap",
             description=None,
-            work_date=date.today(),
             items=[
                 WorkOrderItemCreate(
                     part_master_id=int(pm.id),
@@ -336,7 +291,6 @@ def test_close_work_order_requires_full_completion(db):
             contractor_id=int(contractor.id),
             title="Close test WO",
             description=None,
-            work_date=date.today(),
             items=[
                 WorkOrderItemCreate(
                     part_master_id=int(pm.id),

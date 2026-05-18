@@ -17,7 +17,7 @@ from modules.contractor.models import (
 
 
 class ContractorCreate(BaseModel):
-    contractor_code: str | None = Field(default=None, max_length=64)
+    contractor_code: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     legal_name: str | None = Field(default=None, max_length=255)
     trade_name: str | None = Field(default=None, max_length=255)

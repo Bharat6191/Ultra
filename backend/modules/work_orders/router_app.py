@@ -62,10 +62,13 @@ def _to_public(db: Session, row: WorkOrder) -> dict:
         "contractor_name": contractor_name,
         "title": row.title,
         "description": row.description,
-        "work_date": row.work_date,
         "status": row.status,
         "approval_request_id": row.approval_request_id,
         "approved_value_total": row.approved_value_total,
+        "approved_by": row.approved_by,
+        "approved_at": row.approved_at,
+        "rejected_by": row.rejected_by,
+        "rejected_at": row.rejected_at,
         "invoiced_ex_tax_total": inv_ex,
         "remaining_invoiceable_value": rem,
         "created_by": row.created_by,
@@ -165,14 +168,14 @@ def work_order_rate_preview(
     svc: Annotated[WorkOrderService, Depends(_svc)],
     contractor_id: int = Query(..., ge=1),
     part_master_id: int = Query(..., ge=1),
-    work_date: date = Query(...),
+    pricing_date: date | None = Query(None, description="Rate lookup date; defaults to today for new drafts."),
 ) -> dict[str, Any]:
-    """Resolved unit rate for a contractor + part on a given work date (negotiated window vs Part Master)."""
+    """Resolved unit rate for a contractor + part (negotiated window vs Part Master)."""
     try:
         return svc.preview_resolved_line_rate(
             contractor_id=contractor_id,
             part_master_id=part_master_id,
-            work_date=work_date,
+            pricing_date=pricing_date or date.today(),
         )
     except NotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

@@ -13,6 +13,8 @@ import {
 import {
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   // CircleDollarSign,
   ClipboardList,
   Clock3,
@@ -37,14 +39,17 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { PartWorkOrderPreviewDialog } from "@/components/parts/analytics/PartWorkOrderPreviewDialog"
 import { VsBaseToleranceBadge } from "@/components/contractors/VsBaseToleranceBadge"
 import { formatMoney, formatPercent, rateStatusLabel, rateStatusVariant } from "@/components/contractors/rateStatus"
 import { statusLabel, statusVariant } from "@/components/contractors/status"
 import { ApiError, getJson } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
+import { workOrderStatusBadgeVariant } from "@/lib/work-order-status-badge"
 import type {
   CommercialInsights,
   ContractorAnalyticsSummary,
+  ContractorWorkOrderRow,
   NegotiationAnalytics,
   NegotiationRow,
   WorkOrderAnalytics,
@@ -100,6 +105,8 @@ import type {
 
 // type ChartOption = { value: string; label: string; hint: string }
 
+const WO_PAGE_SIZE = 10
+
 function q(params: Record<string, string | undefined>): string {
   const p = new URLSearchParams()
   Object.entries(params).forEach(([k, v]) => {
@@ -107,6 +114,41 @@ function q(params: Record<string, string | undefined>): string {
   })
   const s = p.toString()
   return s ? `?${s}` : ""
+}
+
+function num(v: string | number | null | undefined): number | null {
+  if (v === null || v === undefined || v === "") return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function fmtPct(v: number | null): string {
+  if (v === null) return "—"
+  return `${v.toFixed(1)}%`
+}
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return "—"
+  try {
+    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(iso))
+  } catch {
+    return iso
+  }
+}
+
+function workOrderStatusLabel(status: string): string {
+  switch (String(status || "").toLowerCase()) {
+    case "closed":
+      return "Completed"
+    case "pending_approval":
+      return "In approval"
+    case "draft":
+      return "Draft"
+    case "rejected":
+      return "Returned"
+    default:
+      return status.replace(/_/g, " ")
+  }
 }
 
 type InsightTone = "neutral" | "success" | "warning" | "danger" | "info" | "violet"
@@ -288,6 +330,8 @@ export function ContractorAnalyticsDashboard({
   const [wo, setWo] = React.useState<WorkOrderAnalytics | null>(null)
   const [commercial, setCommercial] = React.useState<CommercialInsights | null>(null)
   const [selectedNegotiation, setSelectedNegotiation] = React.useState<NegotiationRow | null>(null)
+  const [selectedWorkOrder, setSelectedWorkOrder] = React.useState<ContractorWorkOrderRow | null>(null)
+  const [woPage, setWoPage] = React.useState(0)
   const canOpenNegotiationPage = hasPermission("contractor_rates.view")
 
   const filterParams = React.useMemo(
@@ -349,6 +393,20 @@ export function ContractorAnalyticsDashboard({
   React.useEffect(() => {
     void load()
   }, [load])
+
+  React.useEffect(() => {
+    setWoPage(0)
+  }, [filterParams])
+
+  const woRows = wo?.rows ?? []
+  const woPageCount = Math.max(1, Math.ceil(woRows.length / WO_PAGE_SIZE))
+  const woPageSafe = Math.min(woPage, woPageCount - 1)
+  const paginatedWoRows = React.useMemo(() => {
+    const start = woPageSafe * WO_PAGE_SIZE
+    return woRows.slice(start, start + WO_PAGE_SIZE)
+  }, [woRows, woPageSafe])
+  const woRangeStart = woRows.length === 0 ? 0 : woPageSafe * WO_PAGE_SIZE + 1
+  const woRangeEnd = Math.min((woPageSafe + 1) * WO_PAGE_SIZE, woRows.length)
 
   // const pieData = React.useMemo(() => {
   //   if (!neg) return []
@@ -777,6 +835,103 @@ export function ContractorAnalyticsDashboard({
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-base">Work orders</CardTitle>
+              <CardDescription>
+                Work orders for this contractor — {formatMoney(wo.total_wo_value)} total value,{" "}
+                {formatMoney(wo.total_invoiced)} invoiced, {formatMoney(wo.pending_invoice_amount)} pending.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-0 pb-3">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="h-8 text-xs">WO number</TableHead>
+                      <TableHead className="h-8 text-xs">Plant</TableHead>
+                      <TableHead className="h-8 text-right text-xs">Qty</TableHead>
+                      <TableHead className="h-8 text-right text-xs">WO value</TableHead>
+                      <TableHead className="h-8 text-right text-xs">Invoiced</TableHead>
+                      <TableHead className="h-8 text-right text-xs">Pending</TableHead>
+                      <TableHead className="h-8 text-xs">Status</TableHead>
+                      <TableHead className="h-8 text-right text-xs">Completion %</TableHead>
+                      <TableHead className="h-8 text-xs">Start</TableHead>
+                      <TableHead className="h-8 text-xs">End</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {woRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={10} className="py-6 text-center text-sm text-muted-foreground">
+                          No work orders for this contractor.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paginatedWoRows.map((r) => (
+                        <TableRow key={r.work_order_id} className="text-sm">
+                          <TableCell className="py-2">
+                            <button
+                              type="button"
+                              className="font-mono text-xs font-medium text-primary hover:underline"
+                              onClick={() => setSelectedWorkOrder(r)}
+                            >
+                              {r.work_order_number}
+                            </button>
+                          </TableCell>
+                          <TableCell className="py-2">{r.plant_name}</TableCell>
+                          <TableCell className="py-2 text-right tabular-nums">{String(r.quantity)}</TableCell>
+                          <TableCell className="py-2 text-right tabular-nums">{formatMoney(r.wo_value)}</TableCell>
+                          <TableCell className="py-2 text-right tabular-nums">{formatMoney(r.invoiced_value)}</TableCell>
+                          <TableCell className="py-2 text-right tabular-nums">{formatMoney(r.pending_value)}</TableCell>
+                          <TableCell className="py-2">
+                            <Badge variant={workOrderStatusBadgeVariant(r.status)} className="text-[10px] font-normal">
+                              {workOrderStatusLabel(r.status)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="py-2 text-right tabular-nums">{fmtPct(num(r.completion_pct))}</TableCell>
+                          <TableCell className="py-2 text-xs text-muted-foreground">{fmtDate(r.start_date)}</TableCell>
+                          <TableCell className="py-2 text-xs text-muted-foreground">{fmtDate(r.end_date)}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              {woRows.length > WO_PAGE_SIZE ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2">
+                  <p className="text-xs text-muted-foreground">
+                    Showing {woRangeStart}–{woRangeEnd} of {woRows.length}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2"
+                      disabled={woPageSafe <= 0}
+                      onClick={() => setWoPage((p) => Math.max(0, p - 1))}
+                      aria-label="Previous page"
+                    >
+                      <ChevronLeft className="size-4" aria-hidden />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2"
+                      disabled={woPageSafe >= woPageCount - 1}
+                      onClick={() => setWoPage((p) => Math.min(woPageCount - 1, p + 1))}
+                      aria-label="Next page"
+                    >
+                      <ChevronRight className="size-4" aria-hidden />
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
         </div>
 
         {/*
@@ -984,6 +1139,12 @@ export function ContractorAnalyticsDashboard({
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <PartWorkOrderPreviewDialog
+        open={selectedWorkOrder != null}
+        onOpenChange={(open) => !open && setSelectedWorkOrder(null)}
+        summaryRow={selectedWorkOrder}
+      />
     </div>
   )
 }

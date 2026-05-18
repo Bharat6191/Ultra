@@ -15,7 +15,6 @@ from typing import Any
 
 from sqlalchemy import (
     Boolean,
-    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -59,7 +58,6 @@ class WorkOrder(Base):
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    work_date: Mapped[date] = mapped_column(Date, nullable=False)
 
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="draft", index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())

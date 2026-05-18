@@ -15,6 +15,7 @@ import { UsersPage } from "@/pages/users"
 import { ContractorsPage } from "@/pages/contractors"
 import { ContractorDetailPage } from "@/pages/contractor-detail"
 import { ContractorCreatePage } from "@/pages/contractor-create"
+import { ContractorEditPage } from "@/pages/contractor-edit"
 import { PartMasterPage } from "@/pages/part-master"
 import { PartMasterCreatePage } from "@/pages/part-master-create"
 import { PartMasterDetailPage } from "@/pages/part-master-detail"
@@ -139,6 +140,14 @@ function App() {
               element={
                 <RequirePermission code="contractor.create">
                   <ContractorCreatePage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path=":id/edit"
+              element={
+                <RequirePermission code="contractor.update">
+                  <ContractorEditPage />
                 </RequirePermission>
               }
             />

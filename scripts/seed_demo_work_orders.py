@@ -207,7 +207,6 @@ def main() -> int:
                     contractor_id=cid,
                     title=title,
                     description=f"Seeded work order {i} for approval inbox testing.",
-                    work_date=date.today(),
                     items=[
                         _weight_aware_item(pm_pairs[0][0], a1_qty, "Seed line A1"),
                         _weight_aware_item(pm_pairs[0][1], Decimal("6") + Decimal(i), "Seed line A2"),
@@ -244,7 +243,6 @@ def main() -> int:
                     contractor_id=cid,
                     title=title,
                     description=f"Seeded demo work order {i} (one contractor, six lines).",
-                    work_date=date.today(),
                     items=[
                         _weight_aware_item(pm_pairs[0][0], Decimal("10"), "A1"),
                         _weight_aware_item(pm_pairs[0][1], Decimal("7"), "A2"),
@@ -279,7 +277,6 @@ def main() -> int:
                     contractor_id=cid,
                     title=title,
                     description="Seeded WO focusing on kg + job unit lines.",
-                    work_date=date.today(),
                     items=[
                         _weight_aware_item(pm_kg, Decimal("500"), "kg line"),
                         _weight_aware_item(pm_job, Decimal("2"), "job line"),

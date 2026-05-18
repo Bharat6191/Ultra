@@ -47,6 +47,14 @@ def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _pricing_date_for(wo: WorkOrder) -> date:
+    """Negotiated-rate lookup date: anchored to work order creation (not a separate work date)."""
+    ts = wo.created_at
+    if ts is None:
+        return date.today()
+    return ts.date()
+
+
 def _q2(x: Decimal) -> Decimal:
     return x.quantize(Decimal("0.01"))
 
@@ -109,15 +117,15 @@ class WorkOrderService:
         *,
         contractor_id: int,
         part_master_id: int,
-        work_date: date,
+        pricing_date: date,
     ) -> tuple[Decimal, str, int | None]:
         """Return (rate, source, contractor_rate_id).
 
-        Uses the work order **work_date**: the latest **approved** negotiated rate whose
+        Uses the work order **creation date**: the latest **approved** negotiated rate whose
         ``[effective_from, effective_to]`` window contains that date wins; otherwise the
         active Part Master baseline applies.
         """
-        # Prefer an approved negotiated rate whose validity window covers work_date.
+        # Prefer an approved negotiated rate whose validity window covers pricing_date.
         # Order by effective_from (newest window first), then approval time, then id.
         stmt = (
             select(ContractorRate)
@@ -125,8 +133,8 @@ class WorkOrderService:
                 ContractorRate.contractor_id == int(contractor_id),
                 ContractorRate.part_master_id == int(part_master_id),
                 ContractorRate.status == "approved",
-                ContractorRate.effective_from <= work_date,
-                func.coalesce(ContractorRate.effective_to, date(9999, 12, 31)) >= work_date,
+                ContractorRate.effective_from <= pricing_date,
+                func.coalesce(ContractorRate.effective_to, date(9999, 12, 31)) >= pricing_date,
             )
             .order_by(
                 ContractorRate.effective_from.desc(),
@@ -142,10 +150,10 @@ class WorkOrderService:
         rm = self._ensure_part_master(int(part_master_id))
         if not bool(rm.is_active):
             raise ConflictError("Selected part master row is not active.")
-        if rm.effective_from and rm.effective_from > work_date:
-            raise ConflictError("Selected part master is not yet effective for the work date.")
-        if rm.effective_to is not None and rm.effective_to < work_date:
-            raise ConflictError("Selected part master is expired for the work date.")
+        if rm.effective_from and rm.effective_from > pricing_date:
+            raise ConflictError("Selected part master is not yet effective for the creation date.")
+        if rm.effective_to is not None and rm.effective_to < pricing_date:
+            raise ConflictError("Selected part master is expired for the creation date.")
         return Decimal(rm.base_rate), "master", None
 
     def preview_resolved_line_rate(
@@ -153,14 +161,14 @@ class WorkOrderService:
         *,
         contractor_id: int,
         part_master_id: int,
-        work_date: date,
+        pricing_date: date,
     ) -> dict[str, Any]:
         """Same resolution as persisted WO lines; for UI preview while drafting."""
         self._ensure_contractor(int(contractor_id))
         rate, src, cr_id = self._resolve_rate_for(
             contractor_id=int(contractor_id),
             part_master_id=int(part_master_id),
-            work_date=work_date,
+            pricing_date=pricing_date,
         )
         return {
             "resolved_rate": str(rate),
@@ -381,13 +389,13 @@ class WorkOrderService:
         *,
         contractor_id: int,
         it: WorkOrderItemCreate,
-        work_date: date,
+        pricing_date: date,
     ) -> WorkOrderItem:
         rm = self._ensure_part_master(int(it.part_master_id))
         rate, src, cr_id = self._resolve_rate_for(
             contractor_id=int(contractor_id),
             part_master_id=int(rm.id),
-            work_date=work_date,
+            pricing_date=pricing_date,
         )
         pt = it.progress_type.strip().lower()
         if pt not in WORK_ORDER_ITEM_PROGRESS_TYPES:
@@ -453,7 +461,7 @@ class WorkOrderService:
         *,
         contractor_id: int,
         items: list[WorkOrderItemCreate],
-        work_date: date,
+        pricing_date: date,
     ) -> None:
         if not items:
             raise ConflictError("At least one line item is required.")
@@ -464,7 +472,7 @@ class WorkOrderService:
         for it in items:
             self._db.add(
                 self._build_item_from_create(
-                    wo, contractor_id=int(contractor_id), it=it, work_date=work_date
+                    wo, contractor_id=int(contractor_id), it=it, pricing_date=pricing_date
                 )
             )
 
@@ -509,14 +517,14 @@ class WorkOrderService:
             or 0
         )
 
-    def _reprice_items_after_contractor_change(self, wo: WorkOrder, *, work_date: date) -> None:
+    def _reprice_items_after_contractor_change(self, wo: WorkOrder, *, pricing_date: date) -> None:
         """Re-resolve negotiated/master rates for each line (contractor or work-date change)."""
         self._ensure_contractor(int(wo.contractor_id))
         for item in list(wo.items or []):
             rate, src, cr_id = self._resolve_rate_for(
                 contractor_id=int(wo.contractor_id),
                 part_master_id=int(item.part_master_id),
-                work_date=work_date,
+                pricing_date=pricing_date,
             )
             item.resolved_rate = _q2(Decimal(rate))
             item.rate_source = src
@@ -526,7 +534,7 @@ class WorkOrderService:
     def sync_resolved_rates_for_contractor_part(self, *, contractor_id: int, part_master_id: int) -> int:
         """Re-resolve rates on draft/active work orders after a negotiated rate becomes active.
 
-        Uses the same :meth:`_resolve_rate_for` rules as new work order lines (work date window,
+        Uses the same :meth:`_resolve_rate_for` rules as new work order lines (creation date window,
         then Part Master baseline). Skips lines that already use an **approved** manual override.
 
         Invoice lines inherit ``resolved_rate`` from the work order item, so this keeps WO and
@@ -560,7 +568,7 @@ class WorkOrderService:
                 rate, src, cr_id = self._resolve_rate_for(
                     contractor_id=int(wo.contractor_id),
                     part_master_id=int(item.part_master_id),
-                    work_date=wo.work_date,
+                    pricing_date=_pricing_date_for(wo),
                 )
                 new_r = _q2(Decimal(rate))
                 new_src = str(src)
@@ -593,7 +601,6 @@ class WorkOrderService:
             contractor_id=int(payload.contractor_id),
             title=payload.title.strip(),
             description=(payload.description or None),
-            work_date=payload.work_date,
             status="draft",
             created_by=actor_user_id,
         )
@@ -604,7 +611,7 @@ class WorkOrderService:
             wo,
             contractor_id=int(payload.contractor_id),
             items=list(payload.items),
-            work_date=payload.work_date,
+            pricing_date=_pricing_date_for(wo),
         )
 
         audit_helpers.write_audit(
@@ -664,7 +671,8 @@ class WorkOrderService:
             "contractor_name": contractor_name,
             "title": wo.title,
             "description": wo.description,
-            "work_date": wo.work_date.isoformat(),
+            "created_at": wo.created_at.isoformat() if wo.created_at else None,
+            "approved_at": wo.approved_at.isoformat() if wo.approved_at else None,
             "execution_lines": lines_out,
             "execution_line_count": len(lines_out),
         }
@@ -692,9 +700,6 @@ class WorkOrderService:
                 else None
             )
 
-        if "work_date" in incoming and payload.work_date is not None:
-            wo.work_date = payload.work_date
-
         if "org_unit_id" in incoming and payload.org_unit_id is not None:
             ou = self._ensure_plant(int(payload.org_unit_id))
             if int(ou.id) != int(wo.org_unit_id):
@@ -710,7 +715,7 @@ class WorkOrderService:
                 self._ensure_contractor(int(payload.contractor_id))
                 wo.contractor_id = int(payload.contractor_id)
                 if "items" not in incoming:
-                    self._reprice_items_after_contractor_change(wo, work_date=wo.work_date)
+                    self._reprice_items_after_contractor_change(wo, pricing_date=_pricing_date_for(wo))
                     self._db.flush()
 
         if "items" in incoming:
@@ -722,12 +727,8 @@ class WorkOrderService:
                 wo,
                 contractor_id=int(wo.contractor_id),
                 items=list(payload.items),
-                work_date=wo.work_date,
+                pricing_date=_pricing_date_for(wo),
             )
-        elif "work_date" in incoming and payload.work_date is not None and list(wo.items or []):
-            # Lines were built for the previous work_date; re-resolve rates when only the date moves.
-            self._reprice_items_after_contractor_change(wo, work_date=wo.work_date)
-            self._db.flush()
 
         audit_helpers.write_audit(
             self._db,
@@ -1094,7 +1095,8 @@ class WorkOrderService:
                 "work_order_title": wo.title if wo is not None else None,
                 "org_unit_id": int(wo.org_unit_id) if wo is not None else None,
                 "org_unit_name": org_unit_name,
-                "work_date": wo.work_date.isoformat() if wo is not None else None,
+                "created_at": wo.created_at.isoformat() if wo is not None and wo.created_at else None,
+                "approved_at": wo.approved_at.isoformat() if wo is not None and wo.approved_at else None,
                 "contractor_id": int(wo.contractor_id) if wo is not None else None,
                 "contractor_name": contractor_name,
                 "line": {

@@ -413,7 +413,7 @@ class ContractorAnalyticsService:
                     pending_value=wo_pend,
                     status=st,
                     completion_pct=self._wo_completion(line_items),
-                    start_date=w.work_date,
+                    start_date=w.created_at.date() if w.created_at else None,
                     end_date=end_dt,
                 )
             )

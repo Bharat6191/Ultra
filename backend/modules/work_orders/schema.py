@@ -22,7 +22,6 @@ class WorkOrderCreate(BaseModel):
     contractor_id: int
     title: str
     description: str | None = None
-    work_date: date
     items: list[WorkOrderItemCreate] = Field(default_factory=list)
 
 
@@ -31,7 +30,6 @@ class WorkOrderDraftUpdate(BaseModel):
 
     title: str | None = None
     description: str | None = None
-    work_date: date | None = None
     org_unit_id: int | None = None
     contractor_id: int | None = None
     items: list[WorkOrderItemCreate] | None = None
@@ -111,10 +109,13 @@ class WorkOrderPublic(BaseModel):
     contractor_name: str | None = None
     title: str
     description: str | None
-    work_date: date
     status: str
     approval_request_id: int | None
     approved_value_total: Decimal | None = None
+    approved_by: int | None = None
+    approved_at: datetime | None = None
+    rejected_by: int | None = None
+    rejected_at: datetime | None = None
     invoiced_ex_tax_total: Decimal | None = None
     remaining_invoiceable_value: Decimal | None = None
     created_by: int | None

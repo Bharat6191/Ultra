@@ -130,7 +130,6 @@ def _create_minimal_wo(
             contractor_id=int(contractor_id),
             title=title,
             description="Two-level approval scenario seed.",
-            work_date=date.today(),
             items=[
                 WorkOrderItemCreate(
                     part_master_id=int(part.id),

@@ -196,7 +196,7 @@ export function ContractorTable({
                       <DropdownMenuItem
                         onSelect={(e) => {
                           e.preventDefault()
-                          navigate(`/dashboard/contractors/${c.id}?edit=1`)
+                          navigate(`/dashboard/contractors/${c.id}/edit`)
                         }}
                       >
                         <Pencil className="mr-2 size-4 opacity-70" aria-hidden />

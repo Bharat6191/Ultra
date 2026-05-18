@@ -16,6 +16,8 @@ import {
   flattenWorkOrderToDraftLines,
   formatExecutionQtyDisplay,
   formatExecutionWeightAmount,
+  formatWorkOrderDateTime,
+  pricingDateFromCreatedAt,
   newDraftLine,
   WorkOrderExecutionFooter,
   WorkOrderExecutionHeader,
@@ -51,8 +53,9 @@ type WorkOrder = {
   contractor_id: number
   title: string
   description: string | null
-  work_date: string
   status: string
+  created_at?: string | null
+  approved_at?: string | null
   updated_at?: string | null
   approved_value_total?: string | number | null
   invoiced_ex_tax_total?: string | number | null
@@ -149,7 +152,6 @@ export function WorkOrderDetailPage() {
   const [editReference, setEditReference] = React.useState("")
   const [editOrgUnit, setEditOrgUnit] = React.useState("")
   const [editContractorId, setEditContractorId] = React.useState("")
-  const [editWorkDate, setEditWorkDate] = React.useState("")
   const [draftLines, setDraftLines] = React.useState<ExecutionDraftLine[]>(() => [newDraftLine()])
 
   const canSubmit = hasPermission("work_orders.create")
@@ -211,7 +213,6 @@ export function WorkOrderDetailPage() {
     setEditReference(row.description ?? "")
     setEditOrgUnit(String(row.org_unit_id))
     setEditContractorId(String(row.contractor_id ?? ""))
-    setEditWorkDate(row.work_date ?? "")
     setDraftLines(flattenWorkOrderToDraftLines(row))
   }, [row, editableDraft])
 
@@ -401,7 +402,6 @@ export function WorkOrderDetailPage() {
 
   async function saveDraft() {
     if (!row || !editableDraft) return
-    if (!editWorkDate.trim()) return toast.error("Work date is required.")
     if (!editTitle.trim()) return toast.error("Title is required.")
     const built = buildWorkOrderLinesForApi(editContractorId, draftLines, partMasters)
     if (!built.ok) return toast.error(built.error)
@@ -411,7 +411,6 @@ export function WorkOrderDetailPage() {
       await patchJson(`/work-orders/${row.id}`, {
         title: editTitle.trim(),
         description: editReference.trim() || null,
-        work_date: editWorkDate,
         org_unit_id: Number(editOrgUnit),
         contractor_id: built.contractor_id,
         items: built.items,
@@ -458,7 +457,16 @@ export function WorkOrderDetailPage() {
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Badge variant={workOrderStatusBadgeVariant(row.status)}>{row.status}</Badge>
             {!editableDraft ? (
-              <span className="text-sm text-muted-foreground tabular-nums">Work date: {row.work_date ?? "—"}</span>
+              <>
+                <span className="text-sm text-muted-foreground tabular-nums">
+                  Created: {formatWorkOrderDateTime(row.created_at)}
+                </span>
+                {row.approved_at ? (
+                  <span className="text-sm text-muted-foreground tabular-nums">
+                    Approved: {formatWorkOrderDateTime(row.approved_at)}
+                  </span>
+                ) : null}
+              </>
             ) : null}
           </div>
         </div>
@@ -485,8 +493,6 @@ export function WorkOrderDetailPage() {
         onReference={setEditReference}
         onOrgUnit={setEditOrgUnit}
         plantLabel={editableDraft ? undefined : plantLabel}
-        work_date={editableDraft ? editWorkDate : row.work_date}
-        onWorkDate={editableDraft ? setEditWorkDate : undefined}
       />
 
       <WorkOrderExecutionTable
@@ -501,7 +507,7 @@ export function WorkOrderDetailPage() {
         onLinesChange={editableDraft ? setDraftLines : () => {}}
         detailRows={editableDraft ? undefined : detailRows}
         contractorSummaryLabel={!editableDraft ? contractorName(row.contractor_id) : undefined}
-        pricingWorkDate={editableDraft ? editWorkDate : undefined}
+        pricingWorkDate={editableDraft ? pricingDateFromCreatedAt(row.created_at) : undefined}
       />
 
       {showCompletionEngine && allLinesFullyComplete ? (

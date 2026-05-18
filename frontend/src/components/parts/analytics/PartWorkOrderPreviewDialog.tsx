@@ -4,7 +4,7 @@ import { ExternalLink, Loader2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -15,8 +15,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   executionDetailRateCell,
   executionDetailTaxableCell,
+  ExecutionSheetContractorBanner,
   formatExecutionQtyDisplay,
   formatExecutionWeightAmount,
+  formatWorkOrderDateTime,
   type OrgUnitLite,
 } from "@/components/work-orders/work-order-execution-ui"
 import { ApiError, getJson } from "@/lib/api"
@@ -55,7 +57,8 @@ type WorkOrderPreview = {
   contractor_name?: string | null
   title: string
   description: string | null
-  work_date: string
+  created_at?: string | null
+  approved_at?: string | null
   status: string
   items?: WoItem[]
 }
@@ -185,7 +188,8 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  partMasterId: number
+  /** When set, highlights the matching part row (part analytics). Omit for contractor dashboard. */
+  partMasterId?: number
   summaryRow: PartWorkOrderRow | null
 }
 
@@ -258,7 +262,14 @@ export function PartWorkOrderPreviewDialog({ open, onOpenChange, partMasterId, s
           {detail ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Badge variant={workOrderStatusBadgeVariant(detail.status)}>{detail.status}</Badge>
-              <span className="text-sm text-muted-foreground tabular-nums">Work date: {detail.work_date ?? "—"}</span>
+              <span className="text-sm text-muted-foreground tabular-nums">
+                Created: {formatWorkOrderDateTime(detail.created_at)}
+              </span>
+              {detail.approved_at ? (
+                <span className="text-sm text-muted-foreground tabular-nums">
+                  Approved: {formatWorkOrderDateTime(detail.approved_at)}
+                </span>
+              ) : null}
             </div>
           ) : null}
         </DialogHeader>
@@ -277,15 +288,14 @@ export function PartWorkOrderPreviewDialog({ open, onOpenChange, partMasterId, s
                 <ReadOnlyField label="Title" value={detail.title} />
                 <ReadOnlyField label="Reference (optional)" value={detail.description?.trim() || "—"} />
                 <ReadOnlyField label="Plant" value={plantLabel} />
-                <ReadOnlyField label="Work date (rate pricing)" value={detail.work_date} />
+                <ReadOnlyField label="Created" value={formatWorkOrderDateTime(detail.created_at)} />
+                <ReadOnlyField label="Approved" value={formatWorkOrderDateTime(detail.approved_at)} />
               </div>
 
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base font-semibold">Execution sheet</CardTitle>
-                  <CardDescription>
-                    <span className="font-medium text-foreground">{contractorLabel}</span>
-                  </CardDescription>
+                  <ExecutionSheetContractorBanner name={contractorLabel} />
                 </CardHeader>
                 <CardContent className="px-0 pb-4 sm:px-6">
                   <div className="overflow-x-auto rounded-lg border">
@@ -318,7 +328,9 @@ export function PartWorkOrderPreviewDialog({ open, onOpenChange, partMasterId, s
                           previewLines.map((line) => (
                             <TableRow
                               key={line.sr}
-                              className={line.part_master_id === partMasterId ? "bg-primary/5" : undefined}
+                              className={
+                                partMasterId != null && line.part_master_id === partMasterId ? "bg-primary/5" : undefined
+                              }
                             >
                               <TableCell className="py-2.5 text-xs tabular-nums text-muted-foreground">{line.sr}</TableCell>
                               <TableCell className="py-2.5 font-mono text-xs font-semibold">{line.part}</TableCell>
