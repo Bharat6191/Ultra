@@ -113,6 +113,42 @@ MODULE_CONFIG: list[ModuleConfigDict] = [
             },
         ],
     },
+
+    {
+        "key": "asset",
+        "title": "Assets",
+        "tabs": [
+            {
+                "key": "asset",
+                "title": "Assets",
+                "actions": [
+                    "view",
+                    "create",
+                    "archive",
+                    "unarchive",
+                ],
+            },
+        ],
+    },
+
+    {
+        "key": "order",
+        "title": "Orders",
+        "tabs": [
+            {
+                "key": "order",
+                "title": "Orders",
+                "actions": [
+                    "view",
+                    "create",
+                    "archive",
+                    "unarchive",
+                ],
+            },
+        ],
+    },
+
+
 ]
 
 

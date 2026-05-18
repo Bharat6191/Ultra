@@ -80,6 +80,7 @@ def main() -> int:
 
         full_name = (args.full_name or email.split("@", 1)[0]).strip() or email
         user = User(
+            username=email.split("@")[0],
             full_name=full_name,
             email=email,
             phone=None,

@@ -102,7 +102,20 @@ async def get_login_payload(request: Request) -> LoginRequest:
         ) from exc
 
 
-@router.post("/login", response_model=None)
+@router.post(
+    "/login",
+    response_model=None,
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": LoginRequest.model_json_schema()
+                }
+            },
+        }
+    },
+)
 async def login(
     request: Request,
     payload: Annotated[LoginRequest, Depends(get_login_payload)],

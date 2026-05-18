@@ -20,6 +20,24 @@ export default defineConfig({
           return undefined
         },
       },
+      '/forgot-password': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/reset-password': {
+          target: 'http://localhost:8000',
+          changeOrigin: true,
+          bypass: (req) => {
+            const accept = req.headers?.accept ?? ''
+
+            // Let React frontend handle browser page navigation
+            if (typeof accept === 'string' && accept.includes('text/html')) {
+              return req.url
+            }
+
+            return undefined
+          },
+        },
       '/refresh': {
         target: 'http://localhost:8000',
         changeOrigin: true,

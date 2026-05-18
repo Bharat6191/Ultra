@@ -23,6 +23,8 @@ import { MyTaskDetailPage } from "@/pages/my-task-detail"
 import { ForgotPasswordPage } from "@/pages/forgot-password"
 import { ResetPasswordPage } from "@/pages/reset-password"
 import { MfaSetupPage } from "@/pages/mfa-setup"
+import AssetsPage from "@/pages/assets"
+import OrdersPage from "@/pages/orders"
 import * as React from "react"
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { getJson } from "@/lib/api"
@@ -41,28 +43,50 @@ function App() {
         <Route path="/login" element={<AppLoginRoute />} />
         <Route path="/dashboard" element={<AppRoute />}>
           <Route index element={<DashboardPage />} />
+          /*
+            <Route
+              path="performance"
+              element={
+                <RequireNonUsersWorkspace>
+                  <WorkspacePlaceholder
+                    title="Performance"
+                    body="Connect plant KPIs and trends here. This area is reserved for operational analytics."
+                  />
+                </RequireNonUsersWorkspace>
+              }
+            />
+          */
+          /*
+            <Route
+              path="preferences"
+              element={
+                <RequireNonUsersWorkspace>
+                  <WorkspacePlaceholder
+                    title="Preferences"
+                    body="Personal settings for this workspace will live here."
+                  />
+                </RequireNonUsersWorkspace>
+              }
+            />
+          */
           <Route
-            path="performance"
+            path="assets"
             element={
-              <RequireNonUsersWorkspace>
-                <WorkspacePlaceholder
-                  title="Performance"
-                  body="Connect plant KPIs and trends here. This area is reserved for operational analytics."
-                />
-              </RequireNonUsersWorkspace>
+              <RequirePermission code="asset.view">
+                <AssetsPage />
+              </RequirePermission>
             }
           />
+
           <Route
-            path="preferences"
+            path="orders"
             element={
-              <RequireNonUsersWorkspace>
-                <WorkspacePlaceholder
-                  title="Preferences"
-                  body="Personal settings for this workspace will live here."
-                />
-              </RequireNonUsersWorkspace>
+              <RequirePermission code="order.view">
+                <OrdersPage />
+              </RequirePermission>
             }
           />
+
           <Route
             path="users"
             element={

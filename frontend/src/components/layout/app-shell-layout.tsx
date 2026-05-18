@@ -6,6 +6,8 @@ import {
   KeyRound,
   LayoutDashboard,
   LogOut,
+  Package,
+  ShoppingCart,
   PanelLeft,
   Settings,
   Settings2,
@@ -47,6 +49,7 @@ type ShellNavItem = {
 
 const shellNavItems: ShellNavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, to: "/dashboard", permission: null },
+  /*
   {
     id: "performance",
     label: "Performance",
@@ -55,6 +58,7 @@ const shellNavItems: ShellNavItem[] = [
     permission: null,
     hideWhenOnlyUsersModule: true,
   },
+
   {
     id: "preferences",
     label: "Preferences",
@@ -63,7 +67,25 @@ const shellNavItems: ShellNavItem[] = [
     permission: null,
     hideWhenOnlyUsersModule: true,
   },
+  */
   { id: "users", label: "Users", icon: Users, to: "/dashboard/users", permission: "users.view" },
+
+  {
+    id: "assets",
+    label: "Assets",
+    icon: Package,
+    to: "/dashboard/assets",
+    permission: "asset.view",
+  },
+
+  {
+    id: "orders",
+    label: "Orders",
+    icon: ShoppingCart,
+    to: "/dashboard/orders",
+    permission: "order.view",
+  },
+
   {
     id: "tasks",
     label: "My tasks",
@@ -72,7 +94,7 @@ const shellNavItems: ShellNavItem[] = [
     permission: "approval.view",
   },
   {
-    id: "plants",
+    id: "plants", 
     label: "Plants",
     icon: Factory,
     to: "/dashboard/plants",
@@ -165,16 +187,20 @@ export function AppShellLayout({ children, userEmail, onSignOut }: AppShellLayou
           isSidebarCollapsed ? "w-16" : "w-64"
         )}
       >
-        <div className={cn("flex h-14 shrink-0 items-center gap-3", isSidebarCollapsed ? "px-3" : "px-4")}>
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-xs font-semibold text-primary-foreground">
-            UL
-          </div>
-          {!isSidebarCollapsed ? (
-            <div className="min-w-0 leading-tight">
-              <div className="text-sm font-semibold tracking-tight">Ultra Workspace</div>
-              <div className="text-xs text-muted-foreground">Operations</div>
-            </div>
-          ) : null}
+        <div
+          className={cn(
+            "flex h-16 shrink-0 items-center justify-center border-b",
+            isSidebarCollapsed ? "px-2" : "px-4"
+          )}
+        >
+          <img
+            src="/logo.png"
+            alt="Takeda"
+            className={cn(
+              "object-contain transition-all duration-200",
+              isSidebarCollapsed ? "h-8 w-8" : "h-12 w-auto"
+            )}
+          />
         </div>
         <Separator className="shrink-0" />
         <div className="flex min-h-0 flex-1 flex-col">

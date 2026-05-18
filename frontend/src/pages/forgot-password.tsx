@@ -41,15 +41,22 @@ export function ForgotPasswordPage() {
 
   return (
     <AppAuthMarketingLayout>
-      <Card className="w-full max-w-md rounded-2xl p-8 shadow-lg">
+      <Card className="w-full max-w-md min-h-[520px] rounded-3xl border border-white/20 bg-white/95 p-8 shadow-2xl backdrop-blur-md">
         <CardHeader className="space-y-2 p-0 pb-6">
+          <div className="mb-6 flex justify-center">
+            <img
+              src="/logo.png"
+              alt="Takeda"
+              className="h-14 w-auto object-contain"
+            />
+          </div>
           <CardTitle className="text-2xl">Forgot password</CardTitle>
           <CardDescription>
             Enter the email for your account. We will send a link to set a new password if the account
             exists.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4 p-0">
+        <CardContent className="flex h-full flex-col justify-between space-y-4 p-0">
           {submitted ? (
             <div className="space-y-4 text-sm text-muted-foreground">
               <p>
@@ -79,11 +86,15 @@ export function ForgotPasswordPage() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
+              <Button
+                type="submit"
+                className="w-full bg-red-700 text-white hover:bg-red-800"
+                disabled={isSubmitting}
+              >
                 {isSubmitting ? "Sending…" : "Send reset link"}
               </Button>
               <p className="text-center text-sm">
-                <Link to={returnTo} className="text-primary underline-offset-2 hover:underline">
+                <Link to={returnTo} className="text-red-700 underline-offset-2 hover:underline">
                   Back to sign in
                 </Link>
               </p>

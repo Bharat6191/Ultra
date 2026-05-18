@@ -174,8 +174,15 @@ export function AppLoginPage() {
 
   return (
     <AppAuthMarketingLayout>
-      <Card className="w-full max-w-md rounded-2xl p-8 shadow-lg">
+      <Card className="w-full max-w-md min-h-[520px] rounded-3xl border border-white/20 bg-white/95 p-8 shadow-2xl backdrop-blur-md">
         <CardHeader className="space-y-2 p-0 pb-6">
+          <div className="mb-6 flex justify-center">
+            <img
+              src="/logo.png"
+              alt="Takeda"
+              className="h-14 w-auto object-contain"
+            />
+          </div>
           <CardTitle className="text-2xl">{step === "otp" ? "Authenticator code" : "Welcome back"}</CardTitle>
           <CardDescription>
             {step === "otp"
@@ -213,7 +220,7 @@ export function AppLoginPage() {
                   <Label htmlFor="password">Password</Label>
                   <Link
                     to="/forgot-password"
-                    className="text-xs text-primary underline-offset-2 hover:underline"
+                    className="text-xs text-red-700 underline-offset-2 hover:underline"
                     tabIndex={-1}
                   >
                     Forgot password?
@@ -244,7 +251,11 @@ export function AppLoginPage() {
                 </div>
               ) : null}
 
-              <Button type="submit" disabled={isSubmitting} className="w-full">
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-red-700 text-white hover:bg-red-800"
+              >
                 {isSubmitting ? "Logging in…" : "Login"}
               </Button>
             </form>
@@ -262,7 +273,11 @@ export function AppLoginPage() {
                   required
                 />
               </div>
-              <Button type="submit" disabled={isSubmitting} className="w-full">
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-red-700 text-white hover:bg-red-800"
+              >
                 {isSubmitting ? "Verifying…" : "Continue"}
               </Button>
               <Button

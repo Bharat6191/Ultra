@@ -87,7 +87,10 @@ export function ResetPasswordPage() {
             <CardDescription>This page needs a valid reset token from your email.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 p-0 text-sm text-muted-foreground">
-            <Button asChild className="w-full">
+            <Button
+              asChild
+              className="w-full bg-red-700 text-white hover:bg-red-800"
+            >
               <Link to={forgotHref}>Request a new reset link</Link>
             </Button>
             <p className="text-center">
@@ -114,7 +117,10 @@ export function ResetPasswordPage() {
             <CardDescription>You can sign in with your new password.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 p-0">
-            <Button asChild className="w-full">
+            <Button
+              asChild
+              className="w-full bg-red-700 text-white hover:bg-red-800"
+            >
               <Link to={backLogin}>Continue to sign in</Link>
             </Button>
             {backLogin !== "/login" ? (
@@ -172,11 +178,18 @@ export function ResetPasswordPage() {
                 required
               />
             </div>
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              className="w-full bg-red-700 text-white hover:bg-red-800"
+              disabled={isSubmitting}
+            >
               {isSubmitting ? "Saving…" : "Update password"}
             </Button>
             <p className="text-center text-sm text-muted-foreground">
-              <Link to={backLogin} className="text-primary underline-offset-2 hover:underline">
+              <Link
+                to={backLogin}
+                className="text-red-700 underline-offset-2 hover:text-red-800 hover:underline"
+              >
                 Back to sign in
               </Link>
             </p>
