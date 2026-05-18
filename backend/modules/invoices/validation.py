@@ -76,6 +76,24 @@ def work_order_ex_vat_cap(db: Session, wo: WorkOrder) -> Decimal:
     return _q2(_dec(tot or 0))
 
 
+def prior_invoiced_ex_vat_for_work_order_item(
+    db: Session, *, work_order_item_id: int, exclude_invoice_id: int | None
+) -> Decimal:
+    stmt = (
+        select(func.coalesce(func.sum(InvoiceLine.amount), 0))
+        .select_from(InvoiceLine)
+        .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
+        .where(
+            InvoiceLine.work_order_item_id == int(work_order_item_id),
+            Invoice.status.in_(STATUSES_COUNTING_TOWARD_WO_VALUE_CAP),
+        )
+    )
+    if exclude_invoice_id is not None:
+        stmt = stmt.where(Invoice.id != int(exclude_invoice_id))
+    row = db.scalar(stmt)
+    return _q2(_dec(row or 0))
+
+
 def prior_invoiced_ex_vat_for_work_order(
     db: Session, *, work_order_id: int, exclude_invoice_id: int | None
 ) -> Decimal:
@@ -102,7 +120,7 @@ def raise_if_new_invoice_breaches_work_order_caps(
     exclude_invoice_id: int | None,
     item_amounts: list[tuple[int, Decimal]],
 ) -> None:
-    """Reject create when ex-VAT totals would exceed the approved work order value (strict, no tolerance)."""
+    """Reject create when ex-VAT totals would exceed remaining approved value (strict, no tolerance)."""
     by_wo: dict[int, Decimal] = defaultdict(Decimal)
     for item_id, amt in item_amounts:
         item = db.get(WorkOrderItem, int(item_id))
@@ -111,6 +129,17 @@ def raise_if_new_invoice_breaches_work_order_caps(
         wo = db.get(WorkOrder, int(item.work_order_id))
         if wo is None or str(wo.status) != "active":
             continue
+        planned_line = _q2(_dec(item.taxable_value))
+        if planned_line > 0:
+            prev_line = prior_invoiced_ex_vat_for_work_order_item(
+                db, work_order_item_id=int(item.id), exclude_invoice_id=exclude_invoice_id
+            )
+            pending_line = _q2(planned_line - prev_line)
+            if _q2(amt) > pending_line:
+                raise ConflictError(
+                    f"Invoice amount for work order line exceeds the remaining approved value "
+                    f"({pending_line} ex. tax pending; line total {planned_line} ex. tax)."
+                )
         by_wo[int(wo.id)] += _q2(amt)
     for wid, add_amt in by_wo.items():
         wo_row = db.get(WorkOrder, int(wid))
@@ -120,11 +149,41 @@ def raise_if_new_invoice_breaches_work_order_caps(
         prev = prior_invoiced_ex_vat_for_work_order(
             db, work_order_id=int(wid), exclude_invoice_id=exclude_invoice_id
         )
-        if _q2(prev + add_amt) > _q2(cap):
+        pending_wo = _q2(cap - prev)
+        if _q2(add_amt) > pending_wo:
             raise ConflictError(
-                f"Cumulative invoice amounts for work order {wo_row.work_order_number} would exceed "
-                f"the approved work order value ({_q2(cap)} ex. tax; already invoiced {_q2(prev)} ex. tax)."
+                f"Invoice amount for work order {wo_row.work_order_number} exceeds the remaining approved "
+                f"value ({pending_wo} ex. tax pending; work order total {cap} ex. tax)."
             )
+
+
+def invoice_within_pending_limits(db: Session, invoice: Invoice) -> bool:
+    """True when this invoice's ex-VAT amounts fit within remaining WO and line budgets."""
+    wo_add: dict[int, Decimal] = defaultdict(Decimal)
+    for line in invoice.lines or []:
+        item = db.get(WorkOrderItem, int(line.work_order_item_id))
+        if item is None:
+            return False
+        amt = _q2(_dec(line.amount))
+        planned_line = _q2(_dec(item.taxable_value))
+        if planned_line > 0:
+            prev_line = prior_invoiced_ex_vat_for_work_order_item(
+                db, work_order_item_id=int(item.id), exclude_invoice_id=int(invoice.id)
+            )
+            if _q2(prev_line + amt) > planned_line:
+                return False
+        wo_add[int(item.work_order_id)] += amt
+    if len(wo_add) != 1:
+        return False
+    wid = next(iter(wo_add.keys()))
+    wo_row = db.get(WorkOrder, int(wid))
+    if wo_row is None:
+        return False
+    cap = work_order_ex_vat_cap(db, wo_row)
+    prev = prior_invoiced_ex_vat_for_work_order(
+        db, work_order_id=int(wid), exclude_invoice_id=int(invoice.id)
+    )
+    return _q2(prev + wo_add[wid]) <= cap
 
 
 @dataclass(frozen=True)

@@ -10,6 +10,21 @@ from typing import Any
 
 INVOICEABLE_WORK_ORDER_STATUS: str = "active"
 
+SINGLE_WORK_ORDER_PER_INVOICE_MSG: str = (
+    "An invoice must include line items from exactly one work order. "
+    "Create a separate invoice for each work order."
+)
+
+
+def assert_single_work_order_for_invoice(*, work_order_ids: set[int]) -> int:
+    """Return the sole work order id; raise if zero or multiple."""
+    from modules.errors import ConflictError
+
+    ids = {int(x) for x in work_order_ids if int(x) > 0}
+    if len(ids) != 1:
+        raise ConflictError(SINGLE_WORK_ORDER_PER_INVOICE_MSG)
+    return next(iter(ids))
+
 
 def is_work_order_invoiceable(*, status: str | None, is_active: bool | None = True) -> bool:
     s = (status or "").strip().lower()

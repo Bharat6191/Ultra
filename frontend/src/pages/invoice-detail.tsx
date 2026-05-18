@@ -59,40 +59,40 @@ type InvoiceAuditEntry = {
   metadata?: any
 }
 
-function invoiceStatusVariant(status: string): React.ComponentProps<typeof Badge>["variant"] {
-  switch (String(status || "").toLowerCase()) {
-    case "draft":
-      return "secondary"
-    case "submitted":
-      return "outline"
-    case "pending_exception_approval":
-      return "warning"
-    case "blocked":
-      return "destructive"
-    case "approved":
-      return "success"
-    case "rejected":
-      return "destructive"
-    case "paid":
-      return "success"
-    default:
-      return "outline"
+/** Match header action buttons (h-10, border, background). */
+const HEADER_STATUS_BADGE_BASE =
+  "h-10 min-h-10 rounded-xl border px-4 text-sm font-medium capitalize shadow-sm"
+
+function headerStatusBadgeClass(
+  kind: "invoice" | "validation",
+  status: string,
+): string {
+  const s = String(status || "").toLowerCase()
+  if (kind === "validation" && s === "pass") {
+    return `${HEADER_STATUS_BADGE_BASE} border-emerald-200/90 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100`
   }
+  if (kind === "validation" && s === "warn") {
+    return `${HEADER_STATUS_BADGE_BASE} border-amber-200/90 bg-amber-50 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-50`
+  }
+  if (kind === "validation" && (s === "fail" || s === "blocked")) {
+    return `${HEADER_STATUS_BADGE_BASE} border-destructive/30 bg-destructive/10 text-destructive`
+  }
+  if (kind === "invoice" && s === "approved") {
+    return `${HEADER_STATUS_BADGE_BASE} border-emerald-200/90 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100`
+  }
+  if (kind === "invoice" && (s === "blocked" || s === "rejected")) {
+    return `${HEADER_STATUS_BADGE_BASE} border-destructive/30 bg-destructive/10 text-destructive`
+  }
+  if (kind === "invoice" && s === "pending_exception_approval") {
+    return `${HEADER_STATUS_BADGE_BASE} border-amber-200/90 bg-amber-50 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-50`
+  }
+  return `${HEADER_STATUS_BADGE_BASE} border-border bg-background text-foreground`
 }
 
-function validationVariant(status: string): React.ComponentProps<typeof Badge>["variant"] {
-  switch (String(status || "").toLowerCase()) {
-    case "pass":
-      return "success"
-    case "warn":
-      return "warning"
-    case "fail":
-      return "destructive"
-    case "blocked":
-      return "destructive"
-    default:
-      return "outline"
-  }
+function formatStatusLabel(status: string): string {
+  return String(status || "")
+    .replace(/_/g, " ")
+    .trim()
 }
 
 function issueSeverityVariant(sev: string): React.ComponentProps<typeof Badge>["variant"] {
@@ -118,7 +118,6 @@ export function InvoiceDetailPage() {
   const [audit, setAudit] = React.useState<InvoiceAuditEntry[]>([])
 
   const canSubmit = hasPermission("invoices.submit")
-  const canValidate = hasPermission("invoices.validate")
   const canUpdate = hasPermission("invoices.update")
 
   const [file, setFile] = React.useState<File | null>(null)
@@ -152,20 +151,6 @@ export function InvoiceDetailPage() {
       await load()
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Submit failed")
-    } finally {
-      setActing(false)
-    }
-  }
-
-  async function validate() {
-    if (!row) return
-    setActing(true)
-    try {
-      await postJson(`/invoices/${row.id}/validate`, {})
-      toast.success("Validated")
-      await load()
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Validate failed")
     } finally {
       setActing(false)
     }
@@ -280,26 +265,28 @@ export function InvoiceDetailPage() {
             Contractor #{row.contractor_id} · Plant #{row.org_unit_id}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={invoiceStatusVariant(row.status)}>{row.status}</Badge>
-          {row.validation_status ? <Badge variant={validationVariant(row.validation_status)}>{row.validation_status}</Badge> : null}
-          <Button asChild size="sm" variant="outline">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Badge variant="outline" className={headerStatusBadgeClass("invoice", row.status)}>
+            {formatStatusLabel(row.status)}
+          </Badge>
+          {row.validation_status ? (
+            <Badge variant="outline" className={headerStatusBadgeClass("validation", row.validation_status)}>
+              {formatStatusLabel(row.validation_status)}
+            </Badge>
+          ) : null}
+          <Button asChild variant="outline" size="default" className="min-h-10 bg-background shadow-sm">
             <Link to="/dashboard/invoices">Back</Link>
           </Button>
-          <Button asChild size="sm" variant="outline">
-            <InvoicePdfDownloadButton
-              data={pdfData}
-              filename={`${String(row.invoice_number ?? "invoice").replace(/\s+/g, "_")}.pdf`}
-            />
-          </Button>
+          <InvoicePdfDownloadButton
+            data={pdfData}
+            filename={`${String(row.invoice_number ?? "invoice").replace(/\s+/g, "_")}.pdf`}
+            variant="outline"
+            size="default"
+            className="min-h-10 bg-background shadow-sm"
+          />
           {canSubmit && row.status === "draft" ? (
-            <Button size="sm" onClick={() => void submit()} disabled={acting}>
+            <Button size="default" onClick={() => void submit()} disabled={acting}>
               Submit
-            </Button>
-          ) : null}
-          {canValidate ? (
-            <Button size="sm" variant="outline" onClick={() => void validate()} disabled={acting}>
-              Validate
             </Button>
           ) : null}
           {canSubmit &&
@@ -307,7 +294,7 @@ export function InvoiceDetailPage() {
           ["blocked", "fail"].includes(row.validation_status) &&
           row.status === "blocked" &&
           !row.approval_request_id ? (
-            <Button size="sm" variant="destructive" onClick={() => void requestVariance()} disabled={acting}>
+            <Button size="default" variant="destructive" onClick={() => void requestVariance()} disabled={acting}>
               Request variance approval
             </Button>
           ) : null}
@@ -319,7 +306,7 @@ export function InvoiceDetailPage() {
           <CardTitle className="text-sm font-medium">Lines</CardTitle>
           <CardDescription>
             Each line is checked against its approved work order line total and the work order total (ex. tax). Tint
-            reflects validation posture; badges show per-line result after validation runs.
+            reflects validation posture; badges show per-line result after automatic validation on create.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">

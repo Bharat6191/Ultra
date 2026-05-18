@@ -164,8 +164,6 @@ function lineCommercialGate(
 export function InvoiceCreatePage() {
   const navigate = useNavigate()
   const canCreate = hasPermission("invoices.create")
-  const canValidate = hasPermission("invoices.validate")
-
   const [creating, setCreating] = React.useState(false)
   const [loadingPreflight, setLoadingPreflight] = React.useState(false)
   const [contractors, setContractors] = React.useState<{ id: number; name: string }[]>([])
@@ -413,7 +411,12 @@ export function InvoiceCreatePage() {
 
   const { count: draftLineCount, gross: draftGross } = totalsPreview()
 
-  const lineDetailColSpan = 11
+  const lineDetailColSpan = 10
+
+  const lockedWorkOrderNumber = React.useMemo(() => {
+    if (selectedWoId === "") return null
+    return workOrdersInScope.find((wo) => wo.id === selectedWoId)?.work_order_number ?? null
+  }, [selectedWoId, workOrdersInScope])
 
   const contractorName = React.useMemo(() => {
     const id = Number(form.contractor_id)
@@ -506,9 +509,18 @@ export function InvoiceCreatePage() {
         "No billable quantities: for WEIGHT lines the work order must have remaining billable qty (or approved qty). For PCS lines, enter invoice qty.",
       )
 
+    const woIds = new Set(selectedInvoiceLines.map((ln) => ln.work_order_id))
+    if (woIds.size !== 1) {
+      return toast.error("An invoice can only include line items from one work order.")
+    }
+
     setCreating(true)
     try {
-      const inv = await postJson<any>("/invoices", {
+      const inv = await postJson<{
+        id: number
+        status: string
+        validation_status?: string | null
+      }>("/invoices", {
         contractor_id: Number(form.contractor_id),
         org_unit_id: Number(form.org_unit_id),
         invoice_number: form.invoice_number.trim(),
@@ -516,11 +528,14 @@ export function InvoiceCreatePage() {
         lines,
       })
 
-      toast.success("Invoice created (draft)")
-
-      if (canValidate) {
-        await postJson(`/invoices/${inv.id}/submit`, {})
-        await postJson(`/invoices/${inv.id}/validate`, {})
+      if (inv.status === "approved") {
+        toast.success("Invoice created and approved (within work order pending balance)")
+      } else if (inv.status === "blocked" || inv.validation_status === "blocked") {
+        toast.warning("Invoice created but validation blocked — review issues on the detail page")
+      } else if (inv.status === "submitted" && inv.validation_status) {
+        toast.success(`Invoice created and validated (${inv.validation_status})`)
+      } else {
+        toast.success("Invoice created")
       }
       navigate(`/dashboard/invoices/${inv.id}`)
     } catch (e) {
@@ -545,7 +560,7 @@ export function InvoiceCreatePage() {
         <div className="min-w-0">
           <h2 className="text-base font-medium">New invoice</h2>
           <p className="text-sm text-muted-foreground">
-            Full-screen creation: select contractor + work orders, then enter invoice quantities with real-time preflight.
+            One invoice per work order: pick contractor and plant, select a single work order, then add line items.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -570,12 +585,14 @@ export function InvoiceCreatePage() {
               </>
             )}
           </Button>
-          <Button asChild variant="outline" disabled={!previewLines.length}>
-            <InvoicePdfDownloadButton
-              data={pdfData}
-              filename={`${(form.invoice_number || "invoice").replace(/\s+/g, "_")}.pdf`}
-            />
-          </Button>
+          <InvoicePdfDownloadButton
+            data={pdfData}
+            filename={`${(form.invoice_number || "invoice").replace(/\s+/g, "_")}.pdf`}
+            variant="outline"
+            size="default"
+            disabled={!previewLines.length}
+            className="min-h-10 bg-background shadow-sm"
+          />
           <Button onClick={() => void createInvoice()} disabled={creating || !preflight}>
             {creating ? "Creating…" : "Create draft"}
           </Button>
@@ -585,7 +602,7 @@ export function InvoiceCreatePage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Step 1 · Header</CardTitle>
-          <CardDescription>Select contractor first, then plant + work orders.</CardDescription>
+          <CardDescription>Select contractor first, then plant.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
@@ -641,7 +658,7 @@ export function InvoiceCreatePage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Step 2 · Work order</CardTitle>
           <CardDescription>
-            Select a work order, then add line items. Rates come from the approved work order.
+            Each invoice covers one work order only. Select the work order, then add its line items.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -662,7 +679,12 @@ export function InvoiceCreatePage() {
                   value={selectedWoId === "" ? "" : String(selectedWoId)}
                   onChange={(e) => {
                     const v = e.target.value ? Number(e.target.value) : ""
-                    setSelectedWoId(Number.isFinite(v as number) ? (v as number) : "")
+                    const nextId = Number.isFinite(v as number) ? (v as number) : ""
+                    if (nextId !== selectedWoId && selectedLineIds.size > 0) {
+                      setSelectedLineIds(new Set())
+                      setPendingItemId("")
+                    }
+                    setSelectedWoId(nextId)
                     setPendingItemId("")
                   }}
                 >
@@ -720,6 +742,12 @@ export function InvoiceCreatePage() {
               <Card className="min-w-0">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium">Step 3 · Invoice line items</CardTitle>
+                  {lockedWorkOrderNumber ? (
+                    <CardDescription>
+                      Work order{" "}
+                      <span className="font-mono font-semibold text-foreground">{lockedWorkOrderNumber}</span>
+                    </CardDescription>
+                  ) : null}
                 </CardHeader>
                 <CardContent className="p-0">
                   {selectedInvoiceLines.length === 0 ? (
@@ -731,7 +759,6 @@ export function InvoiceCreatePage() {
                           <TableHeader>
                             <TableRow className="bg-muted/50">
                               <TableHead className="w-[128px]">Value check</TableHead>
-                              <TableHead className="w-[120px]">Work order</TableHead>
                               <TableHead>Line item</TableHead>
                               <TableHead className="w-[88px] text-right">WT (kg)</TableHead>
                               <TableHead className="w-[56px]">Unit</TableHead>
@@ -797,7 +824,6 @@ export function InvoiceCreatePage() {
                                         </Badge>
                                       )}
                                     </TableCell>
-                                    <TableCell className="text-xs font-mono">{ln.work_order_number}</TableCell>
                                     <TableCell className="text-xs">
                                       <div className="flex flex-wrap items-center gap-1.5">
                                         <span className="font-medium">{ln.part_code ?? ln.job_type ?? "—"}</span>

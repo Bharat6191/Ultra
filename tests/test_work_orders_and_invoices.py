@@ -122,9 +122,9 @@ def test_work_order_create_and_invoice_validate(db):
         ),
         actor_user_id=actor,
     )
-    inv2 = InvoiceService(db).submit(int(inv.id), actor_user_id=actor)
-    validated = InvoiceService(db).validate(int(inv2.id), actor_user_id=actor)
-    assert validated.validation_status in ("pass", "warn", "fail", "blocked")
+    assert str(inv.status) == "approved"
+    assert inv.validation_status in ("pass", "warn")
+    assert inv.approved_at is not None
 
 
 def test_work_order_draft_update_replaces_lines(db):
@@ -321,3 +321,56 @@ def test_close_work_order_requires_full_completion(db):
     )
     closed = svc_w.close_active_work_order(int(wo2.id), actor_user_id=actor)
     assert str(closed.status) == "closed"
+
+
+def test_invoice_rejects_lines_from_multiple_work_orders(db):
+    actor = _first_user(db)
+    org = _first_plant(db)
+    contractor = _first_contractor(db)
+    pm = _first_part_master_for_org(db, int(org.id))
+
+    svc_w = WorkOrderService(db)
+    item_ids: list[int] = []
+    for title in ("WO-A", "WO-B"):
+        wo = svc_w.create(
+            WorkOrderCreate(
+                org_unit_id=int(org.id),
+                contractor_id=int(contractor.id),
+                title=title,
+                description=None,
+                items=[
+                    WorkOrderItemCreate(
+                        part_master_id=int(pm.id),
+                        progress_type="quantity",
+                        planned_quantity=Decimal("2"),
+                        planned_percentage=None,
+                        weight_per_piece=Decimal("1"),
+                        notes=None,
+                    )
+                ],
+            ),
+            actor_user_id=actor,
+        )
+        wo2 = svc_w.submit_for_approval(int(wo.id), actor_user_id=actor)
+        if str(wo2.status) == "pending_approval":
+            wo2 = svc_w.finalize_approval(
+                int(wo2.id), approver_user_id=actor, approval_request_id=wo2.approval_request_id
+            )
+        assert str(wo2.status) == "active"
+        item_ids.append(int(wo2.items[0].id))
+
+    inv_svc = InvoiceService(db)
+    with pytest.raises(ConflictError, match="exactly one work order"):
+        inv_svc.create(
+            InvoiceCreate(
+                contractor_id=int(contractor.id),
+                org_unit_id=int(org.id),
+                invoice_number=f"INV-MULTI-WO-{uuid.uuid4().hex[:8]}",
+                invoice_date=date.today(),
+                lines=[
+                    InvoiceLineCreate(work_order_item_id=item_ids[0], quantity=Decimal("1"), rate=None, notes=None),
+                    InvoiceLineCreate(work_order_item_id=item_ids[1], quantity=Decimal("1"), rate=None, notes=None),
+                ],
+            ),
+            actor_user_id=actor,
+        )

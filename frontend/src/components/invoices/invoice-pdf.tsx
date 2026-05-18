@@ -7,8 +7,12 @@ import {
   View,
 } from "@react-pdf/renderer"
 
+import type { VariantProps } from "class-variance-authority"
+
 import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
 import { invoicePreviewTotals } from "@/components/invoices/invoice-line-types"
+import { buttonVariants } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 export type InvoicePdfLine = InvoiceDisplayLine
 
@@ -204,18 +208,35 @@ export function InvoicePdfDownloadButton({
   data,
   filename,
   className,
+  variant = "outline",
+  size = "default",
+  disabled = false,
 }: {
   data: InvoicePdfData
   filename: string
   className?: string
+  variant?: VariantProps<typeof buttonVariants>["variant"]
+  size?: VariantProps<typeof buttonVariants>["size"]
+  disabled?: boolean
 }) {
+  const btnClass = cn(
+    buttonVariants({ variant, size }),
+    "no-underline",
+    disabled && "pointer-events-none opacity-50",
+    className,
+  )
+
+  if (disabled) {
+    return <span className={btnClass}>Download PDF</span>
+  }
+
   return (
-    <PDFDownloadLink document={<InvoicePdfDocument data={data} />} fileName={filename}>
-      {({ loading }) => (
-        <a className={className} href="#">
-          {loading ? "Preparing PDF…" : "Download PDF"}
-        </a>
-      )}
+    <PDFDownloadLink
+      document={<InvoicePdfDocument data={data} />}
+      fileName={filename}
+      className={btnClass}
+    >
+      {({ loading }) => (loading ? "Preparing PDF…" : "Download PDF")}
     </PDFDownloadLink>
   )
 }

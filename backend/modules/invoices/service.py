@@ -24,13 +24,16 @@ from modules.invoices.commercial_amount import invoice_line_ex_vat_amount
 from modules.invoices.validation import (
     InvoiceValidationEngine,
     STATUSES_COUNTING_TOWARD_WO_VALUE_CAP,
+    ValidationResult,
     invoice_tolerance_percentage,
+    invoice_within_pending_limits,
     prior_invoiced_ex_vat_for_work_order,
     raise_if_new_invoice_breaches_work_order_caps,
     work_order_ex_vat_cap,
 )
 from modules.invoices.wo_invoice_policy import (
     allow_manual_amount_override_from_snapshot,
+    assert_single_work_order_for_invoice,
     effective_billing_basis,
     is_work_order_invoiceable,
 )
@@ -149,8 +152,8 @@ class InvoiceService:
         self._db.add(inv)
         self._db.flush()
 
-        total = Decimal("0")
-        cap_checks: list[tuple[int, Decimal]] = []
+        resolved: list[tuple[InvoiceLineCreate, WorkOrderItem, WorkOrder]] = []
+        work_order_ids: set[int] = set()
         for ln in payload.lines:
             item = self._db.get(WorkOrderItem, int(ln.work_order_item_id))
             if item is None:
@@ -158,6 +161,14 @@ class InvoiceService:
             wo = self._db.get(WorkOrder, int(item.work_order_id))
             if wo is None:
                 raise ConflictError("Work order is missing for the selected item.")
+            work_order_ids.add(int(wo.id))
+            resolved.append((ln, item, wo))
+
+        assert_single_work_order_for_invoice(work_order_ids=work_order_ids)
+
+        total = Decimal("0")
+        cap_checks: list[tuple[int, Decimal]] = []
+        for ln, item, wo in resolved:
             if str(wo.status) != "active":
                 raise ConflictError("Invoices may only reference active work orders.")
             if int(wo.org_unit_id) != int(inv.org_unit_id):
@@ -212,8 +223,73 @@ class InvoiceService:
                 "org_unit_id": int(inv.org_unit_id),
             },
         )
+        if invoice_within_pending_limits(self._db, inv):
+            self._auto_submit_and_validate(inv, actor_user_id=actor_user_id)
         self._db.commit()
         return self.get(int(inv.id))
+
+    def _apply_validation_outcome(
+        self,
+        inv: Invoice,
+        result: ValidationResult,
+        *,
+        actor_user_id: int,
+        auto_approve_when_clean: bool,
+    ) -> None:
+        if result.status == "blocked":
+            inv.status = "blocked"
+        elif auto_approve_when_clean and result.status in ("pass", "warn"):
+            inv.status = "approved"
+            inv.approved_by = actor_user_id
+            inv.approved_at = _now_utc()
+        elif result.status in ("pass", "warn"):
+            inv.status = "submitted"
+        else:
+            inv.status = "submitted"
+
+    def _auto_submit_and_validate(self, inv: Invoice, *, actor_user_id: int) -> None:
+        """Submit + validate on create when amounts fit within pending WO / line budgets."""
+        inv.status = "submitted"
+        inv.submitted_by = actor_user_id
+        inv.submitted_at = _now_utc()
+        audit_helpers.write_audit(
+            self._db,
+            invoice_id=int(inv.id),
+            action=audit_helpers.ACTION_SUBMITTED,
+            actor_user_id=actor_user_id,
+            new_value={"status": "submitted", "auto": True},
+        )
+
+        engine = InvoiceValidationEngine(self._db)
+        result = engine.validate_and_persist(inv)
+        self._apply_validation_outcome(
+            inv, result, actor_user_id=actor_user_id, auto_approve_when_clean=True
+        )
+
+        audit_helpers.write_audit(
+            self._db,
+            invoice_id=int(inv.id),
+            action=audit_helpers.ACTION_VALIDATED,
+            actor_user_id=actor_user_id,
+            new_value={
+                "validation_engine_status": result.status,
+                "invoice_status": inv.status,
+                "validation_score": str(result.score),
+                "blockers": result.blocker_count,
+                "errors": result.error_count,
+                "warnings": result.warning_count,
+                "auto": True,
+            },
+        )
+        if inv.status == "approved":
+            audit_helpers.write_audit(
+                self._db,
+                invoice_id=int(inv.id),
+                action=audit_helpers.ACTION_APPROVED,
+                actor_user_id=actor_user_id,
+                new_value={"status": "approved", "auto": True},
+            )
+        self._recompute_contractor_compliance(contractor_id=int(inv.contractor_id))
 
     def submit(self, invoice_id: int, *, actor_user_id: int) -> Invoice:
         inv = self.get(invoice_id)
@@ -241,13 +317,13 @@ class InvoiceService:
 
         engine = InvoiceValidationEngine(self._db)
         result = engine.validate_and_persist(inv)
-
-        if result.status in ("blocked", "fail"):
-            inv.status = "blocked"
-        elif result.status == "warn":
-            inv.status = "submitted"
-        else:
-            inv.status = "submitted"
+        within_pending = invoice_within_pending_limits(self._db, inv)
+        self._apply_validation_outcome(
+            inv,
+            result,
+            actor_user_id=actor_user_id,
+            auto_approve_when_clean=within_pending,
+        )
 
         audit_helpers.write_audit(
             self._db,
@@ -261,8 +337,17 @@ class InvoiceService:
                 "blockers": result.blocker_count,
                 "errors": result.error_count,
                 "warnings": result.warning_count,
+                "within_pending_limits": within_pending,
             },
         )
+        if inv.status == "approved":
+            audit_helpers.write_audit(
+                self._db,
+                invoice_id=int(inv.id),
+                action=audit_helpers.ACTION_APPROVED,
+                actor_user_id=actor_user_id,
+                new_value={"status": "approved", "within_pending_limits": within_pending},
+            )
 
         self._recompute_contractor_compliance(contractor_id=int(inv.contractor_id))
         self._db.commit()
