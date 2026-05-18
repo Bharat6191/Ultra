@@ -6,7 +6,8 @@ import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -48,11 +49,18 @@ type BillableLine = {
   remaining_invoiceable_value: number | null
   completion_vs_billing_pct_hint: number | null
   near_tolerance_warning: boolean
+  approved_invoiced_value?: number
 }
 
 type PreflightResp = {
   tolerance_pct: number
   lines: BillableLine[]
+  work_order_id?: number
+  work_order_number?: string
+  approved_value_total?: number
+  approved_invoiced_ex_tax_total?: number
+  committed_invoiced_ex_tax_total?: number
+  remaining_invoiceable_value?: number
 }
 
 type DraftLineQty = {
@@ -65,6 +73,9 @@ function money(n: number): string {
   if (!Number.isFinite(n)) return "—"
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
+
+const selectClass =
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
 
 function q2Money(n: number): number {
   const sign = n < 0 ? -1 : 1
@@ -174,6 +185,7 @@ export function InvoiceCreatePage() {
   const [preflight, setPreflight] = React.useState<PreflightResp | null>(null)
 
   const [lineInputs, setLineInputs] = React.useState<Record<number, DraftLineQty>>({})
+  const [extraAmountExVat, setExtraAmountExVat] = React.useState("")
 
   const [form, setForm] = React.useState({
     contractor_id: "",
@@ -250,6 +262,7 @@ export function InvoiceCreatePage() {
         contractor_id: form.contractor_id,
         org_unit_id: form.org_unit_id,
       })
+      if (selectedWoId !== "") q.set("work_order_ids", String(selectedWoId))
       const data = await getJson<PreflightResp>(`/invoices/preflight-billables?${q}`)
       setPreflight(data)
       setLineInputs((prev) => {
@@ -265,13 +278,13 @@ export function InvoiceCreatePage() {
     } finally {
       setLoadingPreflight(false)
     }
-  }, [form.contractor_id, form.org_unit_id])
+  }, [form.contractor_id, form.org_unit_id, selectedWoId])
 
   React.useEffect(() => {
     if (!form.contractor_id || !form.org_unit_id) return
     const t = setTimeout(() => void loadPreflight(), 280)
     return () => clearTimeout(t)
-  }, [form.contractor_id, form.org_unit_id, loadPreflight])
+  }, [form.contractor_id, form.org_unit_id, selectedWoId, loadPreflight])
 
   const selectedLineIdsKey = React.useMemo(() => [...selectedLineIds].sort((a, b) => a - b).join(","), [selectedLineIds])
 
@@ -393,8 +406,16 @@ export function InvoiceCreatePage() {
     setPendingItemId("")
   }
 
+  const extraExVatNum = React.useMemo(() => {
+    const raw = extraAmountExVat.trim().replace(/,/g, "")
+    if (!raw) return 0
+    const n = Number(raw)
+    return Number.isFinite(n) && n >= 0 ? q2Money(n) : 0
+  }, [extraAmountExVat])
+
   function totalsPreview() {
-    if (!preflight) return { count: 0, gross: 0 }
+    if (!preflight) return { count: 0, exVat: 0, gross: 0 }
+    let exVat = 0
     let gross = 0
     let count = 0
     for (const ln of selectedInvoiceLines) {
@@ -404,14 +425,24 @@ export function InvoiceCreatePage() {
       count += 1
       const base = lineTaxableExVat(ln, q)
       if (base === null) continue
+      exVat += base
       gross += base
     }
-    return { count, gross }
+    exVat = q2Money(exVat + extraExVatNum)
+    gross = q2Money(gross + extraExVatNum)
+    return { count, exVat, gross }
   }
 
-  const { count: draftLineCount, gross: draftGross } = totalsPreview()
+  const { count: draftLineCount, exVat: draftExVat } = totalsPreview()
 
-  const lineDetailColSpan = 10
+  const woDraftWithExtra = React.useMemo(() => {
+    const m = new Map(woDraftTaxSum)
+    if (selectedWoId !== "") {
+      const wid = Number(selectedWoId)
+      m.set(wid, q2Money((m.get(wid) ?? 0) + extraExVatNum))
+    }
+    return m
+  }, [woDraftTaxSum, selectedWoId, extraExVatNum])
 
   const lockedWorkOrderNumber = React.useMemo(() => {
     if (selectedWoId === "") return null
@@ -526,10 +557,11 @@ export function InvoiceCreatePage() {
         invoice_number: form.invoice_number.trim(),
         invoice_date: form.invoice_date,
         lines,
+        extra_amount_ex_vat: String(extraExVatNum),
       })
 
-      if (inv.status === "approved") {
-        toast.success("Invoice created and approved (within work order pending balance)")
+      if (inv.validation_status === "pass" || inv.validation_status === "warn") {
+        toast.success("Invoice created and passed validation")
       } else if (inv.status === "blocked" || inv.validation_status === "blocked") {
         toast.warning("Invoice created but validation blocked — review issues on the detail page")
       } else if (inv.status === "submitted" && inv.validation_status) {
@@ -555,21 +587,17 @@ export function InvoiceCreatePage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-base font-medium">New invoice</h2>
-          <p className="text-sm text-muted-foreground">
-            One invoice per work order: pick contractor and plant, select a single work order, then add line items.
-          </p>
-        </div>
+    <div className="w-full min-w-0 space-y-5 pb-24">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold tracking-tight">New invoice</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" size="sm">
             <Link to="/dashboard/invoices">Back</Link>
           </Button>
           <Button
             type="button"
             variant="outline"
+            size="sm"
             onClick={() => setShowInvoicePreview((v) => !v)}
             className="gap-1.5"
           >
@@ -581,7 +609,7 @@ export function InvoiceCreatePage() {
             ) : (
               <>
                 <Eye className="size-4" />
-                Preview invoice
+                Preview
               </>
             )}
           </Button>
@@ -589,177 +617,189 @@ export function InvoiceCreatePage() {
             data={pdfData}
             filename={`${(form.invoice_number || "invoice").replace(/\s+/g, "_")}.pdf`}
             variant="outline"
-            size="default"
+            size="sm"
             disabled={!previewLines.length}
-            className="min-h-10 bg-background shadow-sm"
           />
-          <Button onClick={() => void createInvoice()} disabled={creating || !preflight}>
-            {creating ? "Creating…" : "Create draft"}
+          <Button size="sm" onClick={() => void createInvoice()} disabled={creating || !preflight}>
+            {creating ? "Creating…" : "Create invoice"}
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Step 1 · Header</CardTitle>
-          <CardDescription>Select contractor first, then plant.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          <div className="grid gap-1.5">
-            <Label showRequired>Contractor</Label>
-            <select
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none"
+      <Card className="border-border/80 shadow-sm">
+        <CardContent className="space-y-5 p-5 sm:p-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-1.5">
+              <Label showRequired>Contractor</Label>
+              <select
+                className={selectClass}
               value={form.contractor_id}
               onChange={(e) => setForm((f) => ({ ...f, contractor_id: e.target.value }))}
             >
-              <option value="">Pick contractor…</option>
+                <option value="">Select…</option>
               {contractors.map((c) => (
                 <option key={c.id} value={String(c.id)}>
                   {c.name}
                 </option>
               ))}
-            </select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label showRequired>Plant</Label>
-            <select
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none"
-              value={form.org_unit_id}
-              onChange={(e) => setForm((f) => ({ ...f, org_unit_id: e.target.value }))}
-              disabled={!form.contractor_id}
-            >
-              <option value="">Pick plant…</option>
+              </select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label showRequired>Plant</Label>
+              <select
+                className={selectClass}
+                value={form.org_unit_id}
+                onChange={(e) => setForm((f) => ({ ...f, org_unit_id: e.target.value }))}
+                disabled={!form.contractor_id}
+              >
+                <option value="">Select…</option>
               {plants.map((p) => (
                 <option key={p.id} value={String(p.id)}>
                   {p.name}
                 </option>
               ))}
-            </select>
+              </select>
+            </div>
+            <div className="grid gap-1.5">
+                <Label showRequired>Invoice #</Label>
+              <Input
+                value={form.invoice_number}
+                onChange={(e) => {
+                  invoiceNumberTouchedRef.current = true
+                  setForm((f) => ({ ...f, invoice_number: e.target.value }))
+                }}
+                placeholder="INV000001"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label showRequired>Date</Label>
+              <Input type="date" value={form.invoice_date} onChange={(e) => setForm((f) => ({ ...f, invoice_date: e.target.value }))} />
+            </div>
           </div>
-          <div className="grid gap-1.5">
-            <Label showRequired>Invoice number</Label>
-            <Input
-              value={form.invoice_number}
-              onChange={(e) => {
-                invoiceNumberTouchedRef.current = true
-                setForm((f) => ({ ...f, invoice_number: e.target.value }))
-              }}
-              placeholder="INV000001"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label showRequired>Invoice date</Label>
-            <Input type="date" value={form.invoice_date} onChange={(e) => setForm((f) => ({ ...f, invoice_date: e.target.value }))} />
-          </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Step 2 · Work order</CardTitle>
-          <CardDescription>
-            Each invoice covers one work order only. Select the work order, then add its line items.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          {!form.contractor_id ? (
-            <div className="sm:col-span-2 text-xs text-muted-foreground">Select contractor first.</div>
-          ) : !form.org_unit_id ? (
-            <div className="sm:col-span-2 text-xs text-muted-foreground">Select plant to load billable work orders.</div>
-          ) : !preflight ? (
-            <div className="sm:col-span-2 text-xs text-muted-foreground">Loading billable work orders…</div>
-          ) : workOrdersInScope.length === 0 ? (
-            <div className="sm:col-span-2 text-xs text-muted-foreground">No active billables for this contractor in this plant.</div>
-          ) : (
+          {form.contractor_id && form.org_unit_id ? (
             <>
-              <div className="grid gap-1.5">
-                <Label showRequired>Work order</Label>
-                <select
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none"
-                  value={selectedWoId === "" ? "" : String(selectedWoId)}
-                  onChange={(e) => {
-                    const v = e.target.value ? Number(e.target.value) : ""
-                    const nextId = Number.isFinite(v as number) ? (v as number) : ""
-                    if (nextId !== selectedWoId && selectedLineIds.size > 0) {
-                      setSelectedLineIds(new Set())
-                      setPendingItemId("")
-                    }
-                    setSelectedWoId(nextId)
-                    setPendingItemId("")
-                  }}
-                >
-                  <option value="">Pick work order…</option>
-                  {workOrdersInScope.map((wo) => (
-                    <option key={wo.id} value={String(wo.id)}>
-                      {wo.work_order_number}
-                    </option>
-                  ))}
-                </select>
+              <Separator />
+              <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                {!preflight ? (
+                  <p className="text-sm text-muted-foreground sm:col-span-3">
+                    {loadingPreflight ? "Updating…" : "Loading work orders…"}
+                  </p>
+                ) : workOrdersInScope.length === 0 ? (
+                  <p className="text-sm text-muted-foreground sm:col-span-3">No billable work orders.</p>
+                ) : (
+                  <>
+                    <div className="grid gap-1.5">
+                      <Label showRequired>Work order</Label>
+                      <select
+                        className={selectClass}
+                        value={selectedWoId === "" ? "" : String(selectedWoId)}
+                        onChange={(e) => {
+                          const v = e.target.value ? Number(e.target.value) : ""
+                          const nextId = Number.isFinite(v as number) ? (v as number) : ""
+                          if (nextId !== selectedWoId && selectedLineIds.size > 0) {
+                            setSelectedLineIds(new Set())
+                            setPendingItemId("")
+                          }
+                          setSelectedWoId(nextId)
+                          setPendingItemId("")
+                        }}
+                      >
+                        <option value="">Select…</option>
+                        {workOrdersInScope.map((wo) => (
+                          <option key={wo.id} value={String(wo.id)}>
+                            {wo.work_order_number}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label>Line to add</Label>
+                      <select
+                        className={selectClass}
+                        value={pendingItemId === "" ? "" : String(pendingItemId)}
+                        onChange={(e) => {
+                          const v = e.target.value ? Number(e.target.value) : ""
+                          setPendingItemId(Number.isFinite(v as number) ? (v as number) : "")
+                        }}
+                        disabled={selectedWoId === ""}
+                      >
+                        <option value="">{selectedWoId === "" ? "Select work order" : "Select line…"}</option>
+                        {selectedWoLines
+                          .filter((l) => !selectedLineIds.has(l.work_order_item_id))
+                          .map((l) => (
+                            <option key={l.work_order_item_id} value={String(l.work_order_item_id)}>
+                              {l.part_code ?? l.job_type ?? "—"} · {l.unit_type ?? l.unit ?? "—"}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <Button type="button" className="sm:mb-0.5" disabled={pendingItemId === ""} onClick={() => addPendingLine()}>
+                      Add line
+                    </Button>
+                  </>
+                )}
               </div>
-              <div className="grid gap-1.5">
-                <Label showRequired>Line item</Label>
-                <div className="flex gap-2">
-                  <select
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none"
-                    value={pendingItemId === "" ? "" : String(pendingItemId)}
-                    onChange={(e) => {
-                      const v = e.target.value ? Number(e.target.value) : ""
-                      setPendingItemId(Number.isFinite(v as number) ? (v as number) : "")
-                    }}
-                    disabled={selectedWoId === ""}
-                  >
-                    <option value="">{selectedWoId === "" ? "Pick work order first…" : "Pick line item…"}</option>
-                    {selectedWoLines
-                      .filter((l) => !selectedLineIds.has(l.work_order_item_id))
-                      .map((l) => (
-                        <option key={l.work_order_item_id} value={String(l.work_order_item_id)}>
-                          {l.part_code ?? l.job_type ?? "—"} · {l.unit_type ?? l.unit ?? "—"}
-                        </option>
-                      ))}
-                  </select>
-                  <Button type="button" variant="outline" disabled={pendingItemId === ""} onClick={() => addPendingLine()}>
-                    Add
-                  </Button>
+
+              {preflight?.work_order_id != null && preflight.approved_value_total != null ? (
+                <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-border/60 bg-muted/25 px-4 py-3 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Approved </span>
+                    <span className="font-medium tabular-nums">{money(preflight.approved_value_total ?? 0)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Invoiced </span>
+                    <span className="font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
+                      {money(preflight.approved_invoiced_ex_tax_total ?? 0)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Committed </span>
+                    <span className="font-medium tabular-nums">{money(preflight.committed_invoiced_ex_tax_total ?? 0)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Remaining </span>
+                    <span className="font-semibold tabular-nums">{money(preflight.remaining_invoiceable_value ?? 0)}</span>
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </>
-          )}
+          ) : null}
         </CardContent>
       </Card>
-
-      {loadingPreflight ? <div className="text-xs text-muted-foreground">Refreshing billables…</div> : null}
 
       {preflight && preflight.lines.length > 0 ? (
         <>
           <div
             className={
               showInvoicePreview
-                ? "grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)] items-start"
+                ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,480px)] items-start"
                 : "grid gap-4 items-start"
             }
           >
-            <div className="min-w-0 space-y-3">
-              <Card className="min-w-0">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Step 3 · Invoice line items</CardTitle>
+            <div className="min-w-0">
+              <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
+                <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/20 px-5 py-3">
+                  <CardTitle className="text-sm font-medium">Line items</CardTitle>
                   {lockedWorkOrderNumber ? (
-                    <CardDescription>
-                      Work order{" "}
-                      <span className="font-mono font-semibold text-foreground">{lockedWorkOrderNumber}</span>
-                    </CardDescription>
+                    <Badge variant="secondary" className="font-mono font-normal">
+                      {lockedWorkOrderNumber}
+                    </Badge>
                   ) : null}
                 </CardHeader>
                 <CardContent className="p-0">
                   {selectedInvoiceLines.length === 0 ? (
-                    <div className="px-6 py-10 text-sm text-muted-foreground">Pick a work order and add at least one line item.</div>
+                    <p className="px-5 py-12 text-center text-sm text-muted-foreground">Add at least one line above.</p>
                   ) : (
                     <div className="border-t">
                       <div className="w-full overflow-x-auto">
                         <Table>
                           <TableHeader>
                             <TableRow className="bg-muted/50">
-                              <TableHead className="w-[128px]">Value check</TableHead>
+                              <TableHead className="w-[72px]">Status</TableHead>
                               <TableHead>Line item</TableHead>
+                              <TableHead className="text-right text-xs">Invoiced</TableHead>
+                              <TableHead className="min-w-[5.5rem] text-right text-xs">Remaining</TableHead>
                               <TableHead className="w-[88px] text-right">WT (kg)</TableHead>
                               <TableHead className="w-[56px]">Unit</TableHead>
                               <TableHead className="min-w-[88px] text-right">Unit rate</TableHead>
@@ -795,10 +835,13 @@ export function InvoiceCreatePage() {
                                     <div className="text-[10px] text-muted-foreground">per unit</div>
                                   </div>
                                 )
+                              const lineRemaining = q2Money(
+                                Math.max(0, approvedLineCapExVat(ln) - (ln.approved_invoiced_value ?? 0)),
+                              )
                               const gate = lineCommercialGate(
                                 ln,
                                 baseEx,
-                                woDraftTaxSum,
+                                woDraftWithExtra,
                                 woCommercialSums.woCapSum,
                                 woCommercialSums.woPriorSum,
                               )
@@ -807,16 +850,14 @@ export function InvoiceCreatePage() {
                                   <TableRow>
                                     <TableCell className="align-middle">
                                       {gate === "pass" ? (
-                                        <Badge variant="success" className="font-normal">
-                                          Passed
-                                        </Badge>
+                                        <Badge variant="success" className="font-normal">OK</Badge>
                                       ) : gate === "line_cap" ? (
                                         <Badge variant="destructive" className="max-w-[118px] whitespace-normal text-left font-normal leading-snug">
-                                          Blocked · over line total
+                                          Over line
                                         </Badge>
                                       ) : gate === "wo_cap" ? (
                                         <Badge variant="destructive" className="max-w-[118px] whitespace-normal text-left font-normal leading-snug">
-                                          Blocked · over WO total
+                                          Over WO
                                         </Badge>
                                       ) : (
                                         <Badge variant="secondary" className="font-normal">
@@ -842,6 +883,12 @@ export function InvoiceCreatePage() {
                                         {ln.part_name ?? "—"} ·{" "}
                                         <span className="uppercase tracking-wide">{ln.progress_type}</span>
                                       </div>
+                                    </TableCell>
+                                    <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+                                      {money(ln.approved_invoiced_value ?? 0)}
+                                    </TableCell>
+                                    <TableCell className="text-right text-xs tabular-nums font-medium">
+                                      {money(lineRemaining)}
                                     </TableCell>
                                     <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
                                       {isWeight && wpu != null ? (
@@ -893,7 +940,7 @@ export function InvoiceCreatePage() {
                                             [ln.work_order_item_id]: { ...inp, notes: e.target.value },
                                           }))
                                         }
-                                        placeholder="Optional note for approval…"
+                                        placeholder="Note"
                                       />
                                     </TableCell>
                                     <TableCell className="text-right">
@@ -919,34 +966,6 @@ export function InvoiceCreatePage() {
                                       </button>
                                     </TableCell>
                                   </TableRow>
-                                  <TableRow className="border-b bg-muted/20 hover:bg-muted/20">
-                                    <TableCell colSpan={lineDetailColSpan} className="border-t border-border/60 py-2.5">
-                                      <div className="flex flex-wrap items-baseline justify-end gap-x-8 gap-y-2 text-xs">
-                                        <div className="text-right tabular-nums">
-                                          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                                            Total taxable value
-                                          </div>
-                                          <div className="font-medium text-foreground">
-                                            ₹
-                                            {baseEx === null && billQ != null && billQ > 0
-                                              ? "—"
-                                              : baseEx != null
-                                                ? money(baseEx)
-                                                : "—"}
-                                          </div>
-                                        </div>
-                                        <div className="text-right tabular-nums">
-                                          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                                            Invoice value
-                                          </div>
-                                          <div className="text-sm font-semibold text-foreground">
-                                            ₹
-                                            {baseEx === null && billQ != null && billQ > 0 ? "—" : money(gross)}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
                                 </React.Fragment>
                               )
                             })}
@@ -968,20 +987,37 @@ export function InvoiceCreatePage() {
             ) : null}
           </div>
 
-          <div className="sticky bottom-0 z-10 rounded-xl border bg-background shadow-sm px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm">
-              Lines with qty:&nbsp;<span className="font-semibold">{draftLineCount}</span>
-            </div>
-            <div className="text-sm tabular-nums">
-              Estimated total (incl tax):{" "}
-              <span className="font-semibold">
-                {draftGross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
+          <div className="sticky bottom-0 z-10 -mx-1 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="grid gap-1">
+                  <Label htmlFor="inv-extra" className="text-xs text-muted-foreground">
+                    Extra (ex. tax)
+                  </Label>
+                  <Input
+                    id="inv-extra"
+                    className="h-8 w-28 tabular-nums"
+                    value={extraAmountExVat}
+                    onChange={(e) => setExtraAmountExVat(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {draftLineCount} line{draftLineCount === 1 ? "" : "s"}
+                </p>
+              </div>
+              <div className="text-right text-sm tabular-nums">
+                <div className="text-muted-foreground">Total ex. tax</div>
+                <div className="text-lg font-semibold">{money(draftExVat)}</div>
+                {preflight?.remaining_invoiceable_value != null ? (
+                  <div className="text-xs text-muted-foreground">WO left {money(preflight.remaining_invoiceable_value)}</div>
+                ) : null}
+              </div>
             </div>
           </div>
         </>
       ) : (
-        <div className="text-sm text-muted-foreground">Pick contractor + plant for billable line suggestions.</div>
+        <p className="text-center text-sm text-muted-foreground py-8">Choose contractor and plant to start.</p>
       )}
     </div>
   )

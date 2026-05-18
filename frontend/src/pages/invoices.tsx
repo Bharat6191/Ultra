@@ -38,8 +38,6 @@ function invoiceStatusBadgeVariant(
   status: string,
 ): React.ComponentProps<typeof Badge>["variant"] {
   switch (String(status || "").toLowerCase()) {
-    case "approved":
-      return "success"
     case "blocked":
     case "rejected":
       return "destructive"

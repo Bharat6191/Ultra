@@ -22,12 +22,15 @@ from modules.invoices.models import (
 )
 from modules.invoices.commercial_amount import invoice_line_ex_vat_amount
 from modules.invoices.validation import (
-    InvoiceValidationEngine,
     STATUSES_COUNTING_TOWARD_WO_VALUE_CAP,
+    InvoiceValidationEngine,
     ValidationResult,
     invoice_tolerance_percentage,
     invoice_within_pending_limits,
     prior_invoiced_ex_vat_for_work_order,
+    prior_invoiced_ex_vat_for_work_order_item,
+    prior_passed_invoiced_ex_vat_for_work_order,
+    prior_passed_invoiced_ex_vat_for_work_order_item,
     raise_if_new_invoice_breaches_work_order_caps,
     work_order_ex_vat_cap,
 )
@@ -166,8 +169,15 @@ class InvoiceService:
 
         assert_single_work_order_for_invoice(work_order_ids=work_order_ids)
 
+        extra_ex = _q2(_dec(payload.extra_amount_ex_vat or 0))
+        if extra_ex < Decimal("0"):
+            raise ConflictError("Extra amount cannot be negative.")
+        inv.extra_amount_ex_vat = extra_ex
+
         total = Decimal("0")
         cap_checks: list[tuple[int, Decimal]] = []
+        wo_id = next(iter(work_order_ids))
+        wo_extra: dict[int, Decimal] = {int(wo_id): extra_ex}
         for ln, item, wo in resolved:
             if str(wo.status) != "active":
                 raise ConflictError("Invoices may only reference active work orders.")
@@ -208,9 +218,10 @@ class InvoiceService:
             self._db,
             exclude_invoice_id=int(inv.id),
             item_amounts=cap_checks,
+            wo_extra_ex_vat=dict(wo_extra),
         )
 
-        inv.total_amount = _q2(total)
+        inv.total_amount = _q2(total + extra_ex)
         audit_helpers.write_audit(
             self._db,
             invoice_id=int(inv.id),
@@ -236,15 +247,11 @@ class InvoiceService:
         actor_user_id: int,
         auto_approve_when_clean: bool,
     ) -> None:
+        del actor_user_id, auto_approve_when_clean
         if result.status == "blocked":
             inv.status = "blocked"
-        elif auto_approve_when_clean and result.status in ("pass", "warn"):
-            inv.status = "approved"
-            inv.approved_by = actor_user_id
-            inv.approved_at = _now_utc()
-        elif result.status in ("pass", "warn"):
-            inv.status = "submitted"
         else:
+            # No invoice approval workflow — validation pass keeps status submitted.
             inv.status = "submitted"
 
     def _auto_submit_and_validate(self, inv: Invoice, *, actor_user_id: int) -> None:
@@ -281,14 +288,6 @@ class InvoiceService:
                 "auto": True,
             },
         )
-        if inv.status == "approved":
-            audit_helpers.write_audit(
-                self._db,
-                invoice_id=int(inv.id),
-                action=audit_helpers.ACTION_APPROVED,
-                actor_user_id=actor_user_id,
-                new_value={"status": "approved", "auto": True},
-            )
         self._recompute_contractor_compliance(contractor_id=int(inv.contractor_id))
 
     def submit(self, invoice_id: int, *, actor_user_id: int) -> Invoice:
@@ -340,15 +339,6 @@ class InvoiceService:
                 "within_pending_limits": within_pending,
             },
         )
-        if inv.status == "approved":
-            audit_helpers.write_audit(
-                self._db,
-                invoice_id=int(inv.id),
-                action=audit_helpers.ACTION_APPROVED,
-                actor_user_id=actor_user_id,
-                new_value={"status": "approved", "within_pending_limits": within_pending},
-            )
-
         self._recompute_contractor_compliance(contractor_id=int(inv.contractor_id))
         self._db.commit()
         return self.get(int(inv.id))
@@ -467,6 +457,11 @@ class InvoiceService:
                         Invoice.status.in_(STATUSES_COUNTING_TOWARD_WO_VALUE_CAP),
                     )
                 )
+                passed_amt = prior_passed_invoiced_ex_vat_for_work_order_item(
+                    self._db,
+                    work_order_item_id=int(it.id),
+                    exclude_invoice_id=None,
+                )
                 pq = Decimal(str(it.planned_quantity)) if it.planned_quantity is not None else None
                 rate = Decimal(str(it.resolved_rate))
                 planned_contract_val = _q2(Decimal(str(it.taxable_value)))
@@ -532,6 +527,7 @@ class InvoiceService:
                         "planned_contract_value": float(planned_contract_val),
                         "permissible_value_with_tolerance": float(perm_val),
                         "previously_invoiced_value": float(prev_amt),
+                        "approved_invoiced_value": float(passed_amt),
                         "remaining_invoiceable_value": float(max(remaining_val, Decimal("0"))) if planned_contract_val > 0 else None,
                         "completion_vs_billing_pct_hint": round(
                             (float(prev_amt) / float(perm_val) * 100.0), 2
@@ -542,7 +538,30 @@ class InvoiceService:
                         "tolerance_pct": float(tol),
                     }
                 )
-        return {"tolerance_pct": float(tol), "lines": out_lines}
+        wo_summary: dict[str, Any] = {}
+        if len(wos) == 1:
+            wo0 = wos[0]
+            cap0 = work_order_ex_vat_cap(self._db, wo0)
+            committed = prior_invoiced_ex_vat_for_work_order(
+                self._db, work_order_id=int(wo0.id), exclude_invoice_id=None
+            )
+            passed = prior_passed_invoiced_ex_vat_for_work_order(
+                self._db,
+                work_order_id=int(wo0.id),
+                exclude_invoice_id=None,
+            )
+            rem0 = _q2(cap0 - committed)
+            if rem0 < Decimal("0"):
+                rem0 = Decimal("0")
+            wo_summary = {
+                "work_order_id": int(wo0.id),
+                "work_order_number": wo0.work_order_number,
+                "approved_value_total": float(cap0),
+                "approved_invoiced_ex_tax_total": float(passed),
+                "committed_invoiced_ex_tax_total": float(committed),
+                "remaining_invoiceable_value": float(rem0),
+            }
+        return {"tolerance_pct": float(tol), "lines": out_lines, **wo_summary}
 
     def work_order_invoice_balance(self, *, work_order_id: int) -> dict[str, Any]:
         wo = self._db.get(WorkOrder, int(work_order_id))

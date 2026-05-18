@@ -64,6 +64,8 @@ class Invoice(Base):
 
     currency: Mapped[str] = mapped_column(String(8), nullable=False, server_default="INR")
     total_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, server_default="0")
+    # Ex-VAT adjustment (freight, rounding, etc.) included in WO cap checks and invoice total.
+    extra_amount_ex_vat: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, server_default="0")
 
     # Validation summary (denormalised for dashboards).
     last_validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

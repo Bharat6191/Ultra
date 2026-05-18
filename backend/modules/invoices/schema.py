@@ -21,6 +21,7 @@ class InvoiceCreate(BaseModel):
     invoice_number: str
     invoice_date: date
     lines: list[InvoiceLineCreate] = Field(default_factory=list)
+    extra_amount_ex_vat: Decimal = Field(default=Decimal("0"), ge=Decimal("0"))
 
 
 class SuggestedInvoiceNumber(BaseModel):
@@ -99,6 +100,8 @@ class InvoicePublic(BaseModel):
     status: str
     currency: str
     total_amount: Decimal
+    extra_amount_ex_vat: Decimal = Decimal("0")
+    lines_subtotal_ex_vat: Decimal | None = None
     validation_status: str | None
     validation_score: Decimal | None
     last_validated_at: datetime | None
@@ -145,6 +148,8 @@ class BillableWOLinePublic(BaseModel):
     planned_contract_value: float
     permissible_value_with_tolerance: float
     previously_invoiced_value: float
+    """Ex-VAT already invoiced on approved/paid invoices for this line."""
+    approved_invoiced_value: float = 0.0
     remaining_invoiceable_value: float | None = None
     completion_vs_billing_pct_hint: float | None = None
     near_tolerance_warning: bool = False
@@ -154,6 +159,12 @@ class BillableWOLinePublic(BaseModel):
 class InvoicePreflightResponse(BaseModel):
     tolerance_pct: float
     lines: list[BillableWOLinePublic] = Field(default_factory=list)
+    work_order_id: int | None = None
+    work_order_number: str | None = None
+    approved_value_total: float | None = None
+    approved_invoiced_ex_tax_total: float | None = None
+    committed_invoiced_ex_tax_total: float | None = None
+    remaining_invoiceable_value: float | None = None
 
 
 class InvoiceAuditEntry(BaseModel):

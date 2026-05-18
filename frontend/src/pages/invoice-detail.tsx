@@ -77,9 +77,6 @@ function headerStatusBadgeClass(
   if (kind === "validation" && (s === "fail" || s === "blocked")) {
     return `${HEADER_STATUS_BADGE_BASE} border-destructive/30 bg-destructive/10 text-destructive`
   }
-  if (kind === "invoice" && s === "approved") {
-    return `${HEADER_STATUS_BADGE_BASE} border-emerald-200/90 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100`
-  }
   if (kind === "invoice" && (s === "blocked" || s === "rejected")) {
     return `${HEADER_STATUS_BADGE_BASE} border-destructive/30 bg-destructive/10 text-destructive`
   }
@@ -90,9 +87,19 @@ function headerStatusBadgeClass(
 }
 
 function formatStatusLabel(status: string): string {
-  return String(status || "")
+  const s = String(status || "")
     .replace(/_/g, " ")
     .trim()
+  if (s.toLowerCase() === "approved") return "validated"
+  return s
+}
+
+function showInvoiceWorkflowStatus(row: { status: string; validation_status?: string | null }): boolean {
+  const vs = String(row.validation_status ?? "").toLowerCase()
+  const st = String(row.status ?? "").toLowerCase()
+  if (vs === "pass" || vs === "warn") return false
+  if (st === "approved") return false
+  return true
 }
 
 function issueSeverityVariant(sev: string): React.ComponentProps<typeof Badge>["variant"] {
@@ -266,9 +273,11 @@ export function InvoiceDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <Badge variant="outline" className={headerStatusBadgeClass("invoice", row.status)}>
-            {formatStatusLabel(row.status)}
-          </Badge>
+          {showInvoiceWorkflowStatus(row) ? (
+            <Badge variant="outline" className={headerStatusBadgeClass("invoice", row.status)}>
+              {formatStatusLabel(row.status)}
+            </Badge>
+          ) : null}
           {row.validation_status ? (
             <Badge variant="outline" className={headerStatusBadgeClass("validation", row.validation_status)}>
               {formatStatusLabel(row.validation_status)}

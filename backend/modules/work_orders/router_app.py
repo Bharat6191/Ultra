@@ -15,6 +15,7 @@ from modules.errors import ConflictError, NotFoundError
 from modules.invoices.service import InvoiceService
 from modules.invoices.validation import (
     prior_invoiced_ex_vat_for_work_order,
+    prior_passed_invoiced_ex_vat_for_work_order,
     work_order_ex_vat_cap,
 )
 from modules.work_orders.models import WORK_ORDER_STATUSES, WorkOrder
@@ -48,10 +49,13 @@ def _to_public(db: Session, row: WorkOrder) -> dict:
     ctr = db.get(Contractor, int(row.contractor_id))
     contractor_name = getattr(ctr, "name", None) if ctr is not None else None
     cap_dec = work_order_ex_vat_cap(db, row)
-    inv_ex = prior_invoiced_ex_vat_for_work_order(
+    committed_ex = prior_invoiced_ex_vat_for_work_order(
         db, work_order_id=int(row.id), exclude_invoice_id=None
     )
-    rem = (cap_dec - inv_ex).quantize(Decimal("0.01"))
+    inv_ex = prior_passed_invoiced_ex_vat_for_work_order(
+        db, work_order_id=int(row.id), exclude_invoice_id=None
+    )
+    rem = (cap_dec - committed_ex).quantize(Decimal("0.01"))
     if rem < Decimal("0"):
         rem = Decimal("0")
     return {
@@ -70,6 +74,7 @@ def _to_public(db: Session, row: WorkOrder) -> dict:
         "rejected_by": row.rejected_by,
         "rejected_at": row.rejected_at,
         "invoiced_ex_tax_total": inv_ex,
+        "committed_invoiced_ex_tax_total": committed_ex,
         "remaining_invoiceable_value": rem,
         "created_by": row.created_by,
         "created_at": row.created_at,
@@ -234,7 +239,10 @@ def list_work_order_invoices(
             invoice_number=str(r.invoice_number),
             invoice_date=r.invoice_date,
             status=str(r.status),
+            validation_status=r.validation_status,
             total_amount=r.total_amount,
+            lines_subtotal_ex_vat=sum((ln.amount for ln in (r.lines or [])), Decimal("0")),
+            extra_amount_ex_vat=r.extra_amount_ex_vat,
         )
         for r in rows
     ]

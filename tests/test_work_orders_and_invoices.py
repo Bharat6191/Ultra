@@ -122,9 +122,9 @@ def test_work_order_create_and_invoice_validate(db):
         ),
         actor_user_id=actor,
     )
-    assert str(inv.status) == "approved"
+    assert str(inv.status) == "submitted"
     assert inv.validation_status in ("pass", "warn")
-    assert inv.approved_at is not None
+    assert inv.approved_at is None
 
 
 def test_work_order_draft_update_replaces_lines(db):

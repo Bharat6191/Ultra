@@ -221,7 +221,12 @@ class WorkOrderService:
             .where(WorkOrderItem.work_order_id == int(work_order_id))
             .distinct()
         )
-        stmt = select(Invoice).where(Invoice.id.in_(subq)).order_by(Invoice.id.desc())
+        stmt = (
+            select(Invoice)
+            .where(Invoice.id.in_(subq))
+            .options(selectinload(Invoice.lines))
+            .order_by(Invoice.id.desc())
+        )
         return list(self._db.scalars(stmt).unique().all())
 
     def list(

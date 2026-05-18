@@ -59,6 +59,7 @@ type WorkOrder = {
   updated_at?: string | null
   approved_value_total?: string | number | null
   invoiced_ex_tax_total?: string | number | null
+  committed_invoiced_ex_tax_total?: string | number | null
   remaining_invoiceable_value?: string | number | null
   items?: {
     id: number
@@ -544,7 +545,7 @@ export function WorkOrderDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
             {row.approved_value_total != null ? (
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-md border bg-muted/30 px-3 py-2">
                   <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Approved work order value (ex. tax)
@@ -553,9 +554,17 @@ export function WorkOrderDetailPage() {
                   {/* <p className="mt-1 text-xs text-muted-foreground">Set when the work order was approved; not editable here.</p> */}
                 </div>
                 <div className="rounded-md border px-3 py-2">
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Invoiced to date (ex. tax)</div>
-                  <div className="mt-1 font-medium tabular-nums">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Passed validation (ex. tax)
+                  </div>
+                  <div className="mt-1 font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
                     {fmtMoney(parseNum(row.invoiced_ex_tax_total ?? 0))}
+                  </div>
+                </div>
+                <div className="rounded-md border px-3 py-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Committed (ex. tax)</div>
+                  <div className="mt-1 font-medium tabular-nums">
+                    {fmtMoney(parseNum(row.committed_invoiced_ex_tax_total ?? 0))}
                   </div>
                 </div>
                 <div className="rounded-md border px-3 py-2">

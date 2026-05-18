@@ -150,6 +150,8 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
         "status": inv.status,
         "currency": inv.currency,
         "total_amount": inv.total_amount,
+        "extra_amount_ex_vat": inv.extra_amount_ex_vat,
+        "lines_subtotal_ex_vat": sum((l.amount for l in (inv.lines or [])), Decimal("0")),
         "validation_status": inv.validation_status,
         "validation_score": inv.validation_score,
         "last_validated_at": inv.last_validated_at,
