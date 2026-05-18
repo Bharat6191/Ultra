@@ -33,6 +33,11 @@ def main() -> int:
     parser.add_argument("--email", required=True, help="Login email (stored lowercased).")
     parser.add_argument("--password", required=True, help="Plain password (validated against settings).")
     parser.add_argument(
+        "--username",
+        required=False,
+        help="Login username (defaults to the email local-part).",
+    )
+    parser.add_argument(
         "--phone",
         required=False,
         help="Unique phone number for this user (recommended). If omitted, a deterministic placeholder is generated.",
@@ -56,24 +61,38 @@ def main() -> int:
         print(f"error: password policy: {exc.error}", file=sys.stderr)
         return 2
 
+    username = (args.username or email.split("@", 1)[0]).strip()
+    if not username:
+        print("error: username is empty", file=sys.stderr)
+        return 1
+
     now = datetime.now(timezone.utc)
     db = SessionLocal()
     try:
         existing = db.scalar(select(User).where(User.email == email))
         if existing is not None:
             changed = False
+            if existing.username != username:
+                existing.username = username
+                changed = True
             if not existing.full_name:
                 existing.full_name = (args.full_name or email.split("@", 1)[0]).strip() or email
                 changed = True
             if not existing.phone:
                 existing.phone = args.phone or f"+1000000{existing.id}"
                 changed = True
+            if not existing.is_superuser:
+                existing.is_superuser = True
+                changed = True
+            if not existing.is_active:
+                existing.is_active = True
+                changed = True
             if changed:
                 try:
                     db.commit()
                 except IntegrityError:
                     db.rollback()
-                    print("error: could not backfill full_name/phone for existing user", file=sys.stderr)
+                    print("error: could not update existing user", file=sys.stderr)
                     return 5
             print(f"ok: superuser already exists id={existing.id} email={existing.email}")
             return 0
@@ -81,11 +100,13 @@ def main() -> int:
         full_name = (args.full_name or email.split("@", 1)[0]).strip() or email
         user = User(
             full_name=full_name,
+            username=username,
             email=email,
             phone=None,
             hashed_password=hash_password(args.password),
             password_changed_at=now,
             is_superuser=True,
+            is_active=True,
         )
         db.add(user)
         try:

@@ -4,7 +4,7 @@ import { toast } from "sonner"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ContractorRatesPanel } from "@/components/contractors/ContractorRatesPanel"
+// import { ContractorRatesPanel } from "@/components/contractors/ContractorRatesPanel"
 import {
   Dialog,
   DialogContent,
@@ -18,7 +18,6 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { ContractorDocuments, type ContractorDocument } from "@/components/contractors/ContractorDocuments"
 import { ContractorHeader } from "@/components/contractors/ContractorHeader"
-import { ContractorStats } from "@/components/contractors/ContractorStats"
 import { ContractorOverview } from "@/components/contractors/ContractorOverview"
 import { ContractorPlants } from "@/components/contractors/ContractorPlants"
 import { ContractorTimeline } from "@/components/contractors/ContractorTimeline"
@@ -100,18 +99,19 @@ export function ContractorDetailPage() {
 
   const canEdit = hasPermission("contractor.update")
   const canActivate = hasPermission("contractor.activate") || hasPermission("contractor.update")
-  const canViewRates = hasPermission("contractor_rates.view")
+  // const canViewRates = hasPermission("contractor_rates.view")
 
   const rawTab = (searchParams.get("tab") ?? "dashboard").toLowerCase()
-  const focusParam = searchParams.get("focus")
-  const focusRateId = focusParam ? Number(focusParam) : null
+  // const focusParam = searchParams.get("focus")
+  // const focusRateId = focusParam ? Number(focusParam) : null
 
   // Tabs available on the contractor master profile. The "rates" tab is a
   // read-only view of negotiation history — actions (create / submit / cancel /
   // add round) live on the dedicated `/dashboard/negotiated-rates/:id` page.
-  const allowedTabs = canViewRates
-    ? (["dashboard", "overview", "documents", "plants", "rates", "timeline"] as const)
-    : (["dashboard", "overview", "documents", "plants", "timeline"] as const)
+  const allowedTabs = ["dashboard", "overview", "documents", "plants", "timeline"] as const
+  // const allowedTabs = canViewRates
+  //   ? (["dashboard", "overview", "documents", "plants", "rates", "timeline"] as const)
+  //   : (["dashboard", "overview", "documents", "plants", "timeline"] as const)
   const tabValue: string = (allowedTabs as readonly string[]).includes(rawTab)
     ? rawTab
     : "overview"
@@ -237,84 +237,6 @@ export function ContractorDetailPage() {
           void changeStatus("blacklisted", "Blacklisted via Detail page")
         }
       />
-
-      <ContractorStats
-        documents={docs ?? []}
-        warnDays={warnDays}
-        contractorUpdatedAt={contractor.updated_at}
-      />
-
-      {contractor.invoice_compliance_score != null ? (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Invoice compliance score</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-muted-foreground">
-                Based on invoice validation outcomes, blocked invoices, and exception patterns.
-              </div>
-              <div className="text-2xl font-semibold tabular-nums">{contractor.invoice_compliance_score.toFixed(2)}</div>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {contractor.invoice_analytics ? (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Invoice governance analytics</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Invoices tracked</div>
-              <div className="text-lg font-semibold tabular-nums">{contractor.invoice_analytics.invoices_total}</div>
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Blocked / variance</div>
-              <div className="text-lg font-semibold tabular-nums">
-                {contractor.invoice_analytics.invoices_blocked} blocked · {contractor.invoice_analytics.pending_variance_approvals}{" "}
-                pending approvals
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Avg variance %</div>
-              <div className="text-lg font-semibold tabular-nums">
-                {contractor.invoice_analytics.average_variance_pct != null
-                  ? `${contractor.invoice_analytics.average_variance_pct.toFixed(2)}%`
-                  : "—"}
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Tolerance config</div>
-              <div className="text-lg font-semibold tabular-nums">
-                {(contractor.invoice_analytics.tolerance_pct_config ?? 5).toFixed(2)}%
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Overbilling flags</div>
-              <div className="text-lg font-semibold tabular-nums">{contractor.invoice_analytics.overbilling_invoice_count}</div>
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Approval dependency rate</div>
-              <div className="text-lg font-semibold tabular-nums">
-                {contractor.invoice_analytics.approval_dependency_rate != null
-                  ? `${(contractor.invoice_analytics.approval_dependency_rate * 100).toFixed(1)}%`
-                  : "—"}
-              </div>
-            </div>
-            <div className="sm:col-span-2">
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Pressure from tolerance exhaustion</div>
-              <div className="text-lg font-semibold tabular-nums">
-                {contractor.invoice_analytics.tolerance_usage_pressure_pct != null
-                  ? `${contractor.invoice_analytics.tolerance_usage_pressure_pct.toFixed(2)}% of invoices blocked`
-                  : "—"}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
       {error ? <div className="text-sm text-destructive">{error}</div> : null}
 
       <Tabs
@@ -324,9 +246,10 @@ export function ContractorDetailPage() {
           if (v === "dashboard") next.delete("tab")
           else if (v === "overview") next.set("tab", "overview")
           else next.set("tab", v)
-          // The deep-link `focus` param is only meaningful while the rates tab
-          // is selected; drop it when the user navigates elsewhere.
-          if (v !== "rates") next.delete("focus")
+          next.delete("focus")
+          // The deep-link `focus` param was only meaningful while the rates tab
+          // was active; keep removing it while the tab stays commented out.
+          // if (v !== "rates") next.delete("focus")
           setSearchParams(next, { replace: true })
         }}
         className="gap-4"
@@ -336,10 +259,10 @@ export function ContractorDetailPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="plants">Plants</TabsTrigger>
-          {canViewRates ? (
+          {/* {canViewRates ? (
             <TabsTrigger value="rates">Negotiated rates</TabsTrigger>
-          ) : null}
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          ) : null} */}
+          <TabsTrigger value="timeline">Timeline & activity</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard">
@@ -366,7 +289,11 @@ export function ContractorDetailPage() {
           <ContractorPlants contractorId={contractor.id} />
         </TabsContent>
 
-        {canViewRates ? (
+        <TabsContent value="timeline">
+          <ContractorTimeline contractorId={contractor.id} />
+        </TabsContent>
+
+        {/* {canViewRates ? (
           <TabsContent value="rates">
             <ContractorRatesPanel
               contractorId={contractor.id}
@@ -381,11 +308,7 @@ export function ContractorDetailPage() {
               readOnly
             />
           </TabsContent>
-        ) : null}
-
-        <TabsContent value="timeline">
-          <ContractorTimeline contractorId={contractor.id} />
-        </TabsContent>
+        ) : null} */}
       </Tabs>
 
       <ContractorEditDialog

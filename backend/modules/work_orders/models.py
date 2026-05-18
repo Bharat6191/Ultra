@@ -168,9 +168,10 @@ class WorkOrderAuditLog(Base):
         ForeignKey("work_orders.id", ondelete="CASCADE"), nullable=False, index=True
     )
     action: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    # NOTE: legacy DBs store this as `actor_user_id` (unified audit naming).
+    # The service/router layer uses the unified ``actor_user_id`` attribute name,
+    # but the migrated table column is ``changed_by``.
     actor_user_id: Mapped[int | None] = mapped_column(
-        "actor_user_id",
+        "changed_by",
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )

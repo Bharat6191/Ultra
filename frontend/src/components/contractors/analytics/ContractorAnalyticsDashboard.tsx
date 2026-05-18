@@ -1,41 +1,104 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
-  ComposedChart,
   Legend,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts"
-import { ListFilter, RefreshCw } from "lucide-react"
+import {
+  CalendarDays,
+  CheckCircle2,
+  // CircleDollarSign,
+  ClipboardList,
+  Clock3,
+  Handshake,
+  ListFilter,
+  LoaderCircle,
+  XCircle,
+} from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { formatMoney, rateStatusLabel } from "@/components/contractors/rateStatus"
+import { VsBaseToleranceBadge } from "@/components/contractors/VsBaseToleranceBadge"
+import { formatMoney, formatPercent, rateStatusLabel, rateStatusVariant } from "@/components/contractors/rateStatus"
+import { statusLabel, statusVariant } from "@/components/contractors/status"
 import { ApiError, getJson } from "@/lib/api"
+import { hasPermission } from "@/lib/permissions"
 import type {
-  AnalyticsTimelineEvent,
   CommercialInsights,
   ContractorAnalyticsSummary,
   NegotiationAnalytics,
+  NegotiationRow,
   WorkOrderAnalytics,
 } from "@/components/contractors/analytics/types"
 
-const CHART_COLORS = ["#059669", "#0ea5e9", "#f59e0b", "#ef4444", "#8b5cf6", "#64748b"]
+// const CHART_COLORS = ["#059669", "#0ea5e9", "#f59e0b", "#ef4444", "#8b5cf6", "#64748b"]
+
+// const NEGOTIATION_CHART_OPTIONS = [
+//   {
+//     value: "base_vs_negotiated",
+//     label: "Base vs negotiated",
+//     hint: "Compare baseline and negotiated rates across parts.",
+//   },
+//   {
+//     value: "volume_by_month",
+//     label: "Volume by month",
+//     hint: "Track negotiation record count and average negotiated value over time.",
+//   },
+//   {
+//     value: "status_mix",
+//     label: "Status mix",
+//     hint: "See how negotiations are split across approval states.",
+//   },
+//   {
+//     value: "premium_ranking",
+//     label: "Premium ranking",
+//     hint: "Focus on parts with the highest premium above base rate.",
+//   },
+// ] as const
+
+// const WORK_ORDER_CHART_OPTIONS = [
+//   {
+//     value: "status_distribution",
+//     label: "Status distribution",
+//     hint: "Current work-order mix by lifecycle status.",
+//   },
+//   {
+//     value: "created_vs_completed",
+//     label: "Created vs completed",
+//     hint: "Compare work-order creation and completion volume by month.",
+//   },
+//   {
+//     value: "plant_workload",
+//     label: "Plant workload",
+//     hint: "Review work-order volume by mapped plant.",
+//   },
+//   {
+//     value: "value_trend",
+//     label: "Value trend",
+//     hint: "Track work-order value movement across months.",
+//   },
+// ] as const
+
+// type ChartOption = { value: string; label: string; hint: string }
 
 function q(params: Record<string, string | undefined>): string {
   const p = new URLSearchParams()
@@ -46,22 +109,177 @@ function q(params: Record<string, string | undefined>): string {
   return s ? `?${s}` : ""
 }
 
-function kpiToneClass(tone: string): string {
-  if (tone === "success") return "border-emerald-200 bg-emerald-50/80"
-  if (tone === "warning") return "border-amber-200 bg-amber-50/80"
-  if (tone === "danger") return "border-rose-200 bg-rose-50/80"
-  return "border-border/60 bg-card"
+type InsightTone = "neutral" | "success" | "warning" | "danger" | "info" | "violet"
+
+function insightToneClasses(tone: InsightTone): {
+  tile: string
+  iconWrap: string
+  icon: string
+} {
+  switch (tone) {
+    case "success":
+      return {
+        tile: "border-emerald-200/80 bg-emerald-50/35",
+        iconWrap: "bg-emerald-100/80",
+        icon: "text-emerald-600",
+      }
+    case "warning":
+      return {
+        tile: "border-amber-200/80 bg-amber-50/35",
+        iconWrap: "bg-amber-100/80",
+        icon: "text-amber-500",
+      }
+    case "danger":
+      return {
+        tile: "border-rose-200/80 bg-rose-50/35",
+        iconWrap: "bg-rose-100/80",
+        icon: "text-rose-500",
+      }
+    case "info":
+      return {
+        tile: "border-sky-200/80 bg-sky-50/30",
+        iconWrap: "bg-sky-100/80",
+        icon: "text-sky-600",
+      }
+    case "violet":
+      return {
+        tile: "border-violet-200/80 bg-violet-50/30",
+        iconWrap: "bg-violet-100/80",
+        icon: "text-violet-600",
+      }
+    case "neutral":
+    default:
+      return {
+        tile: "border-border/70 bg-white",
+        iconWrap: "bg-slate-100/80",
+        icon: "text-slate-500",
+      }
+  }
 }
 
-export function ContractorAnalyticsDashboard({ contractorId }: { contractorId: number }) {
+function FactField({
+  label,
+  value,
+  strong,
+}: {
+  label: string
+  value: React.ReactNode
+  strong?: boolean
+}) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={`mt-0.5 ${strong ? "text-base font-semibold text-foreground" : "text-sm"}`}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function InsightTile({
+  label,
+  value,
+  icon: Icon,
+  tone = "neutral",
+  valueClassName = "",
+}: {
+  label: string
+  value: React.ReactNode
+  icon: React.ElementType
+  tone?: InsightTone
+  valueClassName?: string
+}) {
+  const toneClasses = insightToneClasses(tone)
+
+  return (
+    <div className={`rounded-2xl border p-4 shadow-sm ${toneClasses.tile}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-slate-600">{label}</div>
+          <div className={`mt-3 text-2xl font-semibold tracking-tight text-slate-950 ${valueClassName}`}>{value}</div>
+        </div>
+        <div className={`flex size-11 shrink-0 items-center justify-center rounded-full ${toneClasses.iconWrap}`}>
+          <Icon className={`size-5 ${toneClasses.icon}`} aria-hidden />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InsightSection({
+  title,
+  icon: Icon,
+  iconTone = "info",
+  children,
+}: {
+  title: string
+  icon: React.ElementType
+  iconTone?: InsightTone
+  children: React.ReactNode
+}) {
+  const toneClasses = insightToneClasses(iconTone)
+
+  return (
+    <Card className="rounded-[28px] border border-border/70 bg-white/95 shadow-sm">
+      <CardContent className="p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <div className={`flex size-10 items-center justify-center rounded-2xl ${toneClasses.iconWrap}`}>
+            <Icon className={`size-5 ${toneClasses.icon}`} aria-hidden />
+          </div>
+          <div className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-700">{title}</div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{children}</div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// function ChartSelector({
+//   value,
+//   options,
+//   onChange,
+// }: {
+//   value: string
+//   options: readonly ChartOption[]
+//   onChange: (value: string) => void
+// }) {
+//   const activeOption = options.find((option) => option.value === value)
+//
+//   return (
+//     <div className="space-y-3">
+//       <div className="flex flex-wrap gap-2">
+//         {options.map((option) => (
+//           <Button
+//             key={option.value}
+//             type="button"
+//             size="sm"
+//             variant={value === option.value ? "default" : "outline"}
+//             onClick={() => onChange(option.value)}
+//           >
+//             {option.label}
+//           </Button>
+//         ))}
+//       </div>
+//       {activeOption ? <p className="text-xs text-muted-foreground">{activeOption.hint}</p> : null}
+//     </div>
+//   )
+// }
+
+export function ContractorAnalyticsDashboard({
+  contractorId,
+}: {
+  contractorId: number
+}) {
+  const navigate = useNavigate()
   const [dateFrom, setDateFrom] = React.useState("")
   const [dateTo, setDateTo] = React.useState("")
   const [plantId, setPlantId] = React.useState("")
   const [woStatus, setWoStatus] = React.useState("")
   const [negStatus, setNegStatus] = React.useState("")
   const [partSearch, setPartSearch] = React.useState("")
-  const [tlCats, setTlCats] = React.useState("all")
   const [filtersOpen, setFiltersOpen] = React.useState(false)
+  // const [negChartView, setNegChartView] = React.useState<NegotiationChartView>("base_vs_negotiated")
+  // const [woChartView, setWoChartView] = React.useState<WorkOrderChartView>("status_distribution")
 
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -69,7 +287,8 @@ export function ContractorAnalyticsDashboard({ contractorId }: { contractorId: n
   const [neg, setNeg] = React.useState<NegotiationAnalytics | null>(null)
   const [wo, setWo] = React.useState<WorkOrderAnalytics | null>(null)
   const [commercial, setCommercial] = React.useState<CommercialInsights | null>(null)
-  const [timeline, setTimeline] = React.useState<AnalyticsTimelineEvent[]>([])
+  const [selectedNegotiation, setSelectedNegotiation] = React.useState<NegotiationRow | null>(null)
+  const canOpenNegotiationPage = hasPermission("contractor_rates.view")
 
   const filterParams = React.useMemo(
     () => ({
@@ -94,47 +313,155 @@ export function ContractorAnalyticsDashboard({ contractorId }: { contractorId: n
     return n
   }, [dateFrom, dateTo, plantId, woStatus, negStatus, partSearch])
 
+  const kpiMap = summary ? new Map(summary.kpis.map((k) => [k.key, k])) : new Map()
+
+  function kpiValue(key: string): number | string {
+    return kpiMap.get(key)?.value ?? "—"
+  }
+
+  function openNegotiationDetail(rateId: number) {
+    navigate(`/dashboard/negotiated-rates/${rateId}`)
+  }
+
   const load = React.useCallback(async () => {
     setLoading(true)
     setError(null)
     const base = q(filterParams)
     try {
-      const [s, n, w, c, t] = await Promise.all([
+      const [s, n, w, c] = await Promise.all([
         getJson<ContractorAnalyticsSummary>(`/contractors/${contractorId}/analytics/summary${base}`),
         getJson<NegotiationAnalytics>(`/contractors/${contractorId}/analytics/negotiations${base}`),
         getJson<WorkOrderAnalytics>(`/contractors/${contractorId}/analytics/work-orders${base}`),
         getJson<CommercialInsights>(`/contractors/${contractorId}/analytics/commercial${base}`),
-        getJson<AnalyticsTimelineEvent[]>(
-          `/contractors/${contractorId}/analytics/timeline${tlCats ? `?categories=${encodeURIComponent(tlCats)}` : ""}`,
-        ),
       ])
       setSummary(s)
       setNeg(n)
       setWo(w)
       setCommercial(c)
-      setTimeline(t)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to load analytics")
       setSummary(null)
     } finally {
       setLoading(false)
     }
-  }, [contractorId, filterParams, tlCats])
+  }, [contractorId, filterParams])
 
   React.useEffect(() => {
     void load()
   }, [load])
 
-  const pieData = React.useMemo(() => {
-    if (!neg) return []
-    const rows = Object.entries(neg.status_counts).map(([name, value]) => ({ name, value }))
-    return rows.length ? rows : [{ name: "none", value: 1 }]
+  // const pieData = React.useMemo(() => {
+  //   if (!neg) return []
+  //   const rows = Object.entries(neg.status_counts).map(([name, value]) => ({ name, value }))
+  //   return rows.length ? rows : [{ name: "none", value: 1 }]
+  // }, [neg])
+
+  // Dashboard work-order visual section is temporarily hidden.
+  // const woDonut = React.useMemo(() => {
+  //   if (!wo?.donut_status?.length) return [{ name: "none", value: 0 }]
+  //   return wo.donut_status
+  // }, [wo])
+
+  const negotiationChart = React.useMemo(() => {
+    if (!neg) return null
+    return (
+      <div className="h-80 min-h-[300px] w-full min-w-0">
+        <div className="mb-2 text-xs font-medium text-muted-foreground">Base vs negotiated (sample)</div>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={neg.bar_chart_parts.slice(0, 14)} margin={{ left: 8, right: 8, bottom: 48 }}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+            <XAxis dataKey="part_code" angle={-35} textAnchor="end" interval={0} height={60} tick={{ fontSize: 10 }} />
+            <YAxis tick={{ fontSize: 10 }} />
+            <Tooltip formatter={(v) => formatMoney(Number(v ?? 0))} />
+            <Legend />
+            <Bar dataKey="base_rate" name="Base" fill="#0D2E20" />
+            <Bar dataKey="negotiated_rate" name="Negotiated" fill="#059669" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    )
   }, [neg])
 
-  const woDonut = React.useMemo(() => {
-    if (!wo?.donut_status?.length) return [{ name: "none", value: 0 }]
-    return wo.donut_status
-  }, [wo])
+  // const workOrderChart = React.useMemo(() => {
+  //   if (!wo) return null
+  //
+  //   switch (woChartView) {
+  //     case "created_vs_completed":
+  //       return (
+  //         <div className="h-72 min-h-[280px] w-full min-w-0">
+  //           <div className="mb-2 text-xs font-medium text-muted-foreground">Created vs completed by month</div>
+  //           <ResponsiveContainer width="100%" height="100%">
+  //             <ComposedChart data={wo.by_month} margin={{ left: 8, right: 8 }}>
+  //               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+  //               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+  //               <YAxis tick={{ fontSize: 10 }} />
+  //               <Tooltip />
+  //               <Legend />
+  //               <Bar dataKey="created" name="Created" fill="#0ea5e9" />
+  //               <Bar dataKey="completed" name="Completed" fill="#059669" />
+  //             </ComposedChart>
+  //           </ResponsiveContainer>
+  //         </div>
+  //       )
+  //     case "plant_workload":
+  //       return (
+  //         <div className="h-72 min-h-[280px] w-full min-w-0">
+  //           <div className="mb-2 text-xs font-medium text-muted-foreground">Plant workload (count)</div>
+  //           <ResponsiveContainer width="100%" height="100%">
+  //             <BarChart data={wo.by_plant} margin={{ bottom: 40 }}>
+  //               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+  //               <XAxis dataKey="plant_name" angle={-25} textAnchor="end" interval={0} height={70} tick={{ fontSize: 10 }} />
+  //               <YAxis tick={{ fontSize: 10 }} />
+  //               <Tooltip />
+  //               <Bar dataKey="count" fill="#6366f1" />
+  //             </BarChart>
+  //           </ResponsiveContainer>
+  //         </div>
+  //       )
+  //     case "value_trend":
+  //       return (
+  //         <div className="h-72 min-h-[280px] w-full min-w-0">
+  //           <div className="mb-2 text-xs font-medium text-muted-foreground">Work order value trend</div>
+  //           <ResponsiveContainer width="100%" height="100%">
+  //             <LineChart data={wo.value_trend} margin={{ left: 8, right: 8 }}>
+  //               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+  //               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+  //               <YAxis tick={{ fontSize: 10 }} />
+  //               <Tooltip formatter={(v) => formatMoney(Number(v ?? 0))} />
+  //               <Line type="monotone" dataKey="value" name="Value" stroke="#059669" strokeWidth={2} dot />
+  //             </LineChart>
+  //           </ResponsiveContainer>
+  //         </div>
+  //       )
+  //     case "status_distribution":
+  //     default:
+  //       return (
+  //         <div className="h-72 min-h-[280px] w-full min-w-0">
+  //           <div className="mb-2 text-xs font-medium text-muted-foreground">Status distribution</div>
+  //           <ResponsiveContainer width="100%" height="100%">
+  //             <PieChart>
+  //               <Pie
+  //                 data={woDonut}
+  //                 dataKey="value"
+  //                 nameKey="name"
+  //                 cx="50%"
+  //                 cy="50%"
+  //                 innerRadius={52}
+  //                 outerRadius={86}
+  //                 paddingAngle={2}
+  //               >
+  //                 {woDonut.map((_, i) => (
+  //                   <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+  //                 ))}
+  //               </Pie>
+  //               <Tooltip />
+  //               <Legend />
+  //             </PieChart>
+  //           </ResponsiveContainer>
+  //         </div>
+  //       )
+  //   }
+  // }, [wo, woChartView, woDonut])
 
   if (loading && !summary) {
     return (
@@ -157,178 +484,130 @@ export function ContractorAnalyticsDashboard({ contractorId }: { contractorId: n
     return null
   }
 
+  const toolbarControls = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-expanded={filtersOpen}
+        onClick={() => setFiltersOpen((o) => !o)}
+      >
+        <ListFilter className="mr-1.5 size-3.5" aria-hidden />
+        {filtersOpen ? "Hide filters" : "Filters"}
+        {!filtersOpen && activeFilterCount > 0 ? ` (${activeFilterCount})` : null}
+      </Button>
+    </div>
+  )
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-semibold tracking-tight">Operational & commercial intelligence</h3>
-          <p className="text-sm text-muted-foreground">
-            Negotiations, work orders, and invoices for this contractor in one place.
-          </p>
-          {activeFilterCount > 0 ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} applied — open Filters to edit or clear.
-            </p>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-expanded={filtersOpen}
-            onClick={() => setFiltersOpen((o) => !o)}
-          >
-            <ListFilter className="mr-1.5 size-3.5" aria-hidden />
-            {filtersOpen ? "Hide filters" : "Filters"}
-            {!filtersOpen && activeFilterCount > 0 ? ` (${activeFilterCount})` : null}
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden />
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-      {filtersOpen ? (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Filters</CardTitle>
-          <CardDescription>
-            Date range, plant, statuses, and part search — use Apply to reload analytics.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="grid gap-1">
-            <Label htmlFor="ca-from">From</Label>
-            <Input id="ca-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="ca-to">To</Label>
-            <Input id="ca-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          </div>
-          <div className="grid gap-1">
-            <Label>Plant</Label>
-            <select
-              className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
-              value={plantId}
-              onChange={(e) => setPlantId(e.target.value)}
-            >
-              <option value="">All mapped plants</option>
-              {(summary.plants ?? []).map((p) => (
-                <option key={p.id} value={String(p.id)}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid gap-1">
-            <Label>WO status</Label>
-            <select
-              className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
-              value={woStatus}
-              onChange={(e) => setWoStatus(e.target.value)}
-            >
-              <option value="">Any</option>
-              {["draft", "pending_approval", "approved", "active", "closed", "cancelled", "rejected"].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid gap-1">
-            <Label>Negotiation status</Label>
-            <select
-              className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
-              value={negStatus}
-              onChange={(e) => setNegStatus(e.target.value)}
-            >
-              <option value="">Any</option>
-              {["draft", "pending_approval", "approved", "rejected", "expired", "cancelled"].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid gap-1 sm:col-span-2">
-            <Label htmlFor="ca-part">Part search</Label>
-            <Input
-              id="ca-part"
-              placeholder="Code or name contains…"
-              value={partSearch}
-              onChange={(e) => setPartSearch(e.target.value)}
-            />
-          </div>
-          <div className="flex items-end sm:col-span-2">
-            <Button type="button" size="sm" onClick={() => void load()}>
-              Apply filters
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-      ) : null}
-
       {/* Summary header */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Contractor summary</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-          <div>
-            <div className="text-xs text-muted-foreground">Code</div>
-            <div className="font-medium">{summary.contractor_code ?? "—"}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Status</div>
-            <Badge variant="secondary">{summary.status}</Badge>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Plants</div>
-            <div className="font-medium">{summary.plant_names.length ? summary.plant_names.join(", ") : "—"}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Active since</div>
-            <div className="font-medium">{summary.active_since ?? "—"}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Active work orders</div>
-            <div className="text-lg font-semibold tabular-nums">{summary.total_active_work_orders}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Negotiated parts</div>
-            <div className="text-lg font-semibold tabular-nums">{summary.distinct_negotiated_parts}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Approved negotiations</div>
-            <div className="text-lg font-semibold tabular-nums">{summary.approved_negotiations}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Savings vs initial</div>
-            <div className="text-lg font-semibold tabular-nums text-emerald-800">
-              {formatMoney(summary.overall_savings_vs_initial)}
+        <CardContent className="p-0">
+          <div className="grid gap-0 lg:grid-cols-5">
+            <div className="space-y-3 p-6">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Contractor
+              </div>
+              <div className="text-2xl font-semibold tracking-tight">
+                {summary.contractor_code ?? "—"}
+              </div>
             </div>
-          </div>
-          <div className="sm:col-span-2">
-            <div className="text-xs text-muted-foreground">Premium above base (approved)</div>
-            <div className="text-lg font-semibold tabular-nums text-amber-900">
-              {formatMoney(summary.overall_premium_above_base)}
+
+            <div className="space-y-3 border-t p-6 lg:border-t-0 lg:border-l">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Status
+              </div>
+              <Badge variant={statusVariant(summary.status)}>{statusLabel(summary.status)}</Badge>
+            </div>
+
+            <div className="space-y-3 border-t p-6 lg:border-t-0 lg:border-l">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Plants
+              </div>
+              <div className="space-y-1 text-base font-medium leading-snug">
+                {summary.plant_names.length ? (
+                  summary.plant_names.map((plant) => <div key={plant}>{plant}</div>)
+                ) : (
+                  <div>—</div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t p-6 lg:border-t-0 lg:border-l">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Active since
+              </div>
+              <div className="inline-flex items-center gap-2 text-xl font-semibold tracking-tight">
+                <CalendarDays className="size-4 text-muted-foreground" aria-hidden />
+                <span>{summary.active_since ?? "—"}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t p-6 lg:border-t-0 lg:border-l">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Negotiated parts
+              </div>
+              <div className="text-2xl font-semibold tabular-nums tracking-tight">
+                {summary.distinct_negotiated_parts}
+              </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* KPI cards */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {summary.kpis.map((k) => (
-          <Card key={k.key} className={`border ${kpiToneClass(k.tone)}`}>
-            <CardHeader className="pb-1 pt-3">
-              <CardDescription className="text-xs font-medium uppercase tracking-wide">{k.label}</CardDescription>
-            </CardHeader>
-            <CardContent className="pb-3 text-2xl font-semibold tabular-nums">{String(k.value)}</CardContent>
-          </Card>
-        ))}
+      <div className="grid gap-4 xl:grid-cols-2">
+        <InsightSection title="Work Orders" icon={ClipboardList} iconTone="info">
+          <InsightTile label="Total Work Orders" value={String(kpiValue("wo_total"))} icon={ClipboardList} tone="info" />
+          <InsightTile label="Pending Work Orders" value={String(kpiValue("wo_pending"))} icon={Clock3} tone="warning" />
+          <InsightTile label="In Progress Work Orders" value={String(kpiValue("wo_active"))} icon={LoaderCircle} tone="info" />
+          <InsightTile label="Completed Work Orders" value={String(kpiValue("wo_completed"))} icon={CheckCircle2} tone="success" />
+          <InsightTile
+            label="Cancelled / Rejected Work Orders"
+            value={String(kpiValue("wo_cancelled"))}
+            icon={XCircle}
+            tone="danger"
+          />
+        </InsightSection>
+
+        <InsightSection title="Negotiations" icon={Handshake} iconTone="violet">
+          <InsightTile label="Total Negotiations" value={String(kpiValue("neg_total"))} icon={Handshake} tone="violet" />
+          {/* <InsightTile
+            label="Approved Negotiations"
+            value={String(kpiValue("neg_approved"))}
+            icon={CheckCircle2}
+            tone="success"
+          /> */}
+          <InsightTile
+            label="Pending / Draft Negotiations"
+            value={String(kpiValue("neg_pending"))}
+            icon={Clock3}
+            tone="warning"
+          />
+          <InsightTile
+            label="Approved Negotiations"
+            value={String(kpiValue("neg_approved"))}
+            icon={CheckCircle2}
+            tone="success"
+          />
+          <InsightTile
+            label="Rejected Negotiations"
+            value={String(kpiValue("neg_rejected"))}
+            icon={XCircle}
+            tone="danger"
+          />
+          {/*
+          <InsightTile
+            label="Total Negotiation Savings"
+            value={formatMoney(kpiValue("savings_total"))}
+            icon={CircleDollarSign}
+            tone="success"
+            valueClassName="text-emerald-600"
+          />
+          */}
+        </InsightSection>
       </div>
 
       {error ? (
@@ -338,310 +617,373 @@ export function ContractorAnalyticsDashboard({ contractorId }: { contractorId: n
         </Alert>
       ) : null}
 
-      {/* Negotiation analytics */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Negotiation analytics</CardTitle>
-          <CardDescription>Per-part commercial posture, savings, and approval state.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="h-72 min-h-[280px] w-full min-w-0">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">Base vs negotiated (sample)</div>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={neg.bar_chart_parts.slice(0, 14)} margin={{ left: 8, right: 8, bottom: 48 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="part_code" angle={-35} textAnchor="end" interval={0} height={60} tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v) => formatMoney(Number(v ?? 0))} />
-                  <Legend />
-                  <Bar dataKey="base_rate" name="Base" fill="#94a3b8" />
-                  <Bar dataKey="negotiated_rate" name="Negotiated" fill="#059669" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="h-72 min-h-[280px] w-full min-w-0">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">Negotiation volume by month</div>
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={neg.trend} margin={{ left: 8, right: 16 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="period" tick={{ fontSize: 10 }} />
-                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} allowDecimals={false} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar yAxisId="left" dataKey="count" name="Records" fill="#0ea5e9" />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="avg_negotiated"
-                    name="Avg negotiated"
-                    stroke="#059669"
-                    dot={false}
-                    strokeWidth={2}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="h-64 min-h-[240px] w-full min-w-0">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">Negotiation status mix</div>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
-                    {pieData.map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="h-64 min-h-[240px] w-full min-w-0">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">Highest premium above base (parts)</div>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  layout="vertical"
-                  data={neg.premium_ranking.slice(0, 10)}
-                  margin={{ left: 72, right: 16 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis type="number" tick={{ fontSize: 10 }} />
-                  <YAxis type="category" dataKey="part_code" width={68} tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v) => formatMoney(Number(v ?? 0))} />
-                  <Bar dataKey="premium_above_base" name="Premium" fill="#f59e0b" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div>
-            <div className="mb-2 text-sm font-medium">Negotiation detail</div>
-            <div className="rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Part</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Base</TableHead>
-                    <TableHead className="text-right">Negotiated</TableHead>
-                    <TableHead className="text-right">Initial</TableHead>
-                    <TableHead className="text-right">Savings %</TableHead>
-                    <TableHead className="text-right">Premium</TableHead>
-                    <TableHead className="text-right">Rounds</TableHead>
-                    <TableHead>Effective</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {neg.rows.slice(0, 50).map((r) => (
-                    <TableRow key={r.contractor_rate_id}>
-                      <TableCell className="font-mono text-xs">
-                        {r.part_code}
-                        <div className="text-[11px] font-normal text-muted-foreground">{r.part_name}</div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{rateStatusLabel(r.status)}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{formatMoney(r.base_rate)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatMoney(r.negotiated_rate)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{r.initial_rate != null ? formatMoney(r.initial_rate) : "—"}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {r.savings_percentage != null ? `${Number(r.savings_percentage).toFixed(1)}%` : "—"}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-amber-900">{formatMoney(r.premium_above_base)}</TableCell>
-                      <TableCell className="text-right">{r.rounds}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {r.effective_from}
-                        {r.effective_to ? ` → ${r.effective_to}` : " → open"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        {/* Negotiation analytics */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Negotiation analytics</CardTitle>
+              <CardDescription>Per-part commercial posture and approval state.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* <ChartSelector
+                value={negChartView}
+                options={NEGOTIATION_CHART_OPTIONS}
+                onChange={(value) => setNegChartView(value as NegotiationChartView)}
+              /> */}
+              <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
+                {negotiationChart}
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Work order analytics */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Work order analytics</CardTitle>
-          <CardDescription>Execution pipeline, plant workload, and financial exposure.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid gap-3 sm:grid-cols-3 text-sm">
-            <div>
-              <div className="text-xs text-muted-foreground">Total WO value</div>
-              <div className="text-xl font-semibold">{formatMoney(wo.total_wo_value)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Invoiced</div>
-              <div className="text-xl font-semibold text-emerald-800">{formatMoney(wo.total_invoiced)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Pending invoice exposure</div>
-              <div className="text-xl font-semibold text-amber-900">{formatMoney(wo.pending_invoice_amount)}</div>
-            </div>
-          </div>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="h-64 min-h-[240px] w-full min-w-0">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">Status distribution</div>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={woDonut}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={48}
-                    outerRadius={76}
-                    paddingAngle={2}
-                  >
-                    {woDonut.map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="h-64 min-h-[240px] w-full min-w-0">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">Created vs completed by month</div>
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={wo.by_month} margin={{ left: 8, right: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="created" name="Created" fill="#0ea5e9" />
-                  <Bar dataKey="completed" name="Completed" fill="#059669" />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="h-64 min-h-[240px] w-full min-w-0">
-            <div className="mb-2 text-xs font-medium text-muted-foreground">Plant workload (count)</div>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={wo.by_plant} margin={{ bottom: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="plant_name" angle={-25} textAnchor="end" interval={0} height={70} tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#6366f1" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="h-56 min-h-[220px] w-full min-w-0">
-            <div className="mb-2 text-xs font-medium text-muted-foreground">Work order value trend</div>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={wo.value_trend} margin={{ left: 8, right: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip formatter={(v) => formatMoney(Number(v ?? 0))} />
-                <Line type="monotone" dataKey="value" name="Value" stroke="#059669" strokeWidth={2} dot />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Commercial */}
-      <Card>
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-          <div>
-            <CardTitle className="text-base">Commercial performance</CardTitle>
-            <CardDescription>Savings vs premium profile across approved negotiations.</CardDescription>
-          </div>
-          <Badge
-            variant={
-              commercial.risk_level === "high" ? "destructive" : commercial.risk_level === "medium" ? "warning" : "success"
-            }
-          >
-            Risk: {commercial.risk_level}
-          </Badge>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-          <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/50 p-3">
-            <div className="text-xs font-medium text-emerald-900">Avg savings % (approved)</div>
-            <div className="text-lg font-semibold text-emerald-950">
-              {commercial.avg_negotiation_reduction_pct != null
-                ? `${Number(commercial.avg_negotiation_reduction_pct).toFixed(1)}%`
-                : "—"}
-            </div>
-          </div>
-          <div className="rounded-lg border border-amber-200/80 bg-amber-50/50 p-3">
-            <div className="text-xs font-medium text-amber-950">Avg premium above base</div>
-            <div className="text-lg font-semibold text-amber-950">
-              {commercial.avg_premium_above_base != null ? formatMoney(commercial.avg_premium_above_base) : "—"}
-            </div>
-          </div>
-          <div className="rounded-lg border p-3">
-            <div className="text-xs text-muted-foreground">Total savings generated</div>
-            <div className="text-lg font-semibold">{formatMoney(commercial.total_savings_generated)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Highest premium part</div>
-            <div className="font-medium">{commercial.highest_premium_part_code ?? "—"}</div>
-            <div className="tabular-nums text-amber-900">{formatMoney(commercial.highest_premium_amount)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Highest savings part</div>
-            <div className="font-medium">{commercial.highest_savings_part_code ?? "—"}</div>
-            <div className="tabular-nums text-emerald-800">{formatMoney(commercial.highest_savings_amount)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Above / below base rate</div>
-            <div>
-              <span className="text-amber-900">{Number(commercial.pct_negotiations_above_base).toFixed(1)}%</span>
-              <span className="text-muted-foreground"> / </span>
-              <span className="text-emerald-800">{Number(commercial.pct_negotiations_below_base).toFixed(1)}%</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Timeline */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Timeline & activity</CardTitle>
-          <CardDescription>Filter categories then refresh.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {["all", "negotiations", "work_orders", "approvals", "financial", "compliance"].map((c) => (
-              <Button
-                key={c}
-                type="button"
-                size="sm"
-                variant={tlCats === c ? "default" : "outline"}
-                className="h-8 text-xs capitalize"
-                onClick={() => setTlCats(c)}
-              >
-                {c.replace("_", " ")}
-              </Button>
-            ))}
-          </div>
-          <Separator />
-          <ul className="max-h-96 space-y-2 overflow-y-auto text-sm">
-            {timeline.map((e, i) => (
-              <li key={`${e.timestamp}-${i}`} className="rounded-md border border-border/50 bg-muted/20 px-2 py-2">
-                <div className="flex flex-wrap justify-between gap-1 text-xs text-muted-foreground">
-                  <span className="uppercase tracking-wide">{e.category}</span>
-                  <span>{new Date(e.timestamp).toLocaleString()}</span>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Negotiation detail</CardTitle>
+              <CardDescription>Part-by-part negotiated outcomes in a compact list.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  {activeFilterCount > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} applied.
+                    </p>
+                  ) : null}
                 </div>
-                <div className="font-medium">{e.title}</div>
-                {e.description ? <div className="text-xs text-muted-foreground">{e.description}</div> : null}
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+                {toolbarControls}
+              </div>
+
+              {filtersOpen ? (
+                <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
+                  <div className="mb-4">
+                    <div className="text-sm font-semibold">Filters</div>
+                    <p className="text-xs text-muted-foreground">
+                      Date range, plant, statuses, and part search — use Apply to reload analytics.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid gap-1">
+                      <Label htmlFor="ca-from">From</Label>
+                      <Input id="ca-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label htmlFor="ca-to">To</Label>
+                      <Input id="ca-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label>Plant</Label>
+                      <select
+                        className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                        value={plantId}
+                        onChange={(e) => setPlantId(e.target.value)}
+                      >
+                        <option value="">All mapped plants</option>
+                        {(summary.plants ?? []).map((p) => (
+                          <option key={p.id} value={String(p.id)}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-1">
+                      <Label>WO status</Label>
+                      <select
+                        className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                        value={woStatus}
+                        onChange={(e) => setWoStatus(e.target.value)}
+                      >
+                        <option value="">Any</option>
+                        {["draft", "pending_approval", "approved", "active", "closed", "cancelled", "rejected"].map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-1">
+                      <Label>Negotiation status</Label>
+                      <select
+                        className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                        value={negStatus}
+                        onChange={(e) => setNegStatus(e.target.value)}
+                      >
+                        <option value="">Any</option>
+                        {["draft", "pending_approval", "approved", "rejected", "expired", "cancelled"].map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-1 sm:col-span-2">
+                      <Label htmlFor="ca-part">Part search</Label>
+                      <Input
+                        id="ca-part"
+                        placeholder="Code or name contains…"
+                        value={partSearch}
+                        onChange={(e) => setPartSearch(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-end sm:col-span-2">
+                      <Button type="button" size="sm" onClick={() => void load()}>
+                        Apply filters
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Part</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Base</TableHead>
+                      <TableHead className="text-right">Negotiated</TableHead>
+                      <TableHead className="text-right">Tolerance</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {neg.rows.slice(0, 10).map((r) => (
+                      <TableRow key={r.contractor_rate_id}>
+                        <TableCell className="font-mono text-xs">
+                          <button
+                            type="button"
+                            className="text-left font-semibold text-emerald-700 transition-colors hover:text-emerald-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                            onClick={() => setSelectedNegotiation(r)}
+                          >
+                            {r.part_code}
+                          </button>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{rateStatusLabel(r.status)}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{formatMoney(r.base_rate)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatMoney(r.negotiated_rate)}</TableCell>
+                        <TableCell>
+                          <div className="flex justify-end">
+                            <VsBaseToleranceBadge
+                              negotiated={r.negotiated_rate}
+                              baseRate={r.base_rate}
+                            />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/*
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Work order analytics</CardTitle>
+            <CardDescription>Execution pipeline, plant workload, and financial exposure. Pick one chart at a time.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-3 sm:grid-cols-3 text-sm">
+              <div>
+                <div className="text-xs text-muted-foreground">Total WO value</div>
+                <div className="text-xl font-semibold">{formatMoney(wo.total_wo_value)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Invoiced</div>
+                <div className="text-xl font-semibold text-emerald-800">{formatMoney(wo.total_invoiced)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Pending invoice exposure</div>
+                <div className="text-xl font-semibold text-amber-900">{formatMoney(wo.pending_invoice_amount)}</div>
+              </div>
+            </div>
+            <ChartSelector
+              value={woChartView}
+              options={WORK_ORDER_CHART_OPTIONS}
+              onChange={(value) => setWoChartView(value as WorkOrderChartView)}
+            />
+            <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
+              {workOrderChart}
+            </div>
+          </CardContent>
+        </Card>
+        */}
+
+        {/*
+        <Card>
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">Commercial performance</CardTitle>
+              <CardDescription>Savings vs premium profile across approved negotiations.</CardDescription>
+            </div>
+            <Badge
+              variant={
+                commercial.risk_level === "high" ? "destructive" : commercial.risk_level === "medium" ? "warning" : "success"
+              }
+            >
+              Risk: {commercial.risk_level}
+            </Badge>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+            <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/50 p-3">
+              <div className="text-xs font-medium text-emerald-900">Avg savings % (approved)</div>
+              <div className="text-lg font-semibold text-emerald-950">
+                {commercial.avg_negotiation_reduction_pct != null
+                  ? `${Number(commercial.avg_negotiation_reduction_pct).toFixed(1)}%`
+                  : "—"}
+              </div>
+            </div>
+            <div className="rounded-lg border border-amber-200/80 bg-amber-50/50 p-3">
+              <div className="text-xs font-medium text-amber-950">Avg premium above base</div>
+              <div className="text-lg font-semibold text-amber-950">
+                {commercial.avg_premium_above_base != null ? formatMoney(commercial.avg_premium_above_base) : "—"}
+              </div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">Total savings generated</div>
+              <div className="text-lg font-semibold">{formatMoney(commercial.total_savings_generated)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Highest premium part</div>
+              <div className="font-medium">{commercial.highest_premium_part_code ?? "—"}</div>
+              <div className="tabular-nums text-amber-900">{formatMoney(commercial.highest_premium_amount)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Highest savings part</div>
+              <div className="font-medium">{commercial.highest_savings_part_code ?? "—"}</div>
+              <div className="tabular-nums text-emerald-800">{formatMoney(commercial.highest_savings_amount)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Above / below base rate</div>
+              <div>
+                <span className="text-amber-900">{Number(commercial.pct_negotiations_above_base).toFixed(1)}%</span>
+                <span className="text-muted-foreground"> / </span>
+                <span className="text-emerald-800">{Number(commercial.pct_negotiations_below_base).toFixed(1)}%</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        */}
+      </div>
+
+      <Dialog open={selectedNegotiation != null} onOpenChange={(open) => !open && setSelectedNegotiation(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+          {selectedNegotiation ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-sm sm:text-base">{selectedNegotiation.part_code}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span>{selectedNegotiation.part_name}</span>
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedNegotiation.rounds > 0
+                    ? `Showing the latest negotiation snapshot from Round ${selectedNegotiation.rounds}.`
+                    : "Showing the latest negotiation snapshot from the contractor dashboard."}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={rateStatusVariant(selectedNegotiation.status)}>
+                      {rateStatusLabel(selectedNegotiation.status)}
+                    </Badge>
+                    {selectedNegotiation.rounds > 0 ? (
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-800">
+                        Round {selectedNegotiation.rounds}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    Rate ID #{selectedNegotiation.contractor_rate_id}
+                  </span>
+                </div>
+
+                <div className="rounded-2xl border bg-white p-4 sm:p-5">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <FactField label="Base rate" value={formatMoney(selectedNegotiation.base_rate)} />
+                    <FactField
+                      label="Initial ask"
+                      value={selectedNegotiation.initial_rate != null ? formatMoney(selectedNegotiation.initial_rate) : "—"}
+                    />
+                    <FactField
+                      label="Agreed rate"
+                      value={formatMoney(selectedNegotiation.negotiated_rate)}
+                      strong
+                    />
+                    <FactField
+                      label="Negotiated down by"
+                      value={
+                        selectedNegotiation.savings_amount !== null && Number(selectedNegotiation.savings_amount) > 0
+                          ? `${formatMoney(selectedNegotiation.savings_amount)} (${formatPercent(selectedNegotiation.savings_percentage)})`
+                          : "—"
+                      }
+                      strong
+                    />
+                    <FactField label="Effective from" value={selectedNegotiation.effective_from} />
+                    <FactField label="Effective to" value={selectedNegotiation.effective_to ?? "Open"} />
+                  </div>
+
+                  <div className="mt-5 space-y-1">
+                    <p className="text-xs text-muted-foreground">Tolerance</p>
+                    <VsBaseToleranceBadge
+                      negotiated={selectedNegotiation.negotiated_rate}
+                      baseRate={selectedNegotiation.base_rate}
+                      className="w-fit"
+                    />
+                  </div>
+                </div>
+
+                {/* <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <FactField label="Base rate" value={formatMoney(selectedNegotiation.base_rate)} />
+                  <FactField label="Negotiated rate" value={formatMoney(selectedNegotiation.negotiated_rate)} />
+                  <FactField
+                    label="Initial ask"
+                    value={selectedNegotiation.initial_rate != null ? formatMoney(selectedNegotiation.initial_rate) : "—"}
+                  />
+                  <FactField
+                    label="Savings amount"
+                    value={selectedNegotiation.savings_amount != null ? formatMoney(selectedNegotiation.savings_amount) : "—"}
+                  />
+                  <FactField
+                    label="Savings %"
+                    value={
+                      selectedNegotiation.savings_percentage != null
+                        ? `${Number(selectedNegotiation.savings_percentage).toFixed(1)}%`
+                        : "—"
+                    }
+                  />
+                  <FactField label="Premium above base" value={formatMoney(selectedNegotiation.premium_above_base)} />
+                  <FactField label="Rounds" value={selectedNegotiation.rounds} />
+                  <FactField label="Effective from" value={selectedNegotiation.effective_from} />
+                  <FactField
+                    label="Effective to"
+                    value={selectedNegotiation.effective_to ?? "Open"}
+                  />
+                </div> */}
+              </div>
+
+              {canOpenNegotiationPage ? (
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      openNegotiationDetail(selectedNegotiation.contractor_rate_id)
+                      setSelectedNegotiation(null)
+                    }}
+                  >
+                    Open negotiation page
+                  </Button>
+                </DialogFooter>
+              ) : null}
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

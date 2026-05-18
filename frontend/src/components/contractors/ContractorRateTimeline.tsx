@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   ArrowRight,
   CheckCircle2,
+  ChevronDown,
   CircleX,
   History,
   MessagesSquare,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { getJson } from "@/lib/api"
 import { formatMoney, type VsBaseTolerance } from "@/components/contractors/rateStatus"
 import { VsBaseToleranceBadge } from "@/components/contractors/VsBaseToleranceBadge"
@@ -175,11 +177,11 @@ function TimelineHighlights({ highlights }: { highlights: Record<string, string>
   const entries = Object.entries(highlights).filter(([, v]) => v)
   if (entries.length === 0) return null
   return (
-    <div className="mt-2 flex flex-wrap gap-2">
+    <div className="mt-2 flex flex-wrap gap-1.5">
       {entries.map(([key, value]) => (
         <span
           key={key}
-          className={`rounded-md px-2.5 py-1 text-sm font-medium ${
+          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
             key === "savings_amount" || key === "savings_percentage"
               ? "bg-emerald-50 text-emerald-800"
               : key === "counter_rate"
@@ -187,7 +189,7 @@ function TimelineHighlights({ highlights }: { highlights: Record<string, string>
                 : "bg-gray-100 text-gray-800"
           }`}
         >
-          <span className="text-xs font-normal text-muted-foreground">
+          <span className="font-normal text-muted-foreground">
             {HIGHLIGHT_LABELS[key] ?? key}:{" "}
           </span>
           {formatHighlightValue(key, value)}
@@ -200,31 +202,32 @@ function TimelineHighlights({ highlights }: { highlights: Record<string, string>
 function TimelineChanges({ changes }: { changes: TimelineChange[] }) {
   if (changes.length === 0) return null
   return (
-    <div className="mt-3 overflow-hidden rounded-lg border text-sm">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b bg-gray-50 text-left text-xs text-muted-foreground">
-            <th className="px-3 py-2 font-medium">Field</th>
-            <th className="px-3 py-2 font-medium">Before</th>
-            <th className="w-8 px-3 py-2" />
-            <th className="px-3 py-2 font-medium">After</th>
-          </tr>
-        </thead>
-        <tbody>
-          {changes.map((ch) => (
-            <tr key={ch.field} className="border-b last:border-0">
-              <td className="px-3 py-2 font-medium text-gray-700">{ch.label}</td>
-              <td className="px-3 py-2 text-muted-foreground">{ch.old ?? "—"}</td>
-              <td className="px-1 py-2 text-muted-foreground">
-                <ArrowRight className="size-3.5" />
-              </td>
-              <td className="px-3 py-2 font-medium text-gray-900">{ch.new ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-1.5 text-xs">
+      {changes.map((ch) => (
+        <div
+          key={ch.field}
+          className="grid gap-1 rounded-md border border-border/60 bg-background px-2.5 py-2 sm:grid-cols-[9rem_minmax(0,1fr)_1rem_minmax(0,1fr)] sm:items-center"
+        >
+          <div className="font-medium text-foreground">{ch.label}</div>
+          <div className="min-w-0 truncate text-muted-foreground" title={ch.old ?? "—"}>
+            {ch.old ?? "—"}
+          </div>
+          <div className="hidden justify-center text-muted-foreground sm:flex">
+            <ArrowRight className="size-3.5" />
+          </div>
+          <div className="min-w-0 truncate font-medium text-foreground" title={ch.new ?? "—"}>
+            {ch.new ?? "—"}
+          </div>
+        </div>
+      ))}
     </div>
   )
+}
+
+function kindLabel(kind: RateTimelineEvent["kind"]): string {
+  if (kind === "approval") return "Approval"
+  if (kind === "negotiation") return "Round"
+  return "Audit"
 }
 
 export function ContractorRateTimeline({
@@ -259,11 +262,9 @@ export function ContractorRateTimeline({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Negotiation Log</CardTitle>
-        <p></p>
-        {/* <p className="text-xs text-muted-foreground">
-          Commercial story from opening the negotiation through rounds, changes, approval, and
-          activation.
-        </p> */}
+        <p className="text-xs text-muted-foreground">
+          Compact audit trail with its own scroll area so the rate view stays easier to scan.
+        </p>
       </CardHeader>
       <CardContent>
         {error ? <div className="text-sm text-destructive">{error}</div> : null}
@@ -276,83 +277,103 @@ export function ContractorRateTimeline({
           </div>
         ) : null}
         {events && events.length > 0 ? (
-          <ol className="relative space-y-4 pl-6">
-            <span className="absolute left-3 top-2 bottom-2 w-px bg-gray-200" aria-hidden />
-            {events.map((evt, i) => {
-              const Icon = eventIcon(evt.action)
-              const t = tone(evt.action, evt.kind)
-              const cls = TONE_CLASSES[t]
-              const payload = evt.payload
-              const comment = payload?.comment ?? evt.description
-              const highlights = payload?.highlights
-              const changes = payload?.changes
-              const vsBaseTolerance = apiVsBaseTolerance(payload?.vs_base_tolerance)
+          <ScrollArea className="h-[min(68vh,44rem)]">
+            <div className="pr-4">
+              <ol className="relative space-y-3 pl-5">
+                <span className="absolute left-2 top-2 bottom-2 w-px bg-gray-200" aria-hidden />
+                {events.map((evt, i) => {
+                  const Icon = eventIcon(evt.action)
+                  const t = tone(evt.action, evt.kind)
+                  const cls = TONE_CLASSES[t]
+                  const payload = evt.payload
+                  const comment = payload?.comment ?? evt.description
+                  const highlights = payload?.highlights
+                  const changes = payload?.changes
+                  const vsBaseTolerance = apiVsBaseTolerance(payload?.vs_base_tolerance)
+                  const hasExpandableDetails = Boolean((changes && changes.length) || comment)
 
-              return (
-                <li key={`${evt.occurred_at}-${evt.action}-${i}`} className="relative">
-                  <span
-                    className={`absolute -left-[26px] flex size-6 items-center justify-center rounded-full ring-2 ${cls.ring} ${cls.bg} ${cls.text}`}
-                  >
-                    <Icon className="size-3.5" />
-                  </span>
-                  <div className="rounded-xl border bg-white p-3 shadow-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-gray-900">{evt.title}</span>
-                        {payload?.is_resubmit ? (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
-                            Resubmit
+                  return (
+                    <li key={`${evt.occurred_at}-${evt.action}-${i}`} className="relative">
+                      <span
+                        className={`absolute -left-[22px] flex size-5 items-center justify-center rounded-full ring-2 ${cls.ring} ${cls.bg} ${cls.text}`}
+                      >
+                        <Icon className="size-3" />
+                      </span>
+                      <div className="rounded-xl border bg-white p-3 shadow-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                {kindLabel(evt.kind)}
+                              </span>
+                              {payload?.is_resubmit ? (
+                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
+                                  Resubmit
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="text-sm font-semibold text-foreground">{evt.title}</div>
+                          </div>
+                          <span className="shrink-0 text-[11px] text-muted-foreground">
+                            {formatTimestamp(evt.occurred_at)}
                           </span>
+                        </div>
+
+                        {highlights ? <TimelineHighlights highlights={highlights} /> : null}
+                        {vsBaseTolerance ? (
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="text-[11px] text-muted-foreground">Tolerance</span>
+                            <VsBaseToleranceBadge
+                              negotiated={null}
+                              baseRate={null}
+                              tolerance={vsBaseTolerance}
+                              className="w-fit"
+                            />
+                          </div>
                         ) : null}
+
+                        {hasExpandableDetails ? (
+                          <details className="group mt-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 [&_summary::-webkit-details-marker]:hidden">
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+                              <span>View details</span>
+                              <ChevronDown className="size-3.5 transition-transform duration-200 group-open:rotate-180" />
+                            </summary>
+                            <div className="mt-2 space-y-2">
+                              {changes ? <TimelineChanges changes={changes} /> : null}
+                              {comment ? (
+                                <blockquote className="rounded-md border-l-2 border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                                  {comment}
+                                </blockquote>
+                              ) : null}
+                            </div>
+                          </details>
+                        ) : null}
+
+                        <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+                          <span className="grid h-5 w-5 place-items-center rounded-full bg-gray-100 text-[10px] font-semibold text-gray-600">
+                            {actorInitials(evt.actor_name)}
+                          </span>
+                          <span>
+                            {(() => {
+                              const a = evt.action.toUpperCase()
+                              const name = evt.actor_name
+                              if (a === "APPROVED" || (a === "APPROVE" && evt.kind === "approval")) {
+                                return name ? `Approved by ${name}` : "Approved"
+                              }
+                              if (a === "REJECTED" || (a === "REJECT" && evt.kind === "approval")) {
+                                return name ? `Rejected by ${name}` : "Rejected"
+                              }
+                              return name ?? "System"
+                            })()}
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        {formatTimestamp(evt.occurred_at)}
-                      </span>
-                    </div>
-
-                    {highlights ? <TimelineHighlights highlights={highlights} /> : null}
-                    {vsBaseTolerance ? (
-                      <div className="mt-2 space-y-1">
-                        <p className="text-xs text-muted-foreground">Tolerance</p>
-                        <VsBaseToleranceBadge
-                          negotiated={null}
-                          baseRate={null}
-                          tolerance={vsBaseTolerance}
-                          className="w-fit"
-                        />
-                      </div>
-                    ) : null}
-                    {changes ? <TimelineChanges changes={changes} /> : null}
-
-                    {comment ? (
-                      <blockquote className="mt-3 rounded-md border-l-2 border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                        {comment}
-                      </blockquote>
-                    ) : null}
-
-                    <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="grid h-5 w-5 place-items-center rounded-full bg-gray-100 text-[10px] font-semibold text-gray-600">
-                        {actorInitials(evt.actor_name)}
-                      </span>
-                      <span>
-                        {(() => {
-                          const a = evt.action.toUpperCase()
-                          const name = evt.actor_name
-                          if (a === "APPROVED" || (a === "APPROVE" && evt.kind === "approval")) {
-                            return name ? `Approved by ${name}` : "Approved"
-                          }
-                          if (a === "REJECTED" || (a === "REJECT" && evt.kind === "approval")) {
-                            return name ? `Rejected by ${name}` : "Rejected"
-                          }
-                          return name ?? "System"
-                        })()}
-                      </span>
-                    </div>
-                  </div>
-                </li>
-              )
-            })}
-          </ol>
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
+          </ScrollArea>
         ) : null}
       </CardContent>
     </Card>

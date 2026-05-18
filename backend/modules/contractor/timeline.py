@@ -16,6 +16,7 @@ from modules.contractor.models import (
     ContractorAuditLog,
 )
 from modules.errors import NotFoundError
+from modules.org_units.model import OrgUnit
 from modules.users.model import User
 
 
@@ -46,6 +47,28 @@ def _action_title(action: str) -> str:
     return mapping.get(action, action.replace("_", " ").title())
 
 
+def _org_unit_label(db: Session, row: ContractorAuditLog) -> str | None:
+    meta = row.metadata_json or {}
+    for source in (meta, row.new_value or {}, row.old_value or {}):
+        name = source.get("org_unit_name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+
+    for source in (meta, row.new_value or {}, row.old_value or {}):
+        raw_id = source.get("org_unit_id")
+        if raw_id in (None, ""):
+            continue
+        try:
+            org_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        org = db.get(OrgUnit, org_id)
+        if org is not None and getattr(org, "name", None):
+            return str(org.name)
+        return f"Org unit #{org_id}"
+    return None
+
+
 class ContractorTimelineService:
     """Build a unified timeline for a single contractor."""
 
@@ -73,7 +96,7 @@ class ContractorTimelineService:
                     "type": "audit",
                     "action": row.action,
                     "title": _action_title(row.action),
-                    "description": _describe_audit(row),
+                    "description": _describe_audit(self._db, row),
                     "timestamp": row.created_at,
                     "actor_user_id": row.changed_by,
                     "actor_name": actor,
@@ -156,7 +179,7 @@ def _approval_request_title(req: ApprovalRequest) -> str:
     return label
 
 
-def _describe_audit(row: ContractorAuditLog) -> str | None:
+def _describe_audit(db: Session, row: ContractorAuditLog) -> str | None:
     if row.action == "STATUS_CHANGED":
         new = (row.new_value or {}).get("status")
         old = (row.old_value or {}).get("status")
@@ -177,8 +200,8 @@ def _describe_audit(row: ContractorAuditLog) -> str | None:
         if keys:
             return f"Updated document fields: {', '.join(keys)}."
     if row.action.startswith("PLANT_MAPPING_"):
-        meta = row.metadata_json or {}
-        org = meta.get("org_unit_id")
-        if org:
-            return f"Plant mapping (org_unit_id={org})."
+        org_name = _org_unit_label(db, row)
+        if org_name:
+            return f"Plant mapping ({org_name})."
+        return "Plant mapping updated."
     return None

@@ -566,12 +566,12 @@ export function RolesPage() {
                           mod.tabs.flatMap((t) => (Array.isArray(t.actions) ? t.actions : []))
                         )
                         return (
-                      <Table>
+                      <Table className="w-max min-w-[40rem] table-fixed">
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-[140px]">Tab</TableHead>
+                            <TableHead className="w-[220px] min-w-[220px]">Tab</TableHead>
                             {moduleActions.map((act) => (
-                              <TableHead key={act} className="w-[88px] text-center">
+                              <TableHead key={act} className="w-[96px] min-w-[96px] text-center">
                                 {ACTION_LABEL[act] ?? act}
                               </TableHead>
                             ))}
@@ -580,12 +580,14 @@ export function RolesPage() {
                         <TableBody>
                           {mod.tabs.map((tab) => (
                             <TableRow key={`${mod.key}.${tab.key}`}>
-                              <TableCell className="text-sm text-muted-foreground">{tab.title}</TableCell>
+                              <TableCell className="w-[220px] min-w-[220px] text-sm text-muted-foreground">
+                                {tab.title}
+                              </TableCell>
                               {moduleActions.map((act) => {
                                 const cell = tab.permissions.find((p) => p.action === act)
                                 if (!cell) {
                                   return (
-                                    <TableCell key={act} className="text-center">
+                                    <TableCell key={act} className="w-[96px] min-w-[96px] text-center">
                                       <span className="text-xs text-muted-foreground">—</span>
                                     </TableCell>
                                   )
@@ -594,7 +596,7 @@ export function RolesPage() {
                                 const checked = id != null && selectedPermissionIds.has(id)
                                 const disabled = id == null || !canSaveRole
                                 return (
-                                  <TableCell key={act} className="text-center">
+                                  <TableCell key={act} className="w-[96px] min-w-[96px] text-center">
                                     <div className="flex justify-center">
                                       <Checkbox
                                         checked={checked}

@@ -315,16 +315,6 @@ export function NegotiatedRateNewPage() {
   const negRate = Number(form.negotiated_rate)
   const initialAskStr = form.initial_rate.trim()
   const initialAskN = Number(initialAskStr)
-  const effectiveInitial =
-    initialAskStr !== "" && Number.isFinite(initialAskN) && initialAskN > 0 ? initialAskN : NaN
-
-  const previewNegotiationSavings =
-    Number.isFinite(effectiveInitial) && Number.isFinite(negRate) && effectiveInitial > 0
-      ? {
-          amount: Math.max(0, effectiveInitial - negRate),
-          pct: effectiveInitial > 0 ? (Math.max(0, effectiveInitial - negRate) / effectiveInitial) * 100 : 0,
-        }
-      : null
 
   const previewVsBase = computeVsBaseTolerance(negRate, baseRate)
 

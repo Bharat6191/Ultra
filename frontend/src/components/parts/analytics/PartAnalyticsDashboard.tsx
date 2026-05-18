@@ -105,8 +105,8 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
   const [dateTo, setDateTo] = React.useState("")
   const [plantId, setPlantId] = React.useState("")
   const [contractorId, setContractorId] = React.useState("")
-  const [woStatus, setWoStatus] = React.useState("")
-  const [negStatus, setNegStatus] = React.useState("")
+  const woStatus = ""
+  const negStatus = ""
   const [filtersOpen, setFiltersOpen] = React.useState(false)
 
   const [loading, setLoading] = React.useState(true)

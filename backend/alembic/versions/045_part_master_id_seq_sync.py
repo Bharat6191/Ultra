@@ -25,10 +25,14 @@ def upgrade() -> None:
     bind.execute(
         text(
             """
+            WITH part_master_ids AS (
+                SELECT MAX(id) AS max_id
+                FROM part_master
+            )
             SELECT setval(
                 pg_get_serial_sequence('part_master', 'id'),
-                (SELECT COALESCE(MAX(id), 0) FROM part_master),
-                true
+                COALESCE((SELECT max_id FROM part_master_ids), 1),
+                COALESCE((SELECT max_id IS NOT NULL FROM part_master_ids), false)
             )
             """
         )

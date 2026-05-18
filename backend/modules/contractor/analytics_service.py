@@ -13,18 +13,20 @@ from sqlalchemy.orm import Session
 
 from modules.approvals.model import ApprovalRequest, ApprovalTask
 from modules.contractor.models import Contractor, ContractorDocument, ContractorPlant
-from modules.contractor_rates.models import ContractorRate, NegotiationLog
+from modules.contractor_rates.models import ContractorRate, ContractorRateAuditLog, NegotiationLog
 from modules.errors import NotFoundError
-from modules.invoices.models import Invoice
+from modules.invoices.models import Invoice, InvoiceLine
 from modules.org_units.model import OrgUnit
 from modules.part_master.models import PartMaster
-from modules.work_orders.models import WorkOrder, WorkOrderItem
+from modules.users.model import User
+from modules.work_orders.models import WorkOrder, WorkOrderItem, WorkOrderItemProgress
 
 from modules.contractor.analytics_schema import (
     AnalyticsFilters,
     AnalyticsTimelineEvent,
     CommercialInsights,
     ContractorAnalyticsSummary,
+    ContractorWorkOrderRow,
     KpiCard,
     NegotiationAnalytics,
     NegotiationRow,
@@ -53,6 +55,82 @@ class ContractorAnalyticsService:
         if row is None:
             raise NotFoundError("Contractor", contractor_id)
         return row
+
+    def _user_name(self, user_id: int | None) -> str | None:
+        if user_id is None:
+            return None
+        u = self._db.get(User, int(user_id))
+        if u is None:
+            return f"User #{user_id}"
+        return str(u.full_name or u.email or u.username or f"User #{user_id}")
+
+    def _audit_actor_name(self, audit_rows: Sequence[ContractorRateAuditLog]) -> str | None:
+        for row in audit_rows:
+            name = self._user_name(getattr(row, "changed_by", None))
+            if name:
+                return name
+        return None
+
+    def _rate_actor_name(self, rate: ContractorRate) -> str | None:
+        direct = self._user_name(rate.created_by)
+        if direct:
+            return direct
+        audit_rows = [a for a in list(rate.audit_logs or []) if str(a.action).upper() == "CREATED"]
+        return self._audit_actor_name(audit_rows) or self._audit_actor_name(list(rate.audit_logs or []))
+
+    def _item_completion_pct(self, item: WorkOrderItem) -> Decimal | None:
+        latest: WorkOrderItemProgress | None = None
+        if item.progress:
+            latest = max(
+                item.progress,
+                key=lambda p: (
+                    p.created_at or datetime.min.replace(tzinfo=timezone.utc),
+                    int(p.id),
+                ),
+            )
+        if latest is not None and latest.completed_percentage is not None:
+            return Decimal(str(latest.completed_percentage))
+        if (
+            latest is not None
+            and latest.completed_quantity is not None
+            and item.planned_quantity is not None
+        ):
+            pq = Decimal(str(item.planned_quantity))
+            if pq > 0:
+                return Decimal(str(latest.completed_quantity)) / pq * Decimal("100")
+        return None
+
+    def _wo_completion(self, items: list[WorkOrderItem]) -> Decimal | None:
+        pcts = [p for p in (self._item_completion_pct(it) for it in items) if p is not None]
+        if not pcts:
+            return None
+        return sum(pcts) / Decimal(len(pcts))
+
+    def _round_actor_name(self, rate: ContractorRate, log: NegotiationLog) -> str | None:
+        direct = self._user_name(log.created_by)
+        if direct:
+            return direct
+        round_no = int(log.round_number or 0)
+        matches: list[ContractorRateAuditLog] = []
+        for audit in list(rate.audit_logs or []):
+            md = audit.metadata_json or {}
+            nv = audit.new_value or {}
+            md_round = md.get("round_number")
+            nv_round = nv.get("round_number")
+            try:
+                same_round = (md_round is not None and int(md_round) == round_no) or (nv_round is not None and int(nv_round) == round_no)
+            except (TypeError, ValueError):
+                same_round = False
+            if same_round:
+                matches.append(audit)
+        return self._audit_actor_name(matches) or self._rate_actor_name(rate)
+
+    def _approved_actor_name(self, rate: ContractorRate) -> str | None:
+        direct = self._user_name(rate.approved_by)
+        if direct:
+            return direct
+        matches = [a for a in list(rate.audit_logs or []) if str(a.action).upper() in {"APPROVED", "RATE_ACTIVATED"}]
+        return self._audit_actor_name(matches)
 
     def _part_filter(self, flt: AnalyticsFilters):
         cond = []
@@ -251,18 +329,54 @@ class ContractorAnalyticsService:
         )
 
     def get_work_orders(self, contractor_id: int, flt: AnalyticsFilters) -> WorkOrderAnalytics:
-        self._ensure(contractor_id)
+        contractor = self._ensure(contractor_id)
         wo_base = select(WorkOrder).where(WorkOrder.contractor_id == int(contractor_id))
         wox = self._wo_date_filter(flt)
         if wox is not None:
             wo_base = wo_base.where(wox)
         wos = list(self._db.scalars(wo_base).all())
+        wo_ids = [int(w.id) for w in wos]
 
         totals_by_status: dict[str, int] = defaultdict(int)
         by_plant: dict[str, dict[str, Any]] = {}
         by_month_c: dict[str, int] = defaultdict(int)
         by_month_x: dict[str, int] = defaultdict(int)
         value_trend: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+        wo_rows: list[ContractorWorkOrderRow] = []
+
+        items_map: dict[int, list[WorkOrderItem]] = defaultdict(list)
+        if wo_ids:
+            all_items = list(
+                self._db.scalars(
+                    select(WorkOrderItem).where(WorkOrderItem.work_order_id.in_(wo_ids))
+                ).all()
+            )
+            for it in all_items:
+                items_map[int(it.work_order_id)].append(it)
+
+        inv_by_wo: dict[int, tuple[Decimal, Decimal]] = defaultdict(lambda: (Decimal("0"), Decimal("0")))
+        if wo_ids:
+            inv_rows = list(
+                self._db.execute(
+                    select(
+                        WorkOrderItem.work_order_id,
+                        Invoice.status,
+                        func.coalesce(func.sum(InvoiceLine.amount), 0),
+                    )
+                    .join(InvoiceLine, InvoiceLine.invoice_id == Invoice.id)
+                    .join(WorkOrderItem, WorkOrderItem.id == InvoiceLine.work_order_item_id)
+                    .where(WorkOrderItem.work_order_id.in_(wo_ids))
+                    .group_by(WorkOrderItem.work_order_id, Invoice.status)
+                ).all()
+            )
+            for wo_id, st, amt in inv_rows:
+                a = Decimal(str(amt))
+                st_l = str(st).lower()
+                cur_inv, cur_pend = inv_by_wo[int(wo_id)]
+                if st_l in ("approved", "paid"):
+                    inv_by_wo[int(wo_id)] = (cur_inv + a, cur_pend)
+                elif st_l in ("draft", "submitted", "blocked", "pending_exception_approval"):
+                    inv_by_wo[int(wo_id)] = (cur_inv, cur_pend + a)
 
         for w in wos:
             st = str(w.status).lower()
@@ -272,12 +386,11 @@ class ContractorAnalyticsService:
                 on = self._db.get(OrgUnit, oid)
                 by_plant[oid] = {"plant_id": oid, "plant_name": on.name if on else str(oid), "count": 0, "value": Decimal("0")}
             by_plant[oid]["count"] += 1
+            line_items = items_map.get(int(w.id), [])
             val = _d0(w.approved_value_total)
-            sub = self._db.scalar(
-                select(func.coalesce(func.sum(WorkOrderItem.taxable_value), 0)).where(WorkOrderItem.work_order_id == int(w.id))
-            )
-            if val == 0 and sub is not None:
-                val = Decimal(str(sub))
+            if val == 0:
+                val = sum((_d0(it.taxable_value) for it in line_items), start=Decimal("0"))
+            line_qty = sum((_d0(it.planned_quantity) for it in line_items), start=Decimal("0"))
             by_plant[oid]["value"] += val
             mkey = w.created_at.strftime("%Y-%m") if w.created_at else "unknown"
             by_month_c[mkey] += 1
@@ -285,6 +398,27 @@ class ContractorAnalyticsService:
             if st == "closed" and w.updated_at:
                 mx = w.updated_at.strftime("%Y-%m")
                 by_month_x[mx] += 1
+            wo_inv, wo_pend = inv_by_wo.get(int(w.id), (Decimal("0"), Decimal("0")))
+            end_dt = w.updated_at.date() if st == "closed" and w.updated_at else None
+            wo_rows.append(
+                ContractorWorkOrderRow(
+                    work_order_id=int(w.id),
+                    work_order_number=str(w.work_order_number),
+                    contractor_id=int(contractor.id),
+                    contractor_name=str(contractor.name),
+                    plant_name=str(by_plant[oid]["plant_name"]),
+                    quantity=line_qty,
+                    wo_value=val,
+                    invoiced_value=wo_inv,
+                    pending_value=wo_pend,
+                    status=st,
+                    completion_pct=self._wo_completion(line_items),
+                    start_date=w.work_date,
+                    end_date=end_dt,
+                )
+            )
+
+        wo_rows.sort(key=lambda r: r.work_order_number, reverse=True)
 
         months = sorted(set(by_month_c) | set(by_month_x) | set(value_trend.keys()))
         by_month_list = [
@@ -312,6 +446,7 @@ class ContractorAnalyticsService:
             pending_invoice_amount=pending_inv,
             donut_status=donut,
             value_trend=vtrend,
+            rows=wo_rows,
         )
 
     def get_commercial(self, contractor_id: int, flt: AnalyticsFilters) -> CommercialInsights:
@@ -502,6 +637,7 @@ class ContractorAnalyticsService:
                             title=f"Work order {w.work_order_number}",
                             description=w.title,
                             timestamp=w.created_at,
+                            actor_name=self._user_name(w.created_by),
                             metadata={"work_order_id": int(w.id), "status": w.status},
                         )
                     )
@@ -513,6 +649,7 @@ class ContractorAnalyticsService:
                             title=f"Work order closed: {w.work_order_number}",
                             description=None,
                             timestamp=w.updated_at,
+                            actor_name=None,
                             metadata={"work_order_id": int(w.id)},
                         )
                     )
@@ -529,6 +666,7 @@ class ContractorAnalyticsService:
                             title=f"Negotiation record — {label}",
                             description=f"Status {cr.status}",
                             timestamp=cr.created_at,
+                            actor_name=self._rate_actor_name(cr),
                             metadata={"contractor_rate_id": int(cr.id), "status": cr.status},
                         )
                     )
@@ -541,6 +679,7 @@ class ContractorAnalyticsService:
                                 title=f"Round {log.round_number} — {label}",
                                 description=log.remarks,
                                 timestamp=log.created_at,
+                                actor_name=self._round_actor_name(cr, log),
                                 metadata={"round": log.round_number, "contractor_rate_id": int(cr.id)},
                             )
                         )
@@ -552,6 +691,7 @@ class ContractorAnalyticsService:
                             title=f"Negotiation approved — {label}",
                             description=None,
                             timestamp=cr.approved_at,
+                            actor_name=self._approved_actor_name(cr),
                             metadata={"contractor_rate_id": int(cr.id)},
                         )
                     )
@@ -565,6 +705,7 @@ class ContractorAnalyticsService:
                         title=f"Invoice {inv.invoice_number} ({inv.status})",
                         description=None,
                         timestamp=inv.created_at,
+                        actor_name=self._user_name(inv.submitted_by or inv.created_by),
                         metadata={"invoice_id": int(inv.id), "total": str(inv.total_amount)},
                     )
                 )
@@ -578,6 +719,7 @@ class ContractorAnalyticsService:
                         title=f"Document: {d.document_name}",
                         description=f"Verification {d.verification_status}",
                         timestamp=d.created_at,
+                        actor_name=self._user_name(d.verified_by or d.created_by),
                         metadata={"document_id": int(d.id)},
                     )
                 )

@@ -33,6 +33,26 @@ export type ContractorTimelineEvent = {
   metadata: Record<string, unknown> | null
 }
 
+function orgUnitNameFromEvent(event: ContractorTimelineEvent) {
+  for (const source of [event.metadata, event.new_value, event.old_value]) {
+    const value = source?.org_unit_name
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return null
+}
+
+function eventDescription(event: ContractorTimelineEvent) {
+  if (event.action.startsWith("PLANT_MAPPING_")) {
+    const orgUnitName = orgUnitNameFromEvent(event)
+    if (orgUnitName) return `Plant mapping (${orgUnitName}).`
+  }
+  return event.description
+}
+
+function eventActorName(event: ContractorTimelineEvent) {
+  return event.actor_name?.trim() || "System"
+}
+
 function formatTimestamp(ts: string | null) {
   if (!ts) return "—"
   try {
@@ -125,6 +145,29 @@ function toneClasses(tone: string) {
   }
 }
 
+function fieldLabel(key: string) {
+  const labels: Record<string, string> = {
+    org_unit_name: "Plant / org unit",
+    role: "Role",
+    start_date: "Start date",
+    end_date: "End date",
+    notes: "Notes",
+    status: "Status",
+    document_name: "Document",
+    document_type: "Document type",
+  }
+  if (labels[key]) return labels[key]
+  return key.replace(/_/g, " ")
+}
+
+function renderFieldValue(value: unknown) {
+  if (value === undefined || value === null || value === "") return "—"
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value)
+  }
+  return JSON.stringify(value)
+}
+
 function DiffBlock({
   oldValue,
   newValue,
@@ -134,7 +177,9 @@ function DiffBlock({
 }) {
   const keys = Array.from(
     new Set([...(oldValue ? Object.keys(oldValue) : []), ...(newValue ? Object.keys(newValue) : [])]),
-  ).sort()
+  )
+    .filter((key) => !(key === "org_unit_id" && ((oldValue?.org_unit_name ?? newValue?.org_unit_name) != null)))
+    .sort()
   if (keys.length === 0) return null
   return (
     <div className="mt-3 overflow-hidden rounded-xl border bg-zinc-50">
@@ -152,12 +197,12 @@ function DiffBlock({
             const after = newValue?.[k]
             return (
               <tr key={k} className="border-t border-zinc-200">
-                <td className="px-3 py-2 font-medium text-zinc-700">{k}</td>
+                <td className="px-3 py-2 font-medium capitalize text-zinc-700">{fieldLabel(k)}</td>
                 <td className="px-3 py-2 font-mono text-zinc-700">
-                  {before === undefined || before === null ? "—" : JSON.stringify(before)}
+                  {renderFieldValue(before)}
                 </td>
                 <td className="px-3 py-2 font-mono text-emerald-700">
-                  {after === undefined || after === null ? "—" : JSON.stringify(after)}
+                  {renderFieldValue(after)}
                 </td>
               </tr>
             )
@@ -202,22 +247,23 @@ function TimelineRow({
                   {event.type}
                 </Badge>
               </div>
-              {event.description ? (
-                <div className="text-sm text-muted-foreground">{event.description}</div>
+              {eventDescription(event) ? (
+                <div className="text-sm text-muted-foreground">{eventDescription(event)}</div>
               ) : null}
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                {event.actor_name ? (
-                  <span className="inline-flex items-center gap-1.5">
+              <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+                <div className="rounded-xl border bg-zinc-50/80 px-3 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Performed by</div>
+                  <div className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-zinc-900">
                     <span className="flex size-5 items-center justify-center rounded-full bg-zinc-100 text-[10px] font-medium text-zinc-600">
-                      {actorInitials(event.actor_name)}
+                      {actorInitials(eventActorName(event))}
                     </span>
-                    {event.actor_name}
-                  </span>
-                ) : (
-                  <span className="text-zinc-500">System</span>
-                )}
-                <span className="text-zinc-300">•</span>
-                <span>{formatTimestamp(event.timestamp)}</span>
+                    {eventActorName(event)}
+                  </div>
+                </div>
+                <div className="rounded-xl border bg-zinc-50/80 px-3 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Time</div>
+                  <div className="mt-1 text-sm font-medium text-zinc-900">{formatTimestamp(event.timestamp)}</div>
+                </div>
               </div>
             </div>
             {hasDiff ? (
@@ -247,7 +293,6 @@ function TimelineRow({
 export function ContractorTimeline({ contractorId }: { contractorId: number }) {
   const [events, setEvents] = React.useState<ContractorTimelineEvent[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
-  const [filter, setFilter] = React.useState<"all" | "audit" | "approval">("all")
 
   React.useEffect(() => {
     let cancelled = false
@@ -268,7 +313,7 @@ export function ContractorTimeline({ contractorId }: { contractorId: number }) {
     }
   }, [contractorId])
 
-  const visible = (events ?? []).filter((e) => filter === "all" || e.type === filter)
+  const visible = events ?? []
 
   return (
     <Card className="rounded-2xl">
@@ -279,21 +324,6 @@ export function ContractorTimeline({ contractorId }: { contractorId: number }) {
             <div className="text-sm text-muted-foreground">
               Audit log + approval activity for this contractor.
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button size="xs" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>
-              All
-            </Button>
-            <Button size="xs" variant={filter === "audit" ? "default" : "outline"} onClick={() => setFilter("audit")}>
-              Audit
-            </Button>
-            <Button
-              size="xs"
-              variant={filter === "approval" ? "default" : "outline"}
-              onClick={() => setFilter("approval")}
-            >
-              Approvals
-            </Button>
           </div>
         </div>
       </CardHeader>

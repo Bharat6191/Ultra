@@ -36,6 +36,7 @@ from modules.contractor.models import (
     Contractor,
     ContractorAuditLog,
     ContractorDocument,
+    ContractorDocumentVersion,
     ContractorPlant,
 )
 from modules.contractor.service import ContractorService
@@ -170,12 +171,28 @@ def _ensure_doc(
         contractor_id=contractor_id,
         document_name=document_name,
         document_type=document_type,
+        file_path=file_url,
         file_url=file_url,
+        issue_date=issued_date,
         issued_date=issued_date,
         expiry_date=expiry_date,
+        verification_status="verified",
+        verified_at=datetime.now(timezone.utc),
+        current_version=1,
     )
     db.add(d)
     db.flush()
+    db.add(
+        ContractorDocumentVersion(
+            document_id=int(d.id),
+            version_number=1,
+            file_path=file_url,
+            issue_date=issued_date,
+            expiry_date=expiry_date,
+            remarks="Seeded manual-test document.",
+            uploaded_by=None,
+        )
+    )
     return d
 
 
@@ -664,4 +681,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

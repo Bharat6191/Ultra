@@ -1048,7 +1048,9 @@ export function RateDetailPanel({
         </CardContent>
       </Card>
 
-      <ContractorRateTimeline rateId={rate.id} refreshKey={rate.updated_at} />
+      <div className="self-start lg:sticky lg:top-4">
+        <ContractorRateTimeline rateId={rate.id} refreshKey={rate.updated_at} />
+      </div>
     </div>
   )
 }

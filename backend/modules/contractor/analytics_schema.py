@@ -86,6 +86,22 @@ class WorkOrderMonthly(BaseModel):
     completed: int
 
 
+class ContractorWorkOrderRow(BaseModel):
+    work_order_id: int
+    work_order_number: str
+    contractor_id: int
+    contractor_name: str
+    plant_name: str
+    quantity: Decimal
+    wo_value: Decimal
+    invoiced_value: Decimal
+    pending_value: Decimal
+    status: str
+    completion_pct: Decimal | None
+    start_date: date | None
+    end_date: date | None
+
+
 class WorkOrderAnalytics(BaseModel):
     totals_by_status: dict[str, int]
     by_plant: list[dict[str, Any]]
@@ -95,6 +111,7 @@ class WorkOrderAnalytics(BaseModel):
     pending_invoice_amount: Decimal
     donut_status: list[dict[str, Any]]  # {name, value}
     value_trend: list[dict[str, Any]]  # {month, value}
+    rows: list[ContractorWorkOrderRow] = Field(default_factory=list)
 
 
 class CommercialInsights(BaseModel):
@@ -131,4 +148,5 @@ class AnalyticsTimelineEvent(BaseModel):
     title: str
     description: str | None
     timestamp: datetime
+    actor_name: str | None = None
     metadata: dict[str, Any] | None = None

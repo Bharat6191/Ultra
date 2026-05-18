@@ -59,6 +59,23 @@ export type WorkOrderAnalytics = {
   pending_invoice_amount: string | number
   donut_status: { name: string; value: number }[]
   value_trend: { month: string; value: number }[]
+  rows: ContractorWorkOrderRow[]
+}
+
+export type ContractorWorkOrderRow = {
+  work_order_id: number
+  work_order_number: string
+  contractor_id: number
+  contractor_name: string
+  plant_name: string
+  quantity: string | number
+  wo_value: string | number
+  invoiced_value: string | number
+  pending_value: string | number
+  status: string
+  completion_pct: string | number | null
+  start_date: string | null
+  end_date: string | null
 }
 
 export type CommercialInsights = {
@@ -93,5 +110,6 @@ export type AnalyticsTimelineEvent = {
   title: string
   description: string | null
   timestamp: string
+  actor_name: string | null
   metadata: Record<string, unknown> | null
 }

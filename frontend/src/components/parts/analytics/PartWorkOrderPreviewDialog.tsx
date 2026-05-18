@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { cn } from "@/lib/utils"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   executionDetailRateCell,
@@ -350,24 +349,16 @@ export function PartWorkOrderPreviewDialog({ open, onOpenChange, partMasterId, s
           ) : null}
         </div>
 
-        <div
-          className={cn(
-            "flex shrink-0 flex-wrap items-center gap-3 border-t bg-muted/20 px-6 py-4",
-            canViewFull && summaryRow ? "justify-between" : "justify-end",
-          )}
-        >
-          <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-          {canViewFull && summaryRow ? (
+        {canViewFull && summaryRow ? (
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t bg-muted/20 px-6 py-4">
             <Button type="button" size="sm" asChild>
               <Link to={`/dashboard/work-orders/${summaryRow.work_order_id}`}>
                 Open full work order
                 <ExternalLink className="ml-1.5 size-3.5 shrink-0" aria-hidden />
               </Link>
             </Button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   )
