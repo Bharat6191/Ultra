@@ -59,6 +59,26 @@ type InvoiceAuditEntry = {
 
 const HIDDEN_VALIDATION_ISSUE_CODES = new Set(["QTY_EXCEEDS_COMPLETION", "CUMULATIVE_QTY_EXCEEDS_ALLOWED"])
 
+function issueAllowedActual(i: { allowed_qty?: unknown; allowed_value?: unknown; actual_qty?: unknown; actual_value?: unknown }) {
+  const allowed = i.allowed_qty ?? i.allowed_value
+  const actual = i.actual_qty ?? i.actual_value
+  if (allowed == null && actual == null) return null
+  return (
+    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+      allowed {String(allowed ?? "—")} · actual {String(actual ?? "—")}
+    </span>
+  )
+}
+
+function mergedBlockerJustification(issues: { justification?: string | null }[]): string {
+  const texts = [
+    ...new Set(
+      issues.map((i) => String(i.justification ?? "").trim()).filter(Boolean),
+    ),
+  ]
+  return texts[0] ?? ""
+}
+
 function issueSeverityVariant(sev: string): React.ComponentProps<typeof Badge>["variant"] {
   switch (String(sev || "").toLowerCase()) {
     case "blocker":
@@ -142,11 +162,16 @@ export function InvoiceDetailPage() {
     }
   }
 
-  async function saveJustification(issueId: number, justification: string) {
-    if (!justification.trim()) return
+  async function saveJustificationForBlockers(justification: string, issueIds: number[]) {
+    const text = justification.trim()
+    if (!text || issueIds.length === 0) return
     setActing(true)
     try {
-      await patchJson(`/invoices/issues/${issueId}/justification`, { justification: justification.trim() })
+      await Promise.all(
+        issueIds.map((issueId) =>
+          patchJson(`/invoices/issues/${issueId}/justification`, { justification: text }),
+        ),
+      )
       toast.success("Justification saved")
       await load()
     } catch (e) {
@@ -214,6 +239,11 @@ export function InvoiceDetailPage() {
   const visibleIssues = (row.issues ?? []).filter(
     (i: { code?: string }) => !HIDDEN_VALIDATION_ISSUE_CODES.has(String(i.code ?? "")),
   )
+  const issuesNeedingJustification = visibleIssues.filter((i: { requires_justification?: boolean }) =>
+    Boolean(i.requires_justification),
+  )
+  const otherVisibleIssues = visibleIssues.filter((i: { requires_justification?: boolean }) => !i.requires_justification)
+  const blockerJustificationKey = issuesNeedingJustification.map((i: { id: number }) => i.id).join(",")
 
   return (
     <div className="space-y-4">
@@ -343,54 +373,76 @@ export function InvoiceDetailPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Validation issues</CardTitle>
-          <CardDescription>Blockers require justification + attachments and may trigger exception approvals.</CardDescription>
+          <CardDescription>
+            Provide one justification for all blockers below before requesting exception approval.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {visibleIssues.length === 0 ? (
             <div className="text-sm text-muted-foreground">No issues.</div>
-          ) : (
-            visibleIssues.map((i: any) => (
-              <div
-                key={i.id}
-                className={
-                  i.severity === "blocker" || i.severity === "error"
-                    ? "rounded-md border border-destructive/30 bg-destructive/5 p-3"
-                    : i.severity === "warning"
-                      ? "rounded-md border border-amber-300/40 bg-amber-500/5 p-3"
-                      : "rounded-md border bg-muted/20 p-3"
-                }
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">
-                      {i.code} <span className="text-muted-foreground">·</span>{" "}
-                      <Badge variant={issueSeverityVariant(i.severity)}>{i.severity}</Badge>
+          ) : null}
+          {issuesNeedingJustification.length > 0 ? (
+            <div className="space-y-4 rounded-md border border-destructive/30 bg-destructive/5 p-4">
+              <ul className="space-y-3">
+                {issuesNeedingJustification.map((i: any) => (
+                  <li key={i.id} className="border-b border-destructive/15 pb-3 last:border-0 last:pb-0">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium">{i.code}</span>
+                          <Badge variant={issueSeverityVariant(i.severity)}>{i.severity}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{i.message}</p>
+                      </div>
+                      {issueAllowedActual(i)}
                     </div>
-                    <div className="text-sm text-muted-foreground">{i.message}</div>
-                  </div>
-                  <div className="text-xs text-muted-foreground tabular-nums">
-                    allowed {String(i.allowed_qty ?? i.allowed_value ?? "—")} · actual{" "}
-                    {String(i.actual_qty ?? i.actual_value ?? "—")}
-                  </div>
+                  </li>
+                ))}
+              </ul>
+              {canUpdate ? (
+                <div className="grid gap-2 border-t border-destructive/15 pt-3">
+                  <Label className="text-xs" showRequired>
+                    Justification
+                  </Label>
+                  <Textarea
+                    key={blockerJustificationKey}
+                    defaultValue={mergedBlockerJustification(issuesNeedingJustification)}
+                    rows={3}
+                    onBlur={(e) =>
+                      void saveJustificationForBlockers(
+                        e.target.value,
+                        issuesNeedingJustification.map((i: { id: number }) => i.id),
+                      )
+                    }
+                    placeholder="Explain why this invoice should be approved despite the exceptions above"
+                    disabled={acting}
+                  />
+                  <p className="text-xs text-muted-foreground">Click outside the field to save for all blockers.</p>
                 </div>
-                {canUpdate && i.requires_justification ? (
-                  <div className="mt-2 grid gap-2">
-                    <Label className="text-xs" showRequired>
-                      Justification
-                    </Label>
-                    <Textarea
-                      defaultValue={i.justification ?? ""}
-                      rows={2}
-                      onBlur={(e) => void saveJustification(i.id, e.target.value)}
-                      placeholder="Required"
-                      disabled={acting}
-                    />
-                    <div className="text-xs text-muted-foreground">Tip: click out of the field to save.</div>
+              ) : null}
+            </div>
+          ) : null}
+          {otherVisibleIssues.map((i: any) => (
+            <div
+              key={i.id}
+              className={
+                i.severity === "warning"
+                  ? "rounded-md border border-amber-300/40 bg-amber-500/5 p-3"
+                  : "rounded-md border bg-muted/20 p-3"
+              }
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium">{i.code}</span>
+                    <Badge variant={issueSeverityVariant(i.severity)}>{i.severity}</Badge>
                   </div>
-                ) : null}
+                  <p className="text-sm text-muted-foreground">{i.message}</p>
+                </div>
+                {issueAllowedActual(i)}
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </CardContent>
       </Card>
 
