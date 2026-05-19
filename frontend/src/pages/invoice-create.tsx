@@ -1,17 +1,18 @@
 import * as React from "react"
-import { Eye, EyeOff } from "lucide-react"
-import { Link, useNavigate } from "react-router-dom"
+import { Eye, Plus, Trash2, TriangleAlert } from "lucide-react"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ApiError, getJson, postJson } from "@/lib/api"
+import { ApiError, getJson, patchJson, postJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
 import { InvoicePdfDownloadButton } from "@/components/invoices/invoice-pdf"
@@ -61,12 +62,55 @@ type PreflightResp = {
   approved_invoiced_ex_tax_total?: number
   committed_invoiced_ex_tax_total?: number
   remaining_invoiceable_value?: number
+  remaining_after_passed_ex_tax?: number
 }
 
 type DraftLineQty = {
   qty: string
   tax_pct: string
   notes: string
+}
+
+type ExtraLineDraft = {
+  clientId: string
+  description: string
+  unit: string
+  qty: string
+  unitPrice: string
+  taxable: string
+}
+
+function newExtraLineDraft(): ExtraLineDraft {
+  return {
+    clientId: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    description: "",
+    unit: "",
+    qty: "",
+    unitPrice: "",
+    taxable: "",
+  }
+}
+
+function parseNumInput(raw: string): number | null {
+  const t = raw.trim().replace(/,/g, "")
+  if (!t) return null
+  const n = Number(t)
+  return Number.isFinite(n) ? n : null
+}
+
+function extraLineUsesCalc(row: ExtraLineDraft): boolean {
+  const q = parseNumInput(row.qty)
+  const p = parseNumInput(row.unitPrice)
+  return q != null && q > 0 && p != null && p >= 0
+}
+
+function extraLineTaxableExVat(row: ExtraLineDraft): number | null {
+  if (extraLineUsesCalc(row)) {
+    return q2Money(parseNumInput(row.qty)! * parseNumInput(row.unitPrice)!)
+  }
+  const t = parseNumInput(row.taxable)
+  if (t == null || t <= 0) return null
+  return q2Money(t)
 }
 
 function money(n: number): string {
@@ -92,31 +136,55 @@ function effectiveBillingBasis(ln: BillableLine): "WEIGHT" | "PCS" | "MANUAL" {
   return "PCS"
 }
 
-/** Quantity (WO UOM, e.g. pieces) used for commercial math on this screen / submit. */
-function autoWoDerivedBillQtyPieces(ln: BillableLine): number | null {
-  const rem = ln.remaining_invoiceable_qty_hint
-  if (rem != null && Number.isFinite(rem) && rem > 0) return rem
-  const aq = ln.approved_quantity
+function formatQtyInput(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return ""
+  const s = n.toLocaleString(undefined, { maximumFractionDigits: 6 })
+  return s
+}
+
+/** Max invoice qty for this WO line (pieces, or 0–1 lot fraction for % progress). */
+function workOrderLineMaxQty(ln: BillableLine): number | null {
+  if (ln.progress_type === "percentage") return 1
+  const aq = ln.approved_quantity ?? ln.approved_line_qty_basis
   if (aq != null && Number.isFinite(aq) && aq > 0) return aq
-  const basis = ln.approved_line_qty_basis
-  if (basis != null && Number.isFinite(basis) && basis > 0) return basis
   return null
 }
 
-function autoWoDerivedBillQtyString(ln: BillableLine): string {
-  const n = autoWoDerivedBillQtyPieces(ln)
-  return n != null ? String(n) : ""
+/** Default invoice qty from latest WO line completion (capped at WO planned qty). */
+function defaultInvoiceQtyFromCompletion(ln: BillableLine): string {
+  const max = workOrderLineMaxQty(ln)
+  if (ln.progress_type === "percentage") {
+    const cp = ln.completed_percentage
+    if (cp == null || !Number.isFinite(cp) || cp <= 0) return ""
+    const q = cp / 100
+    return formatQtyInput(max != null ? Math.min(q, max) : q)
+  }
+  const cq = ln.completed_quantity
+  if (cq == null || !Number.isFinite(cq) || cq <= 0) return ""
+  const q = max != null ? Math.min(cq, max) : cq
+  return formatQtyInput(q)
+}
+
+function clampInvoiceQtyInput(ln: BillableLine, raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return ""
+  const q = Number(trimmed.replace(/,/g, ""))
+  if (!Number.isFinite(q)) return raw
+  const max = workOrderLineMaxQty(ln)
+  if (max == null) return raw
+  if (q > max) return formatQtyInput(max)
+  if (q < 0) return "0"
+  return raw
 }
 
 /** Quantity (WO UOM, e.g. pieces) used for commercial math on this screen / submit. */
 function billQtyPiecesForLine(ln: BillableLine, inp: DraftLineQty | undefined): number | null {
-  if (effectiveBillingBasis(ln) === "WEIGHT") {
-    return autoWoDerivedBillQtyPieces(ln)
-  }
   const qRaw = inp?.qty?.trim() ?? ""
   if (!qRaw) return null
   const q = Number(qRaw.replace(/,/g, ""))
   if (!Number.isFinite(q) || q <= 0) return null
+  const max = workOrderLineMaxQty(ln)
+  if (max != null && q > max + 1e-9) return max
   return q
 }
 
@@ -143,39 +211,18 @@ function lineTaxableExVat(ln: BillableLine, invoiceQty: number): number | null {
   return lineExTax(ln, invoiceQty)
 }
 
-/** Approved ex-VAT cap for this work order line (matches backend ``WorkOrderItem.taxable_value``). */
-function approvedLineCapExVat(ln: BillableLine): number {
-  const v = ln.approved_line_taxable_ex_vat
-  if (Number.isFinite(v)) return v
-  const p = ln.planned_contract_value
-  return Number.isFinite(p ?? NaN) ? (p as number) : 0
-}
-
-type LineCommercialGate = "pending" | "pass" | "line_cap" | "wo_cap"
-
-function lineCommercialGate(
-  ln: BillableLine,
-  lineTaxable: number | null,
-  woDraftSum: Map<number, number>,
-  woCapSum: Map<number, number>,
-  woPriorSum: Map<number, number>,
-): LineCommercialGate {
-  if (lineTaxable == null || lineTaxable <= 0) return "pending"
-  const prev = ln.previously_invoiced_value != null && Number.isFinite(ln.previously_invoiced_value) ? ln.previously_invoiced_value : 0
-  const lineCap = approvedLineCapExVat(ln)
-  if (lineCap > 0 && q2Money(prev + lineTaxable) > q2Money(lineCap)) return "line_cap"
-  const wid = ln.work_order_id
-  const cap = woCapSum.get(wid) ?? 0
-  const prior = woPriorSum.get(wid) ?? 0
-  const draft = woDraftSum.get(wid) ?? 0
-  if (cap > 0 && q2Money(prior + draft) > q2Money(cap)) return "wo_cap"
-  return "pass"
-}
-
 export function InvoiceCreatePage() {
   const navigate = useNavigate()
+  const { id: editIdRaw } = useParams()
+  const editInvoiceId =
+    editIdRaw != null && Number.isFinite(Number(editIdRaw)) && Number(editIdRaw) > 0 ? Number(editIdRaw) : null
+  const isEdit = editInvoiceId != null
+
   const canCreate = hasPermission("invoices.create")
+  const canUpdate = hasPermission("invoices.update")
+  const canSubmit = hasPermission("invoices.submit")
   const [creating, setCreating] = React.useState(false)
+  const [loadingDraft, setLoadingDraft] = React.useState(isEdit)
   const [loadingPreflight, setLoadingPreflight] = React.useState(false)
   const [contractors, setContractors] = React.useState<{ id: number; name: string }[]>([])
   const [plants, setPlants] = React.useState<{ id: number; name: string }[]>([])
@@ -185,7 +232,7 @@ export function InvoiceCreatePage() {
   const [preflight, setPreflight] = React.useState<PreflightResp | null>(null)
 
   const [lineInputs, setLineInputs] = React.useState<Record<number, DraftLineQty>>({})
-  const [extraAmountExVat, setExtraAmountExVat] = React.useState("")
+  const [extraLines, setExtraLines] = React.useState<ExtraLineDraft[]>([])
 
   const [form, setForm] = React.useState({
     contractor_id: "",
@@ -288,21 +335,20 @@ export function InvoiceCreatePage() {
 
   const selectedLineIdsKey = React.useMemo(() => [...selectedLineIds].sort((a, b) => a - b).join(","), [selectedLineIds])
 
-  /** Keep WEIGHT lines’ stored qty in sync with work order (preflight) — no manual invoice qty. */
+  /** Prefill qty from WO completion when a line is selected and qty is still empty. */
   React.useEffect(() => {
     if (!preflight) return
     setLineInputs((prev) => {
       const next = { ...prev }
       let changed = false
       for (const ln of preflight.lines) {
-        if (effectiveBillingBasis(ln) !== "WEIGHT") continue
         if (!selectedLineIds.has(ln.work_order_item_id)) continue
-        const auto = autoWoDerivedBillQtyString(ln)
         const cur = next[ln.work_order_item_id] ?? { qty: "", tax_pct: "", notes: "" }
-        if (auto && cur.qty !== auto) {
-          next[ln.work_order_item_id] = { ...cur, qty: auto }
-          changed = true
-        }
+        if (cur.qty.trim()) continue
+        const def = defaultInvoiceQtyFromCompletion(ln)
+        if (!def) continue
+        next[ln.work_order_item_id] = { ...cur, qty: def }
+        changed = true
       }
       return changed ? next : prev
     })
@@ -328,6 +374,12 @@ export function InvoiceCreatePage() {
     return preflight.lines.filter((l) => l.work_order_id === selectedWoId)
   }, [preflight, selectedWoId])
 
+  React.useEffect(() => {
+    if (!isEdit || !preflight || selectedWoId !== "" || selectedLineIds.size === 0) return
+    const first = preflight.lines.find((l) => selectedLineIds.has(l.work_order_item_id))
+    if (first) setSelectedWoId(first.work_order_id)
+  }, [isEdit, preflight, selectedLineIds, selectedWoId])
+
   const selectedInvoiceLines = React.useMemo(() => {
     if (!preflight) return []
     const ids = [...selectedLineIds]
@@ -344,44 +396,6 @@ export function InvoiceCreatePage() {
     return lines
   }, [billableByItemId, preflight, selectedLineIds])
 
-  const woCommercialSums = React.useMemo(() => {
-    const woCapSum = new Map<number, number>()
-    const woPriorSum = new Map<number, number>()
-    if (!preflight) return { woCapSum, woPriorSum }
-    for (const l of preflight.lines) {
-      const wid = l.work_order_id
-      woCapSum.set(wid, q2Money((woCapSum.get(wid) ?? 0) + approvedLineCapExVat(l)))
-      const prev =
-        l.previously_invoiced_value != null && Number.isFinite(l.previously_invoiced_value) ? l.previously_invoiced_value : 0
-      woPriorSum.set(wid, q2Money((woPriorSum.get(wid) ?? 0) + prev))
-    }
-    return { woCapSum, woPriorSum }
-  }, [preflight])
-
-  const woDraftTaxSum = React.useMemo(() => {
-    const m = new Map<number, number>()
-    for (const ln of selectedInvoiceLines) {
-      const inp = lineInputs[ln.work_order_item_id]
-      const q = billQtyPiecesForLine(ln, inp)
-      const ex = q != null && q > 0 ? lineTaxableExVat(ln, q) : null
-      if (ex == null || !Number.isFinite(ex) || ex <= 0) continue
-      const wid = ln.work_order_id
-      m.set(wid, q2Money((m.get(wid) ?? 0) + ex))
-    }
-    return m
-  }, [selectedInvoiceLines, lineInputs])
-
-  function defaultInvoiceQtyFromCompletion(ln: BillableLine): string {
-    if (ln.progress_type === "percentage") {
-      const cp = ln.completed_percentage
-      if (cp != null && Number.isFinite(cp)) return String(cp / 100)
-      return ""
-    }
-    const cq = ln.completed_quantity
-    if (cq != null && Number.isFinite(cq)) return String(cq)
-    return ""
-  }
-
   function addPendingLine() {
     if (pendingItemId === "" || !preflight) return
     const ln = billableByItemId.get(pendingItemId)
@@ -394,24 +408,20 @@ export function InvoiceCreatePage() {
     setLineInputs((m) => {
       const next = { ...m }
       const cur = next[ln.work_order_item_id] ?? { qty: "", tax_pct: "", notes: "" }
-      if (effectiveBillingBasis(ln) === "WEIGHT") {
-        next[ln.work_order_item_id] = { ...cur, qty: autoWoDerivedBillQtyString(ln) }
-      } else if (!cur.qty.trim()) {
-        next[ln.work_order_item_id] = { ...cur, qty: defaultInvoiceQtyFromCompletion(ln) }
-      } else {
-        next[ln.work_order_item_id] = cur
-      }
+      next[ln.work_order_item_id] = { ...cur, qty: defaultInvoiceQtyFromCompletion(ln) }
       return next
     })
     setPendingItemId("")
   }
 
   const extraExVatNum = React.useMemo(() => {
-    const raw = extraAmountExVat.trim().replace(/,/g, "")
-    if (!raw) return 0
-    const n = Number(raw)
-    return Number.isFinite(n) && n >= 0 ? q2Money(n) : 0
-  }, [extraAmountExVat])
+    let sum = 0
+    for (const row of extraLines) {
+      const tx = extraLineTaxableExVat(row)
+      if (tx != null && tx > 0) sum += tx
+    }
+    return q2Money(sum)
+  }, [extraLines])
 
   function totalsPreview() {
     if (!preflight) return { count: 0, exVat: 0, gross: 0 }
@@ -435,14 +445,30 @@ export function InvoiceCreatePage() {
 
   const { count: draftLineCount, exVat: draftExVat } = totalsPreview()
 
-  const woDraftWithExtra = React.useMemo(() => {
-    const m = new Map(woDraftTaxSum)
-    if (selectedWoId !== "") {
-      const wid = Number(selectedWoId)
-      m.set(wid, q2Money((m.get(wid) ?? 0) + extraExVatNum))
+  const woPassedRemainingExVat = React.useMemo(() => {
+    if (preflight?.approved_value_total == null) return null
+    const base =
+      preflight.remaining_after_passed_ex_tax ??
+      q2Money(Math.max(0, (preflight.approved_value_total ?? 0) - (preflight.approved_invoiced_ex_tax_total ?? 0)))
+    return q2Money(base - draftExVat)
+  }, [preflight, draftExVat])
+
+  const invoiceOverWoCap = React.useMemo(() => {
+    if (preflight?.approved_value_total == null || draftExVat <= 0) return null
+    const cap = preflight.approved_value_total ?? 0
+    if (cap <= 0) return null
+    const priorPassed = preflight.approved_invoiced_ex_tax_total ?? 0
+    const invoiceTotal = q2Money(priorPassed + draftExVat)
+    if (invoiceTotal <= cap) return null
+    return {
+      cap,
+      priorPassed,
+      draftExVat,
+      invoiceTotal,
+      overBy: q2Money(invoiceTotal - cap),
+      workOrderNumber: preflight.work_order_number ?? null,
     }
-    return m
-  }, [woDraftTaxSum, selectedWoId, extraExVatNum])
+  }, [preflight, draftExVat])
 
   const lockedWorkOrderNumber = React.useMemo(() => {
     if (selectedWoId === "") return null
@@ -486,8 +512,24 @@ export function InvoiceCreatePage() {
         totalInclTax,
       })
     }
+    for (const ex of extraLines) {
+      if (!ex.description.trim()) continue
+      const taxable = extraLineTaxableExVat(ex)
+      if (taxable == null || taxable <= 0) continue
+      const q = parseNumInput(ex.qty)
+      const p = parseNumInput(ex.unitPrice)
+      out.push({
+        description: ex.description.trim(),
+        qty: q != null && q > 0 ? q : 1,
+        unit: ex.unit.trim() || "—",
+        unitPrice: p != null && p >= 0 ? p : taxable,
+        taxable,
+        taxAmount: 0,
+        totalInclTax: taxable,
+      })
+    }
     return out
-  }, [preflight, selectedInvoiceLines, lineInputs])
+  }, [preflight, selectedInvoiceLines, lineInputs, extraLines])
 
   const pdfData = React.useMemo(() => {
     const due = new Date(form.invoice_date)
@@ -510,17 +552,125 @@ export function InvoiceCreatePage() {
     }
   }, [contractorName, form.invoice_date, form.invoice_number, plantName, previewLines])
 
-  async function createInvoice() {
-    if (!form.contractor_id) return toast.error("Contractor is required.")
-    if (!form.org_unit_id) return toast.error("Plant is required.")
-    if (!form.invoice_number.trim()) return toast.error("Invoice number is required.")
-    if (!preflight?.lines?.length) return toast.error("No billable work order rows in scope.")
+  React.useEffect(() => {
+    if (!isEdit || editInvoiceId == null) {
+      setLoadingDraft(false)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      setLoadingDraft(true)
+      try {
+        const inv = await getJson<{
+          id: number
+          status: string
+          contractor_id: number
+          org_unit_id: number
+          invoice_number: string
+          invoice_date: string
+          lines: { work_order_item_id: number; quantity: string | number; tax_pct?: number | null; notes?: string | null }[]
+          extra_lines?: {
+            description: string
+            quantity?: string | number | null
+            unit?: string | null
+            unit_price?: string | number | null
+            amount_ex_vat: string | number
+          }[]
+        }>(`/invoices/${editInvoiceId}`)
+        if (cancelled) return
+        if (inv.status !== "draft" && inv.status !== "rejected") {
+          toast.error("Only draft invoices can be edited")
+          navigate(`/dashboard/invoices/${inv.id}`, { replace: true })
+          return
+        }
+        invoiceNumberTouchedRef.current = true
+        setForm({
+          contractor_id: String(inv.contractor_id),
+          org_unit_id: String(inv.org_unit_id),
+          invoice_number: inv.invoice_number,
+          invoice_date: String(inv.invoice_date).slice(0, 10),
+        })
+        const lineIds = new Set<number>()
+        const inputs: Record<number, DraftLineQty> = {}
+        for (const l of inv.lines ?? []) {
+          lineIds.add(l.work_order_item_id)
+          inputs[l.work_order_item_id] = {
+            qty: formatQtyInput(Number(l.quantity)),
+            tax_pct: l.tax_pct != null ? String(l.tax_pct) : "",
+            notes: l.notes ?? "",
+          }
+        }
+        setSelectedLineIds(lineIds)
+        setLineInputs(inputs)
+        const extras: ExtraLineDraft[] = (inv.extra_lines ?? []).map((x) => ({
+          ...newExtraLineDraft(),
+          description: x.description,
+          unit: x.unit ?? "",
+          qty: x.quantity != null ? String(x.quantity) : "",
+          unitPrice: x.unit_price != null ? String(x.unit_price) : "",
+          taxable: String(x.amount_ex_vat),
+        }))
+        setExtraLines(extras)
+      } catch (e) {
+        if (!cancelled) toast.error(e instanceof ApiError ? e.message : "Failed to load invoice")
+      } finally {
+        if (!cancelled) setLoadingDraft(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [editInvoiceId, isEdit, navigate])
+
+  function buildInvoicePayload():
+    | {
+        ok: true
+        body: {
+          contractor_id: number
+          org_unit_id: number
+          invoice_number: string
+          invoice_date: string
+          lines: { work_order_item_id: number; quantity: string; tax_pct: number | null; notes?: string | null }[]
+          extra_lines: {
+            description: string
+            quantity?: string
+            unit?: string | null
+            unit_price?: string
+            amount_ex_vat?: string
+          }[]
+          extra_amount_ex_vat: string
+        }
+      }
+    | { ok: false } {
+    if (!form.contractor_id) {
+      toast.error("Contractor is required.")
+      return { ok: false }
+    }
+    if (!form.org_unit_id) {
+      toast.error("Plant is required.")
+      return { ok: false }
+    }
+    if (!form.invoice_number.trim()) {
+      toast.error("Invoice number is required.")
+      return { ok: false }
+    }
+    if (!preflight?.lines?.length) {
+      toast.error("No billable work order rows in scope.")
+      return { ok: false }
+    }
 
     const lines: { work_order_item_id: number; quantity: string; tax_pct: number | null; notes?: string | null }[] = []
     for (const ln of selectedInvoiceLines) {
       const inp = lineInputs[ln.work_order_item_id]
       const q = billQtyPiecesForLine(ln, inp)
       if (q == null || q <= 0) continue
+      const maxQ = workOrderLineMaxQty(ln)
+      if (maxQ != null && q > maxQ + 1e-9) {
+        toast.error(
+          `Quantity for ${ln.part_code ?? "line"} cannot exceed work order quantity (${formatQtyInput(maxQ)}).`,
+        )
+        return { ok: false }
+      }
       const taxRaw = inp?.tax_pct?.trim()
       lines.push({
         work_order_item_id: ln.work_order_item_id,
@@ -535,61 +685,153 @@ export function InvoiceCreatePage() {
         notes: inp?.notes?.trim() ? inp.notes.trim() : null,
       })
     }
-    if (!lines.length)
-      return toast.error(
-        "No billable quantities: for WEIGHT lines the work order must have remaining billable qty (or approved qty). For PCS lines, enter invoice qty.",
-      )
+    if (!lines.length) {
+      toast.error("Enter a quantity greater than zero on at least one line (from completion or edited).")
+      return { ok: false }
+    }
 
     const woIds = new Set(selectedInvoiceLines.map((ln) => ln.work_order_id))
     if (woIds.size !== 1) {
-      return toast.error("An invoice can only include line items from one work order.")
+      toast.error("An invoice can only include line items from one work order.")
+      return { ok: false }
     }
 
-    setCreating(true)
-    try {
-      const inv = await postJson<{
-        id: number
-        status: string
-        validation_status?: string | null
-      }>("/invoices", {
+    const extraPayload: {
+      description: string
+      quantity?: string
+      unit?: string | null
+      unit_price?: string
+      amount_ex_vat?: string
+    }[] = []
+    for (const row of extraLines) {
+      const desc = row.description.trim()
+      if (!desc) continue
+      const taxable = extraLineTaxableExVat(row)
+      if (taxable == null || taxable <= 0) {
+        toast.error(`Extra charge "${desc}" needs quantity × unit price or a taxable amount.`)
+        return { ok: false }
+      }
+      if (extraLineUsesCalc(row)) {
+        extraPayload.push({
+          description: desc,
+          quantity: row.qty.trim(),
+          unit: row.unit.trim() || null,
+          unit_price: row.unitPrice.trim(),
+        })
+      } else {
+        extraPayload.push({
+          description: desc,
+          unit: row.unit.trim() || null,
+          amount_ex_vat: String(taxable),
+        })
+      }
+    }
+
+    const header = {
+      invoice_number: form.invoice_number.trim(),
+      invoice_date: form.invoice_date,
+      lines,
+      extra_lines: extraPayload,
+      extra_amount_ex_vat: String(extraExVatNum),
+    }
+    return {
+      ok: true,
+      body: {
         contractor_id: Number(form.contractor_id),
         org_unit_id: Number(form.org_unit_id),
-        invoice_number: form.invoice_number.trim(),
-        invoice_date: form.invoice_date,
-        lines,
-        extra_amount_ex_vat: String(extraExVatNum),
-      })
+        ...header,
+      },
+    }
+  }
 
-      if (inv.validation_status === "pass" || inv.validation_status === "warn") {
-        toast.success("Invoice created and passed validation")
-      } else if (inv.status === "blocked" || inv.validation_status === "blocked") {
-        toast.warning("Invoice created but validation blocked — review issues on the detail page")
-      } else if (inv.status === "submitted" && inv.validation_status) {
-        toast.success(`Invoice created and validated (${inv.validation_status})`)
-      } else {
-        toast.success("Invoice created")
+  async function persistDraft(): Promise<{ id: number } | null> {
+    const built = buildInvoicePayload()
+    if (!built.ok) return null
+    if (isEdit && editInvoiceId != null) {
+      if (!canUpdate) {
+        toast.error("You don't have permission to update invoices.")
+        return null
       }
-      navigate(`/dashboard/invoices/${inv.id}`)
+      const inv = await patchJson<{ id: number }>(`/invoices/${editInvoiceId}`, {
+        invoice_number: built.body.invoice_number,
+        invoice_date: built.body.invoice_date,
+        lines: built.body.lines,
+        extra_lines: built.body.extra_lines,
+        extra_amount_ex_vat: built.body.extra_amount_ex_vat,
+      })
+      return { id: inv.id }
+    }
+    if (!canCreate) {
+      toast.error("You don't have permission to create invoices.")
+      return null
+    }
+    const inv = await postJson<{ id: number }>("/invoices", built.body)
+    return { id: inv.id }
+  }
+
+  function toastAfterSubmit(inv: { status: string; validation_status?: string | null }) {
+    if (inv.validation_status === "pass" || inv.validation_status === "warn") {
+      toast.success(`Submitted — validation ${inv.validation_status}`)
+    } else if (inv.status === "blocked" || inv.validation_status === "blocked") {
+      toast.warning("Submitted but blocked — request approval or adjust amounts")
+    } else {
+      toast.success("Submitted for validation")
+    }
+  }
+
+  async function saveDraft() {
+    setCreating(true)
+    try {
+      const saved = await persistDraft()
+      if (!saved) return
+      toast.success(isEdit ? "Draft saved" : "Invoice saved as draft")
+      navigate(`/dashboard/invoices/${saved.id}`)
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Create failed")
+      toast.error(e instanceof ApiError ? e.message : "Save failed")
     } finally {
       setCreating(false)
     }
   }
 
-  if (!canCreate) {
+  async function submitInvoice() {
+    if (!canSubmit) {
+      toast.error("You don't have permission to submit invoices.")
+      return
+    }
+    setCreating(true)
+    try {
+      const saved = await persistDraft()
+      if (!saved) return
+      const inv = await postJson<{ id: number; status: string; validation_status?: string | null }>(
+        `/invoices/${saved.id}/submit`,
+        {},
+      )
+      toastAfterSubmit(inv)
+      navigate(`/dashboard/invoices/${inv.id}`)
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Submit failed")
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  if ((!canCreate && !isEdit) || (isEdit && !canUpdate)) {
     return (
       <Alert variant="destructive">
         <AlertTitle>Permission denied</AlertTitle>
-        <AlertDescription>You don’t have permission to create invoices.</AlertDescription>
+        <AlertDescription>You don’t have permission to {isEdit ? "edit" : "create"} invoices.</AlertDescription>
       </Alert>
     )
+  }
+
+  if (loadingDraft) {
+    return <div className="text-sm text-muted-foreground">Loading invoice…</div>
   }
 
   return (
     <div className="w-full min-w-0 space-y-5 pb-24">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold tracking-tight">New invoice</h2>
+        <h2 className="text-lg font-semibold tracking-tight">{isEdit ? "Edit invoice" : "New invoice"}</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm">
             <Link to="/dashboard/invoices">Back</Link>
@@ -598,20 +840,17 @@ export function InvoiceCreatePage() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setShowInvoicePreview((v) => !v)}
+            onClick={() => {
+              if (!previewLines.length) {
+                toast.message("Add at least one line with quantity to preview")
+                return
+              }
+              setShowInvoicePreview(true)
+            }}
             className="gap-1.5"
           >
-            {showInvoicePreview ? (
-              <>
-                <EyeOff className="size-4" />
-                Hide preview
-              </>
-            ) : (
-              <>
-                <Eye className="size-4" />
-                Preview
-              </>
-            )}
+            <Eye className="size-4" />
+            Preview
           </Button>
           <InvoicePdfDownloadButton
             data={pdfData}
@@ -620,9 +859,20 @@ export function InvoiceCreatePage() {
             size="sm"
             disabled={!previewLines.length}
           />
-          <Button size="sm" onClick={() => void createInvoice()} disabled={creating || !preflight}>
-            {creating ? "Creating…" : "Create invoice"}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void saveDraft()}
+            disabled={creating || loadingDraft || !preflight}
+          >
+            {creating ? "Saving…" : "Save draft"}
           </Button>
+          {canSubmit ? (
+            <Button type="button" size="sm" onClick={() => void submitInvoice()} disabled={creating || loadingDraft || !preflight}>
+              {creating ? "Submitting…" : "Submit"}
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -744,22 +994,18 @@ export function InvoiceCreatePage() {
               {preflight?.work_order_id != null && preflight.approved_value_total != null ? (
                 <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-border/60 bg-muted/25 px-4 py-3 text-sm">
                   <div>
-                    <span className="text-muted-foreground">Approved </span>
+                    <span className="text-muted-foreground">WO amount </span>
                     <span className="font-medium tabular-nums">{money(preflight.approved_value_total ?? 0)}</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Invoiced </span>
+                    <span className="text-muted-foreground">Passed </span>
                     <span className="font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
                       {money(preflight.approved_invoiced_ex_tax_total ?? 0)}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Committed </span>
-                    <span className="font-medium tabular-nums">{money(preflight.committed_invoiced_ex_tax_total ?? 0)}</span>
-                  </div>
-                  <div>
                     <span className="text-muted-foreground">Remaining </span>
-                    <span className="font-semibold tabular-nums">{money(preflight.remaining_invoiceable_value ?? 0)}</span>
+                    <span className="font-semibold tabular-nums">{money(woPassedRemainingExVat ?? 0)}</span>
                   </div>
                 </div>
               ) : null}
@@ -768,17 +1014,46 @@ export function InvoiceCreatePage() {
         </CardContent>
       </Card>
 
+      <Dialog open={showInvoicePreview} onOpenChange={setShowInvoicePreview}>
+        <DialogContent
+          className="flex max-h-[min(92vh,960px)] w-[calc(100vw-1.5rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(56rem,calc(100vw-1.5rem))]"
+          showCloseButton
+        >
+          <DialogHeader className="flex shrink-0 flex-row items-center justify-between gap-3 border-b px-5 py-4 pr-12">
+            <DialogTitle>Invoice preview</DialogTitle>
+            <InvoicePdfDownloadButton
+              data={pdfData}
+              filename={`${(form.invoice_number || "invoice").replace(/\s+/g, "_")}.pdf`}
+              variant="outline"
+              size="sm"
+              disabled={!previewLines.length}
+            />
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-auto bg-zinc-100/80 p-4 sm:p-6">
+            <InvoicePreview data={pdfData} className="shadow-md" />
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {preflight && preflight.lines.length > 0 ? (
         <>
-          <div
-            className={
-              showInvoicePreview
-                ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,480px)] items-start"
-                : "grid gap-4 items-start"
-            }
-          >
-            <div className="min-w-0">
-              <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
+          {invoiceOverWoCap ? (
+            <Alert variant="destructive" className="border-destructive/50 bg-destructive/10 py-2">
+              <TriangleAlert className="size-4" />
+              <AlertDescription className="col-start-2 text-sm font-medium text-destructive [&]:text-destructive">
+                {invoiceOverWoCap.workOrderNumber ? (
+                  <span className="font-mono">{invoiceOverWoCap.workOrderNumber}</span>
+                ) : null}
+                {invoiceOverWoCap.workOrderNumber ? " · " : null}
+                <span className="tabular-nums">
+                  {money(invoiceOverWoCap.draftExVat)} exceeds WO {money(invoiceOverWoCap.cap)} by{" "}
+                  {money(invoiceOverWoCap.overBy)}
+                </span>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
                 <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/20 px-5 py-3">
                   <CardTitle className="text-sm font-medium">Line items</CardTitle>
                   {lockedWorkOrderNumber ? (
@@ -796,10 +1071,7 @@ export function InvoiceCreatePage() {
                         <Table>
                           <TableHeader>
                             <TableRow className="bg-muted/50">
-                              <TableHead className="w-[72px]">Status</TableHead>
                               <TableHead>Line item</TableHead>
-                              <TableHead className="text-right text-xs">Invoiced</TableHead>
-                              <TableHead className="min-w-[5.5rem] text-right text-xs">Remaining</TableHead>
                               <TableHead className="w-[88px] text-right">WT (kg)</TableHead>
                               <TableHead className="w-[56px]">Unit</TableHead>
                               <TableHead className="min-w-[88px] text-right">Unit rate</TableHead>
@@ -835,36 +1107,10 @@ export function InvoiceCreatePage() {
                                     <div className="text-[10px] text-muted-foreground">per unit</div>
                                   </div>
                                 )
-                              const lineRemaining = q2Money(
-                                Math.max(0, approvedLineCapExVat(ln) - (ln.approved_invoiced_value ?? 0)),
-                              )
-                              const gate = lineCommercialGate(
-                                ln,
-                                baseEx,
-                                woDraftWithExtra,
-                                woCommercialSums.woCapSum,
-                                woCommercialSums.woPriorSum,
-                              )
+                              const maxQty = workOrderLineMaxQty(ln)
                               return (
                                 <React.Fragment key={ln.work_order_item_id}>
                                   <TableRow>
-                                    <TableCell className="align-middle">
-                                      {gate === "pass" ? (
-                                        <Badge variant="success" className="font-normal">OK</Badge>
-                                      ) : gate === "line_cap" ? (
-                                        <Badge variant="destructive" className="max-w-[118px] whitespace-normal text-left font-normal leading-snug">
-                                          Over line
-                                        </Badge>
-                                      ) : gate === "wo_cap" ? (
-                                        <Badge variant="destructive" className="max-w-[118px] whitespace-normal text-left font-normal leading-snug">
-                                          Over WO
-                                        </Badge>
-                                      ) : (
-                                        <Badge variant="secondary" className="font-normal">
-                                          —
-                                        </Badge>
-                                      )}
-                                    </TableCell>
                                     <TableCell className="text-xs">
                                       <div className="flex flex-wrap items-center gap-1.5">
                                         <span className="font-medium">{ln.part_code ?? ln.job_type ?? "—"}</span>
@@ -882,13 +1128,16 @@ export function InvoiceCreatePage() {
                                       <div className="text-[11px] text-muted-foreground">
                                         {ln.part_name ?? "—"} ·{" "}
                                         <span className="uppercase tracking-wide">{ln.progress_type}</span>
+                                        {ln.completed_quantity != null || ln.completed_percentage != null ? (
+                                          <span>
+                                            {" "}
+                                            · Done{" "}
+                                            {ln.progress_type === "percentage"
+                                              ? `${ln.completed_percentage ?? 0}%`
+                                              : formatQtyInput(ln.completed_quantity ?? 0)}
+                                          </span>
+                                        ) : null}
                                       </div>
-                                    </TableCell>
-                                    <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
-                                      {money(ln.approved_invoiced_value ?? 0)}
-                                    </TableCell>
-                                    <TableCell className="text-right text-xs tabular-nums font-medium">
-                                      {money(lineRemaining)}
                                     </TableCell>
                                     <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
                                       {isWeight && wpu != null ? (
@@ -904,25 +1153,25 @@ export function InvoiceCreatePage() {
                                     </TableCell>
                                     <TableCell>{rateLabel}</TableCell>
                                     <TableCell>
-                                      {isWeight ? (
-                                        <div className="text-right text-xs tabular-nums font-medium text-foreground">
-                                          {billQ != null && billQ > 0
-                                            ? billQ.toLocaleString(undefined, { maximumFractionDigits: 3 })
-                                            : "—"}
-                                        </div>
-                                      ) : (
-                                        <Input
-                                          className="h-8 text-xs tabular-nums text-right"
-                                          value={inp.qty}
-                                          onChange={(e) =>
-                                            setLineInputs((m) => ({
-                                              ...m,
-                                              [ln.work_order_item_id]: { ...inp, qty: e.target.value },
-                                            }))
-                                          }
-                                          placeholder="0"
-                                        />
-                                      )}
+                                      <Input
+                                        className="h-8 text-xs tabular-nums text-right"
+                                        value={inp.qty}
+                                        onChange={(e) =>
+                                          setLineInputs((m) => ({
+                                            ...m,
+                                            [ln.work_order_item_id]: {
+                                              ...inp,
+                                              qty: clampInvoiceQtyInput(ln, e.target.value),
+                                            },
+                                          }))
+                                        }
+                                        placeholder={maxQty != null ? `Max ${formatQtyInput(maxQty)}` : "0"}
+                                        title={
+                                          maxQty != null
+                                            ? `Work order qty max: ${formatQtyInput(maxQty)}`
+                                            : undefined
+                                        }
+                                      />
                                     </TableCell>
                                     <TableCell className="text-right text-xs tabular-nums">
                                       {baseEx === null && billQ != null && billQ > 0 ? "—" : money(base)}
@@ -975,42 +1224,181 @@ export function InvoiceCreatePage() {
                     </div>
                   )}
                 </CardContent>
-              </Card>
-            </div>
+          </Card>
 
-            {showInvoicePreview ? (
-              <div className="min-w-0 max-w-full lg:sticky lg:top-16 lg:self-start">
-                <div className="overflow-x-auto overscroll-x-contain">
-                  <InvoicePreview data={pdfData} />
+          <Card className="border-border/80 shadow-sm">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/20 px-5 py-3">
+              <CardTitle className="text-sm font-medium">Extra charges (optional)</CardTitle>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                onClick={() => setExtraLines((rows) => [...rows, newExtraLineDraft()])}
+              >
+                <Plus className="size-4" />
+                Add charge
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              {extraLines.length === 0 ? (
+                <p className="px-5 py-6 text-center text-sm text-muted-foreground">
+                  Freight, rounding, or other charges — use qty × unit price or enter taxable directly.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead>Description</TableHead>
+                        <TableHead className="w-20">Unit</TableHead>
+                        <TableHead className="w-24 text-right">Qty</TableHead>
+                        <TableHead className="w-28 text-right">Unit price</TableHead>
+                        <TableHead className="w-28 text-right">Taxable</TableHead>
+                        <TableHead className="w-10" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {extraLines.map((row) => {
+                        const usesCalc = extraLineUsesCalc(row)
+                        const computed = extraLineTaxableExVat(row)
+                        return (
+                          <TableRow key={row.clientId}>
+                            <TableCell>
+                              <Input
+                                className="h-8 text-xs"
+                                value={row.description}
+                                onChange={(e) =>
+                                  setExtraLines((rows) =>
+                                    rows.map((r) =>
+                                      r.clientId === row.clientId ? { ...r, description: e.target.value } : r,
+                                    ),
+                                  )
+                                }
+                                placeholder="e.g. Freight"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                className="h-8 text-xs"
+                                value={row.unit}
+                                onChange={(e) =>
+                                  setExtraLines((rows) =>
+                                    rows.map((r) => (r.clientId === row.clientId ? { ...r, unit: e.target.value } : r)),
+                                  )
+                                }
+                                placeholder="trip"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                className="h-8 text-xs tabular-nums text-right"
+                                value={row.qty}
+                                onChange={(e) => {
+                                  const qty = e.target.value
+                                  setExtraLines((rows) =>
+                                    rows.map((r) => {
+                                      if (r.clientId !== row.clientId) return r
+                                      const next = { ...r, qty }
+                                      const tx = extraLineTaxableExVat(next)
+                                      return {
+                                        ...next,
+                                        taxable: extraLineUsesCalc(next) && tx != null ? String(tx) : r.taxable,
+                                      }
+                                    }),
+                                  )
+                                }}
+                                placeholder="0"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                className="h-8 text-xs tabular-nums text-right"
+                                value={row.unitPrice}
+                                onChange={(e) => {
+                                  const unitPrice = e.target.value
+                                  setExtraLines((rows) =>
+                                    rows.map((r) => {
+                                      if (r.clientId !== row.clientId) return r
+                                      const next = { ...r, unitPrice }
+                                      const tx = extraLineTaxableExVat(next)
+                                      return {
+                                        ...next,
+                                        taxable: extraLineUsesCalc(next) && tx != null ? String(tx) : r.taxable,
+                                      }
+                                    }),
+                                  )
+                                }}
+                                placeholder="0"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {usesCalc ? (
+                                <div className="flex h-8 items-center justify-end text-xs font-medium tabular-nums">
+                                  {computed != null ? money(computed) : "—"}
+                                </div>
+                              ) : (
+                                <Input
+                                  className="h-8 text-xs tabular-nums text-right"
+                                  value={row.taxable}
+                                  onChange={(e) =>
+                                    setExtraLines((rows) =>
+                                      rows.map((r) =>
+                                        r.clientId === row.clientId ? { ...r, taxable: e.target.value } : r,
+                                      ),
+                                    )
+                                  }
+                                  placeholder="0"
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label="Remove extra charge"
+                                onClick={() => setExtraLines((rows) => rows.filter((r) => r.clientId !== row.clientId))}
+                              >
+                                <Trash2 className="size-4 text-muted-foreground" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
                 </div>
-              </div>
-            ) : null}
-          </div>
+              )}
+              {extraExVatNum > 0 ? (
+                <div className="border-t px-5 py-2 text-right text-sm tabular-nums">
+                  Extra subtotal (ex. tax): <span className="font-semibold">{money(extraExVatNum)}</span>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
 
           <div className="sticky bottom-0 z-10 -mx-1 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="grid gap-1">
-                  <Label htmlFor="inv-extra" className="text-xs text-muted-foreground">
-                    Extra (ex. tax)
-                  </Label>
-                  <Input
-                    id="inv-extra"
-                    className="h-8 w-28 tabular-nums"
-                    value={extraAmountExVat}
-                    onChange={(e) => setExtraAmountExVat(e.target.value)}
-                    placeholder="0"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {draftLineCount} line{draftLineCount === 1 ? "" : "s"}
-                </p>
-              </div>
+              <p className="text-xs text-muted-foreground">
+                {draftLineCount} WO line{draftLineCount === 1 ? "" : "s"}
+                {extraLines.length > 0 ? ` · ${extraLines.length} extra` : ""}
+              </p>
               <div className="text-right text-sm tabular-nums">
                 <div className="text-muted-foreground">Total ex. tax</div>
                 <div className="text-lg font-semibold">{money(draftExVat)}</div>
-                {preflight?.remaining_invoiceable_value != null ? (
-                  <div className="text-xs text-muted-foreground">WO left {money(preflight.remaining_invoiceable_value)}</div>
+                {woPassedRemainingExVat != null ? (
+                  <div
+                    className={
+                      "text-xs tabular-nums " +
+                      (woPassedRemainingExVat < 0
+                        ? "font-medium text-destructive"
+                        : "text-muted-foreground")
+                    }
+                  >
+                    WO remaining {money(woPassedRemainingExVat)}
+                    {woPassedRemainingExVat < 0 ? " (over cap)" : ""}
+                  </div>
                 ) : null}
               </div>
             </div>

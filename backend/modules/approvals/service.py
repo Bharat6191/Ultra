@@ -1011,6 +1011,7 @@ class ApprovalEngineService:
             # Minimal finalize: mark approved; payment lifecycle comes later.
             invoice = InvoiceService(self._db).get(int(req.entity_id))
             invoice.status = "approved"
+            invoice.validation_status = "pass"
             invoice.approved_by = approver_user_id
             invoice.approved_at = _now_utc()
             return

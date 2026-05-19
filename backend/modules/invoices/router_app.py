@@ -14,6 +14,7 @@ from modules.errors import ConflictError, NotFoundError
 from modules.invoices.models import Invoice
 from modules.invoices.schema import (
     InvoiceCreate,
+    InvoiceUpdate,
     InvoicePreflightResponse,
     InvoicePublic,
     InvoiceIssueJustificationUpdate,
@@ -151,6 +152,17 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
         "currency": inv.currency,
         "total_amount": inv.total_amount,
         "extra_amount_ex_vat": inv.extra_amount_ex_vat,
+        "extra_lines": [
+            {
+                "id": int(x.id),
+                "description": x.description,
+                "quantity": x.quantity,
+                "unit": x.unit,
+                "unit_price": x.unit_price,
+                "amount_ex_vat": x.amount_ex_vat,
+            }
+            for x in (inv.extra_lines or [])
+        ],
         "lines_subtotal_ex_vat": sum((l.amount for l in (inv.lines or [])), Decimal("0")),
         "validation_status": inv.validation_status,
         "validation_score": inv.validation_score,
@@ -372,6 +384,27 @@ def get_invoice(
         inv = svc.get(invoice_id)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return InvoicePublic.model_validate(_to_public(inv, db))
+
+
+@router.patch(
+    "/invoices/{invoice_id:int}",
+    response_model=InvoicePublic,
+    dependencies=[Depends(require_permission("invoices.update"))],
+)
+def update_invoice_draft(
+    invoice_id: int,
+    payload: InvoiceUpdate,
+    svc: Annotated[InvoiceService, Depends(_svc)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> InvoicePublic:
+    try:
+        inv = svc.update_draft(invoice_id, payload, actor_user_id=int(current.subject))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return InvoicePublic.model_validate(_to_public(inv, db))
 
 

@@ -126,6 +126,7 @@ export function InvoiceDetailPage() {
 
   const canSubmit = hasPermission("invoices.submit")
   const canUpdate = hasPermission("invoices.update")
+  const canEditDraft = canUpdate && (row?.status === "draft" || row?.status === "rejected")
 
   const [file, setFile] = React.useState<File | null>(null)
 
@@ -153,8 +154,17 @@ export function InvoiceDetailPage() {
     if (!row) return
     setActing(true)
     try {
-      await postJson(`/invoices/${row.id}/submit`, {})
-      toast.success("Submitted")
+      const inv = await postJson<{ status: string; validation_status?: string | null }>(
+        `/invoices/${row.id}/submit`,
+        {},
+      )
+      if (inv.validation_status === "pass" || inv.validation_status === "warn") {
+        toast.success(`Submitted — validation ${inv.validation_status}`)
+      } else if (inv.status === "blocked" || inv.validation_status === "blocked") {
+        toast.warning("Submitted but blocked — request approval or adjust amounts")
+      } else {
+        toast.success("Submitted")
+      }
       await load()
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Submit failed")
@@ -293,7 +303,12 @@ export function InvoiceDetailPage() {
             size="default"
             className="min-h-10 bg-background shadow-sm"
           />
-          {canSubmit && row.status === "draft" ? (
+          {canEditDraft ? (
+            <Button asChild variant="outline" size="default" className="min-h-10 bg-background shadow-sm">
+              <Link to={`/dashboard/invoices/${row.id}/edit`}>Edit draft</Link>
+            </Button>
+          ) : null}
+          {canSubmit && (row.status === "draft" || row.status === "rejected") ? (
             <Button size="default" onClick={() => void submit()} disabled={acting}>
               Submit
             </Button>
@@ -304,7 +319,7 @@ export function InvoiceDetailPage() {
           row.status === "blocked" &&
           !row.approval_request_id ? (
             <Button size="default" variant="destructive" onClick={() => void requestVariance()} disabled={acting}>
-              Request variance approval
+              Request approval
             </Button>
           ) : null}
         </div>
@@ -315,7 +330,7 @@ export function InvoiceDetailPage() {
           <CardTitle className="text-sm font-medium">Lines</CardTitle>
           <CardDescription>
             Each line is checked against its approved work order line total and the work order total (ex. tax). Tint
-            reflects validation posture; badges show per-line result after automatic validation on create.
+            reflects validation posture after you submit the invoice.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
