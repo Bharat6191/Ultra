@@ -33,6 +33,11 @@ from modules.work_orders.models import WorkOrder, WorkOrderItem
 
 router = APIRouter(tags=["app", "invoices"])
 
+# Informational completion-qty warnings (no longer raised; hide if present on older validations).
+_HIDDEN_INFORMATIONAL_ISSUE_CODES = frozenset(
+    {"QTY_EXCEEDS_COMPLETION", "CUMULATIVE_QTY_EXCEEDS_ALLOWED"}
+)
+
 
 def _svc(db: Session = Depends(get_db)) -> InvoiceService:
     return InvoiceService(db)
@@ -47,16 +52,17 @@ def _q2(x: Decimal) -> Decimal:
 
 
 def _line_validation_status(inv: Invoice, *, line_pk: int) -> str | None:
+    """Per-line UI status: ``blocked`` when line has blocker/error issues; else unset (= pass)."""
     ranked: str | None = None
     for iss in inv.issues or []:
         if iss.line_id is None or int(iss.line_id) != int(line_pk):
+            continue
+        if str(iss.code) in _HIDDEN_INFORMATIONAL_ISSUE_CODES:
             continue
         if iss.severity == "blocker":
             return "blocked"
         if iss.severity == "error":
             ranked = "blocked"
-        elif iss.severity == "warning" and ranked != "blocked":
-            ranked = "warn"
     return ranked
 
 
@@ -194,6 +200,7 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
                 "created_at": i.created_at,
             }
             for i in (inv.issues or [])
+            if str(i.code) not in _HIDDEN_INFORMATIONAL_ISSUE_CODES
         ],
         "attachments": [
             {

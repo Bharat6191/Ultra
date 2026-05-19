@@ -1,19 +1,29 @@
-import { AlertTriangle, Receipt } from "lucide-react"
+import { AlertTriangle, CheckCircle2, FileEdit, Hourglass, Receipt } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 
 export type InvoicesDashboardModule = {
   total: number
+  draft?: number
+  pass?: number
   blocked: number
   pending_exception_approval: number
+  by_status?: { status: string; count: number }[]
 }
 
 export function InvoicesDashboard({ module }: { module: InvoicesDashboardModule }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
       <Kpi title="Invoices" value={module.total} icon={<Receipt className="size-4" />} />
+      <Kpi title="Draft" value={module.draft ?? 0} icon={<FileEdit className="size-4" />} tone="neutral" />
+      <Kpi title="Pass" value={module.pass ?? 0} icon={<CheckCircle2 className="size-4" />} tone="success" />
       <Kpi title="Blocked" value={module.blocked} icon={<AlertTriangle className="size-4" />} tone="warning" />
-      <Kpi title="Pending exceptions" value={module.pending_exception_approval} icon={<Receipt className="size-4" />} tone="neutral" />
+      <Kpi
+        title="Pending approval"
+        value={module.pending_exception_approval}
+        icon={<Hourglass className="size-4" />}
+        tone="info"
+      />
     </div>
   )
 }

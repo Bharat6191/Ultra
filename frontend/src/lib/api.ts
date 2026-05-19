@@ -75,6 +75,36 @@ export async function getJson<TResponse>(
   return data as TResponse
 }
 
+/** GET list with total from ``X-Total-Count`` response header. */
+export async function getJsonList<TItem>(
+  path: string,
+  init?: Omit<RequestInit, "method">,
+): Promise<{ items: TItem[]; total: number }> {
+  const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`
+  const token = getAccessToken()
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
+    ...init,
+  })
+
+  const text = await res.text()
+  const data = text ? (JSON.parse(text) as unknown) : undefined
+
+  if (!res.ok) {
+    throw new ApiError(parseErrorMessage(data, res.status), res.status, data)
+  }
+
+  const totalHeader = res.headers.get("X-Total-Count")
+  const total = totalHeader != null && totalHeader !== "" ? Number(totalHeader) : Array.isArray(data) ? data.length : 0
+
+  return { items: (Array.isArray(data) ? data : []) as TItem[], total: Number.isFinite(total) ? total : 0 }
+}
+
 export async function postJson<TResponse>(
   path: string,
   body: Json,

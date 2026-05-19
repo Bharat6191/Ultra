@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from core.auth import CurrentUser, get_current_user
@@ -114,6 +114,7 @@ def _to_public(db: Session, row: WorkOrder) -> dict:
     dependencies=[Depends(require_permission("work_orders.view"))],
 )
 def list_work_orders(
+    response: Response,
     svc: Annotated[WorkOrderService, Depends(_svc)],
     db: Session = Depends(get_db),
     org_unit_id: int | None = Query(None),
@@ -122,9 +123,13 @@ def list_work_orders(
         None,
         description="Repeat query param to filter by several statuses, e.g. ?statuses=draft&statuses=rejected",
     ),
-    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=200),
 ) -> list[WorkOrderPublic]:
     allowed = set(WORK_ORDER_STATUSES)
+    list_kw: dict[str, Any] = {"org_unit_id": org_unit_id, "offset": offset, "limit": limit}
+    count_kw: dict[str, Any] = {"org_unit_id": org_unit_id}
+
     if statuses is not None:
         cleaned = [s.strip().lower() for s in statuses if s and str(s).strip()]
         if cleaned:
@@ -134,11 +139,18 @@ def list_work_orders(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid status value(s): {bad}. Allowed: {sorted(allowed)}",
                 )
-            rows = svc.list(org_unit_id=org_unit_id, statuses=cleaned, limit=limit)
-        else:
-            rows = svc.list(org_unit_id=org_unit_id, status=status_filter, limit=limit)
-    else:
-        rows = svc.list(org_unit_id=org_unit_id, status=status_filter, limit=limit)
+            list_kw["statuses"] = cleaned
+            count_kw["statuses"] = cleaned
+        elif status_filter:
+            list_kw["status"] = status_filter
+            count_kw["status"] = status_filter
+    elif status_filter:
+        list_kw["status"] = status_filter
+        count_kw["status"] = status_filter
+
+    rows = svc.list(**list_kw)
+    total = svc.count_list(**count_kw)
+    response.headers["X-Total-Count"] = str(total)
     return [WorkOrderPublic.model_validate(_to_public(db, r)) for r in rows]
 
 

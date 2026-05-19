@@ -142,25 +142,18 @@ function formatQtyInput(n: number): string {
   return s
 }
 
-/** Max invoice qty for this WO line (pieces, or 0–1 lot fraction for % progress). */
+/** Max invoice qty for this WO line (approved / planned quantity). */
 function workOrderLineMaxQty(ln: BillableLine): number | null {
-  if (ln.progress_type === "percentage") return 1
   const aq = ln.approved_quantity ?? ln.approved_line_qty_basis
   if (aq != null && Number.isFinite(aq) && aq > 0) return aq
   return null
 }
 
-/** Default invoice qty from latest WO line completion (capped at WO planned qty). */
+/** Default invoice qty from WO line completion quantity (capped at planned qty). */
 function defaultInvoiceQtyFromCompletion(ln: BillableLine): string {
-  const max = workOrderLineMaxQty(ln)
-  if (ln.progress_type === "percentage") {
-    const cp = ln.completed_percentage
-    if (cp == null || !Number.isFinite(cp) || cp <= 0) return ""
-    const q = cp / 100
-    return formatQtyInput(max != null ? Math.min(q, max) : q)
-  }
   const cq = ln.completed_quantity
   if (cq == null || !Number.isFinite(cq) || cq <= 0) return ""
+  const max = workOrderLineMaxQty(ln)
   const q = max != null ? Math.min(cq, max) : cq
   return formatQtyInput(q)
 }
@@ -1128,13 +1121,10 @@ export function InvoiceCreatePage() {
                                       <div className="text-[11px] text-muted-foreground">
                                         {ln.part_name ?? "—"} ·{" "}
                                         <span className="uppercase tracking-wide">{ln.progress_type}</span>
-                                        {ln.completed_quantity != null || ln.completed_percentage != null ? (
+                                        {ln.completed_quantity != null && Number.isFinite(ln.completed_quantity) ? (
                                           <span>
                                             {" "}
-                                            · Done{" "}
-                                            {ln.progress_type === "percentage"
-                                              ? `${ln.completed_percentage ?? 0}%`
-                                              : formatQtyInput(ln.completed_quantity ?? 0)}
+                                            · Done {formatQtyInput(ln.completed_quantity)} qty
                                           </span>
                                         ) : null}
                                       </div>

@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from modules.approvals.assignment_service import get_workflow_for_action
@@ -229,22 +229,21 @@ class WorkOrderService:
         )
         return list(self._db.scalars(stmt).unique().all())
 
-    def list(
+    def _list_filters(
         self,
+        stmt: Select[Any],
         *,
         org_unit_id: int | None = None,
         contractor_id: int | None = None,
         status: str | None = None,
         statuses: list[str] | None = None,
-        limit: int = 100,
-    ) -> list[WorkOrder]:
-        stmt = select(WorkOrder).options(selectinload(WorkOrder.items)).order_by(WorkOrder.id.desc())
-        # Default: hide archived/inactive work orders.
+    ) -> Select[Any] | None:
+        """Apply list filters. Returns ``None`` when plant scope is empty (no rows)."""
         stmt = stmt.where(WorkOrder.is_active.is_(True))
         if org_unit_id is not None:
             plant_ids = collect_plant_ids_under_scope(self._db, int(org_unit_id))
             if not plant_ids:
-                return []
+                return None
             stmt = stmt.where(WorkOrder.org_unit_id.in_(plant_ids))
         if contractor_id is not None:
             stmt = stmt.where(WorkOrder.contractor_id == int(contractor_id))
@@ -254,7 +253,49 @@ class WorkOrderService:
                 stmt = stmt.where(WorkOrder.status.in_(normalized))
         elif status:
             stmt = stmt.where(WorkOrder.status == status.strip().lower())
-        stmt = stmt.limit(int(limit))
+        return stmt
+
+    def count_list(
+        self,
+        *,
+        org_unit_id: int | None = None,
+        contractor_id: int | None = None,
+        status: str | None = None,
+        statuses: list[str] | None = None,
+    ) -> int:
+        stmt = select(func.count()).select_from(WorkOrder)
+        filtered = self._list_filters(
+            stmt,
+            org_unit_id=org_unit_id,
+            contractor_id=contractor_id,
+            status=status,
+            statuses=statuses,
+        )
+        if filtered is None:
+            return 0
+        return int(self._db.scalar(filtered) or 0)
+
+    def list(
+        self,
+        *,
+        org_unit_id: int | None = None,
+        contractor_id: int | None = None,
+        status: str | None = None,
+        statuses: list[str] | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[WorkOrder]:
+        stmt = select(WorkOrder).options(selectinload(WorkOrder.items)).order_by(WorkOrder.id.desc())
+        filtered = self._list_filters(
+            stmt,
+            org_unit_id=org_unit_id,
+            contractor_id=contractor_id,
+            status=status,
+            statuses=statuses,
+        )
+        if filtered is None:
+            return []
+        stmt = filtered.offset(int(offset)).limit(int(limit))
         return list(self._db.scalars(stmt).unique().all())
 
     def archive(self, work_order_id: int, *, actor_user_id: int) -> WorkOrder:
@@ -971,9 +1012,11 @@ class WorkOrderService:
             remaining = max(approved_qty - cq, 0.0)
 
         ps = item.pricing_snapshot or {}
+        qty_unit = "qty" if item.planned_quantity is not None else str(ps.get("unit_type") or "qty")
         return {
             "progress_type": str(item.progress_type),
-            "unit_type": str(ps.get("unit_type") or ""),
+            "unit_type": qty_unit,
+            "quantity_unit": qty_unit,
             "approved_quantity": approved_qty,
             "approved_percentage": planned_pct_raw,
             "completed_quantity": cq,

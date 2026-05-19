@@ -1,17 +1,19 @@
 import * as React from "react"
 import { Link } from "react-router-dom"
-import { Plus } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { getJson } from "@/lib/api"
+import { getJson, getJsonList } from "@/lib/api"
 import { workOrderStatusBadgeVariant } from "@/lib/work-order-status-badge"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
 type WoTab = "all" | "draft" | "approval" | "operating" | "completed"
+
+const WO_PAGE_SIZE = 20
 
 const WO_TABS: { id: WoTab; label: string }[] = [
   { id: "all", label: "All" },
@@ -21,8 +23,11 @@ const WO_TABS: { id: WoTab; label: string }[] = [
   { id: "completed", label: "Completed" },
 ]
 
-function workOrdersListPath(tab: WoTab): string {
-  const q = new URLSearchParams({ limit: "100" })
+function workOrdersListPath(tab: WoTab, page: number): string {
+  const q = new URLSearchParams({
+    limit: String(WO_PAGE_SIZE),
+    offset: String(page * WO_PAGE_SIZE),
+  })
   if (tab === "draft") {
     q.append("statuses", "draft")
     q.append("statuses", "rejected")
@@ -58,25 +63,38 @@ export function WorkOrdersPage() {
   const canView = hasPermission("work_orders.view")
 
   const [tab, setTab] = React.useState<WoTab>("all")
+  const [page, setPage] = React.useState(0)
   const [rows, setRows] = React.useState<any[] | null>(null)
+  const [total, setTotal] = React.useState(0)
   const [error, setError] = React.useState<string | null>(null)
   const [plants, setPlants] = React.useState<{ id: number; name: string }[]>([])
+
+  const pageCount = Math.max(1, Math.ceil(total / WO_PAGE_SIZE))
+  const pageSafe = Math.min(page, pageCount - 1)
+  const rangeStart = total === 0 ? 0 : pageSafe * WO_PAGE_SIZE + 1
+  const rangeEnd = Math.min(total, (pageSafe + 1) * WO_PAGE_SIZE)
 
   const load = React.useCallback(async () => {
     if (!canView) return
     setError(null)
     try {
-      const list = await getJson<any[]>(workOrdersListPath(tab))
-      setRows(list)
+      const { items, total: t } = await getJsonList<any>(workOrdersListPath(tab, page))
+      setRows(items)
+      setTotal(t)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load work orders")
       setRows([])
+      setTotal(0)
     }
-  }, [canView, tab])
+  }, [canView, tab, page])
 
   React.useEffect(() => {
     void load()
   }, [load])
+
+  React.useEffect(() => {
+    setPage(0)
+  }, [tab])
 
   React.useEffect(() => {
     if (!canView) return
@@ -102,9 +120,6 @@ export function WorkOrdersPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-medium">Work orders</h2>
-          {/* <p className="text-sm text-muted-foreground">
-            Assign operational work to a contractor with Part Master lines, track completion, and govern downstream invoicing.
-          </p> */}
         </div>
         {canCreate ? (
           <Button asChild type="button">
@@ -124,11 +139,6 @@ export function WorkOrdersPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          {/* <CardTitle className="text-sm font-medium">Work orders</CardTitle>
-          <CardDescription>
-            <strong>Draft</strong> means not yet live (including returned edits)—not the same as <strong>In approval</strong>, which
-            is waiting on approvers in <strong>My tasks</strong>. <strong>Completed</strong> lists closed work orders.
-          </CardDescription> */}
           <div className="mt-3 flex flex-wrap gap-2">
             {WO_TABS.map((t) => (
               <Button
@@ -195,6 +205,40 @@ export function WorkOrdersPage() {
               )}
             </TableBody>
           </Table>
+          {total > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3">
+              <p className="text-xs text-muted-foreground">
+                Showing {rangeStart}–{rangeEnd} of {total}
+              </p>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2"
+                  disabled={pageSafe <= 0 || rows === null}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <span className="min-w-[4.5rem] text-center text-xs tabular-nums text-muted-foreground">
+                  {pageSafe + 1} / {pageCount}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2"
+                  disabled={pageSafe >= pageCount - 1 || rows === null}
+                  onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>

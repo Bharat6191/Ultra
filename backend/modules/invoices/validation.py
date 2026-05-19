@@ -447,19 +447,6 @@ class InvoiceValidationEngine:
                     allowed_qty = _dec(latest_p.completed_quantity)
                 else:
                     allowed_qty = Decimal("0")
-                # Apply tolerance.
-                allowed_qty_tol = allowed_qty * (Decimal("1") + (tol / Decimal("100")))
-                if _dec(line.quantity) > allowed_qty_tol:
-                    add_issue(
-                        line_id=int(line.id),
-                        code="QTY_EXCEEDS_COMPLETION",
-                        severity="warning",
-                        message="Invoiced quantity is above recorded completion (informational).",
-                        allowed_qty=allowed_qty,
-                        actual_qty=_dec(line.quantity),
-                        requires_justification=False,
-                        requires_attachments=False,
-                    )
             else:
                 latest_p = self._db.scalar(
                     select(WorkOrderItemProgress)
@@ -545,21 +532,6 @@ class InvoiceValidationEngine:
                             "previous_invoiced_value": str(_q2(prev_amt_dec)),
                             "approved_line_value": str(_q2(planned_contract_value)),
                         },
-                    )
-
-            if allowed_qty is not None:
-                allowed_cum = allowed_qty * (Decimal("1") + (tol / Decimal("100")))
-                if prev_qty_dec + _dec(line.quantity) > allowed_cum:
-                    add_issue(
-                        line_id=int(line.id),
-                        code="CUMULATIVE_QTY_EXCEEDS_ALLOWED",
-                        severity="warning",
-                        message="Cumulative invoiced quantity is above completion (informational).",
-                        allowed_qty=allowed_qty,
-                        actual_qty=prev_qty_dec + _dec(line.quantity),
-                        requires_justification=False,
-                        requires_attachments=False,
-                        metadata={"previous_invoiced_qty": str(prev_qty_dec)},
                     )
 
             # Amount guardrail: stored line amount vs commercial rule (weight: qty × kg × rate/kg).

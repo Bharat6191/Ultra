@@ -7,6 +7,7 @@ export type WorkOrdersDashboardModule = {
   active: number
   pending_approval: number
   draft: number
+  by_status?: { status: string; count: number }[]
 }
 
 export function WorkOrdersDashboard({ module }: { module: WorkOrdersDashboardModule }) {
