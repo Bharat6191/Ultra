@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from core.auth import CurrentUser, get_current_user
@@ -15,6 +15,7 @@ from modules.errors import ConflictError, NotFoundError
 from modules.invoices.service import InvoiceService
 from modules.invoices.validation import (
     prior_invoiced_ex_vat_for_work_order,
+    prior_passed_invoiced_ex_vat_for_work_order,
     work_order_ex_vat_cap,
 )
 from modules.work_orders.models import WORK_ORDER_STATUSES, WorkOrder
@@ -48,10 +49,13 @@ def _to_public(db: Session, row: WorkOrder) -> dict:
     ctr = db.get(Contractor, int(row.contractor_id))
     contractor_name = getattr(ctr, "name", None) if ctr is not None else None
     cap_dec = work_order_ex_vat_cap(db, row)
-    inv_ex = prior_invoiced_ex_vat_for_work_order(
+    committed_ex = prior_invoiced_ex_vat_for_work_order(
         db, work_order_id=int(row.id), exclude_invoice_id=None
     )
-    rem = (cap_dec - inv_ex).quantize(Decimal("0.01"))
+    inv_ex = prior_passed_invoiced_ex_vat_for_work_order(
+        db, work_order_id=int(row.id), exclude_invoice_id=None
+    )
+    rem = (cap_dec - committed_ex).quantize(Decimal("0.01"))
     if rem < Decimal("0"):
         rem = Decimal("0")
     return {
@@ -70,6 +74,7 @@ def _to_public(db: Session, row: WorkOrder) -> dict:
         "rejected_by": row.rejected_by,
         "rejected_at": row.rejected_at,
         "invoiced_ex_tax_total": inv_ex,
+        "committed_invoiced_ex_tax_total": committed_ex,
         "remaining_invoiceable_value": rem,
         "created_by": row.created_by,
         "created_at": row.created_at,
@@ -109,6 +114,7 @@ def _to_public(db: Session, row: WorkOrder) -> dict:
     dependencies=[Depends(require_permission("work_orders.view"))],
 )
 def list_work_orders(
+    response: Response,
     svc: Annotated[WorkOrderService, Depends(_svc)],
     db: Session = Depends(get_db),
     org_unit_id: int | None = Query(None),
@@ -117,9 +123,13 @@ def list_work_orders(
         None,
         description="Repeat query param to filter by several statuses, e.g. ?statuses=draft&statuses=rejected",
     ),
-    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=200),
 ) -> list[WorkOrderPublic]:
     allowed = set(WORK_ORDER_STATUSES)
+    list_kw: dict[str, Any] = {"org_unit_id": org_unit_id, "offset": offset, "limit": limit}
+    count_kw: dict[str, Any] = {"org_unit_id": org_unit_id}
+
     if statuses is not None:
         cleaned = [s.strip().lower() for s in statuses if s and str(s).strip()]
         if cleaned:
@@ -129,11 +139,18 @@ def list_work_orders(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid status value(s): {bad}. Allowed: {sorted(allowed)}",
                 )
-            rows = svc.list(org_unit_id=org_unit_id, statuses=cleaned, limit=limit)
-        else:
-            rows = svc.list(org_unit_id=org_unit_id, status=status_filter, limit=limit)
-    else:
-        rows = svc.list(org_unit_id=org_unit_id, status=status_filter, limit=limit)
+            list_kw["statuses"] = cleaned
+            count_kw["statuses"] = cleaned
+        elif status_filter:
+            list_kw["status"] = status_filter
+            count_kw["status"] = status_filter
+    elif status_filter:
+        list_kw["status"] = status_filter
+        count_kw["status"] = status_filter
+
+    rows = svc.list(**list_kw)
+    total = svc.count_list(**count_kw)
+    response.headers["X-Total-Count"] = str(total)
     return [WorkOrderPublic.model_validate(_to_public(db, r)) for r in rows]
 
 
@@ -234,7 +251,10 @@ def list_work_order_invoices(
             invoice_number=str(r.invoice_number),
             invoice_date=r.invoice_date,
             status=str(r.status),
+            validation_status=r.validation_status,
             total_amount=r.total_amount,
+            lines_subtotal_ex_vat=sum((ln.amount for ln in (r.lines or [])), Decimal("0")),
+            extra_amount_ex_vat=r.extra_amount_ex_vat,
         )
         for r in rows
     ]

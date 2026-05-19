@@ -64,6 +64,8 @@ class Invoice(Base):
 
     currency: Mapped[str] = mapped_column(String(8), nullable=False, server_default="INR")
     total_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, server_default="0")
+    # Ex-VAT adjustment (freight, rounding, etc.) included in WO cap checks and invoice total.
+    extra_amount_ex_vat: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, server_default="0")
 
     # Validation summary (denormalised for dashboards).
     last_validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -114,6 +116,13 @@ class Invoice(Base):
         order_by="InvoiceAttachment.id.asc()",
         lazy="selectin",
     )
+    extra_lines = relationship(
+        "InvoiceExtraLine",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        order_by="InvoiceExtraLine.sort_order.asc(), InvoiceExtraLine.id.asc()",
+        lazy="selectin",
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -149,6 +158,25 @@ class InvoiceLine(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     invoice = relationship("Invoice", back_populates="lines")
+
+
+class InvoiceExtraLine(Base):
+    """Ad-hoc charges (freight, etc.) — not tied to a work order line item."""
+
+    __tablename__ = "invoice_extra_lines"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    invoice_id: Mapped[int] = mapped_column(
+        ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    description: Mapped[str] = mapped_column(String(512), nullable=False)
+    quantity: Mapped[Decimal | None] = mapped_column(Numeric(14, 3), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    unit_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    amount_ex_vat: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
+    invoice = relationship("Invoice", back_populates="extra_lines")
 
 
 class InvoiceValidationIssue(Base):

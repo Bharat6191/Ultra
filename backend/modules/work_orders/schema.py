@@ -117,6 +117,9 @@ class WorkOrderPublic(BaseModel):
     rejected_by: int | None = None
     rejected_at: datetime | None = None
     invoiced_ex_tax_total: Decimal | None = None
+    """Ex-VAT total on approved/paid invoices (passed)."""
+    committed_invoiced_ex_tax_total: Decimal | None = None
+    """Ex-VAT reserved by all invoices counting toward the WO cap (incl. drafts)."""
     remaining_invoiceable_value: Decimal | None = None
     created_by: int | None
     created_at: datetime | None = None
@@ -131,7 +134,10 @@ class WorkOrderLinkedInvoice(BaseModel):
     invoice_number: str
     invoice_date: date
     status: str
+    validation_status: str | None = None
     total_amount: Decimal
+    lines_subtotal_ex_vat: Decimal | None = None
+    extra_amount_ex_vat: Decimal | None = None
 
 
 class WorkOrderAuditEntry(BaseModel):

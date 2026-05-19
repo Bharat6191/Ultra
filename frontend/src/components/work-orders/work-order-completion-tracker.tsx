@@ -64,6 +64,9 @@ function parseEntry(s: string): number {
   return Number(t)
 }
 
+/** WO completion is always tracked in line quantity (pieces), not billing weight UOM (e.g. kg). */
+const COMPLETION_QTY_UNIT = "qty"
+
 const completionHistoryDialogClass = cn(
   "flex h-full max-h-[100dvh] w-full max-w-md flex-col gap-0 overflow-hidden rounded-none border border-border/80 p-0 shadow-xl outline-none sm:rounded-l-xl",
   "fixed inset-y-0 top-0 right-0 left-auto z-50 translate-x-0 translate-y-0",
@@ -92,25 +95,25 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
         ? fromPlan
         : NaN
   const denomOk = Number.isFinite(approved) && approved > 0
+  const qtyBlocked = !denomOk
 
-  const [pctStr, setPctStr] = React.useState("")
+  const [qtyStr, setQtyStr] = React.useState("")
   const [remarks, setRemarks] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [historyOpen, setHistoryOpen] = React.useState(false)
   const [history, setHistory] = React.useState<HistoryEntry[] | null>(null)
   const [historyLoading, setHistoryLoading] = React.useState(false)
 
+  const serverQty =
+    typeof c.completed_quantity === "number" && Number.isFinite(c.completed_quantity) ? c.completed_quantity : null
+
   const displayPct =
-    typeof c.completed_percentage === "number" && Number.isFinite(c.completed_percentage)
-      ? Math.min(100, Math.max(0, c.completed_percentage))
-      : 0
+    denomOk && serverQty != null ? Math.min(100, Math.max(0, (serverQty / approved) * 100)) : 0
 
   React.useEffect(() => {
-    const cp =
-      typeof c.completed_percentage === "number" && Number.isFinite(c.completed_percentage) ? c.completed_percentage : null
-    if (cp !== null) setPctStr(String(cp))
-    else setPctStr("")
-  }, [c.completed_percentage, item.id])
+    if (serverQty != null) setQtyStr(String(serverQty))
+    else setQtyStr("")
+  }, [serverQty, item.id])
 
   async function loadHistory() {
     setHistoryLoading(true)
@@ -125,16 +128,20 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
   }
 
   async function save() {
-    const pctTrim = pctStr.trim()
-    if (!pctTrim) {
-      toast.error("Enter completion %.")
+    if (qtyBlocked) {
+      toast.error("Approved quantity is required before recording completion.")
+      return
+    }
+    const qtyTrim = qtyStr.trim()
+    if (!qtyTrim) {
+      toast.error("Enter completed quantity.")
       return
     }
     setSaving(true)
     try {
       await postJson(`/work-orders/items/${item.id}/progress`, {
-        completed_quantity: null,
-        completed_percentage: pctTrim,
+        completed_quantity: qtyTrim,
+        completed_percentage: null,
         remarks: remarks.trim() || null,
       })
       toast.success("Completion updated.")
@@ -158,7 +165,7 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
       <CardContent className="space-y-4 pt-4">
         <div className="space-y-1.5">
           <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-            <span>Approved qty: <span className="font-medium tabular-nums text-foreground">{denomOk ? approved : "—"}</span> {item.unit_type}</span>
+            <span>Approved qty: <span className="font-medium tabular-nums text-foreground">{denomOk ? approved : "—"}</span> {COMPLETION_QTY_UNIT}</span>
             {typeof c.remaining_quantity === "number" ? (
               <span>
                 Remaining: <span className="font-medium tabular-nums text-foreground">{c.remaining_quantity}</span>
@@ -173,20 +180,28 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
           </div>
           <div className="flex justify-between text-[11px] text-muted-foreground">
             <span>{displayPct <= 0 ? "Pending" : displayPct >= 100 ? "Completed" : "In progress"}</span>
-            <span className="tabular-nums">{displayPct.toFixed(1)}%</span>
+            <span className="tabular-nums">
+              {denomOk && serverQty != null
+                ? `${serverQty} / ${approved} ${COMPLETION_QTY_UNIT}`
+                : qtyBlocked
+                  ? "Set approved qty on line"
+                  : "—"}
+            </span>
           </div>
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor={`cp-${item.id}`} className="text-xs">
-            Completion %
+          <Label htmlFor={`cq-${item.id}`} className="text-xs">
+            Completed qty ({COMPLETION_QTY_UNIT})
           </Label>
           <Input
-            id={`cp-${item.id}`}
+            id={`cq-${item.id}`}
             inputMode="decimal"
             className="h-9 tabular-nums"
-            value={pctStr}
-            onChange={(e) => setPctStr(e.target.value)}
+            value={qtyStr}
+            onChange={(e) => setQtyStr(e.target.value)}
+            disabled={qtyBlocked}
+            placeholder={denomOk ? `Max ${approved}` : "—"}
           />
         </div>
 
@@ -298,34 +313,34 @@ export function WorkOrderLineCompletionInline({ item, contractorLabel, lineSr, o
         ? fromPlan
         : NaN
   const denomOk = Number.isFinite(approved) && approved > 0
-  const qtyBlocked = !denomOk && item.progress_type === "quantity"
+  const qtyBlocked = !denomOk
 
-  const [pctStr, setPctStr] = React.useState("")
+  const [qtyStr, setQtyStr] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [historyOpen, setHistoryOpen] = React.useState(false)
   const [history, setHistory] = React.useState<HistoryEntry[] | null>(null)
   const [historyLoading, setHistoryLoading] = React.useState(false)
 
-  const serverPct =
-    typeof c.completed_percentage === "number" && Number.isFinite(c.completed_percentage) ? c.completed_percentage : null
+  const serverQty =
+    typeof c.completed_quantity === "number" && Number.isFinite(c.completed_quantity) ? c.completed_quantity : null
 
-  const parsedPct = parseEntry(pctStr)
+  const parsedQty = parseEntry(qtyStr)
 
   React.useEffect(() => {
     if (qtyBlocked) return
-    if (serverPct != null && Number.isFinite(serverPct)) setPctStr(String(serverPct))
-    else setPctStr("")
-  }, [serverPct, item.id, qtyBlocked])
+    if (serverQty != null && Number.isFinite(serverQty)) setQtyStr(String(serverQty))
+    else setQtyStr("")
+  }, [serverQty, item.id, qtyBlocked])
 
-  const baselinePct = serverPct != null && Number.isFinite(serverPct) ? String(serverPct) : ""
-  const dirty = pctStr.trim() !== baselinePct.trim()
+  const baselineQty = serverQty != null && Number.isFinite(serverQty) ? String(serverQty) : ""
+  const dirty = qtyStr.trim() !== baselineQty.trim()
 
   const canSave =
     !qtyBlocked &&
-    pctStr.trim() !== "" &&
-    Number.isFinite(parsedPct) &&
-    parsedPct >= 0 &&
-    parsedPct <= 100 + 1e-9
+    qtyStr.trim() !== "" &&
+    Number.isFinite(parsedQty) &&
+    parsedQty >= 0 &&
+    (!denomOk || parsedQty <= approved + 1e-9)
 
   const saveDisabled = saving || !canSave
 
@@ -346,8 +361,8 @@ export function WorkOrderLineCompletionInline({ item, contractorLabel, lineSr, o
     setSaving(true)
     try {
       await postJson(`/work-orders/items/${item.id}/progress`, {
-        completed_quantity: null,
-        completed_percentage: pctStr.trim(),
+        completed_quantity: qtyStr.trim(),
+        completed_percentage: null,
         remarks: null,
       })
       toast.success("Completion saved.")
@@ -378,25 +393,28 @@ export function WorkOrderLineCompletionInline({ item, contractorLabel, lineSr, o
           <div className="relative flex min-w-0 items-stretch border-r border-border/60">
             <Input
               inputMode="decimal"
-              className="h-11 w-[4.5rem] min-w-[3.5rem] rounded-none border-0 bg-transparent py-0 pr-7 pl-1 text-center text-base font-semibold tabular-nums leading-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-              value={pctStr}
-              onChange={(e) => setPctStr(e.target.value)}
+              className="h-11 w-[5.5rem] min-w-[4rem] rounded-none border-0 bg-transparent py-0 px-2 text-center text-base font-semibold tabular-nums leading-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              value={qtyStr}
+              onChange={(e) => setQtyStr(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "ArrowUp") {
                   e.preventDefault()
-                  const base = Number.isFinite(parsedPct) ? parsedPct : serverPct ?? 0
-                  setPctStr(String(Math.min(100, Math.round((base + (e.shiftKey ? 1 : 0.5)) * 10) / 10)))
+                  const base = Number.isFinite(parsedQty) ? parsedQty : serverQty ?? 0
+                  const step = e.shiftKey ? 1 : 0.5
+                  const next = denomOk ? Math.min(approved, base + step) : base + step
+                  setQtyStr(String(Math.round(next * 1000) / 1000))
                 } else if (e.key === "ArrowDown") {
                   e.preventDefault()
-                  const base = Number.isFinite(parsedPct) ? parsedPct : serverPct ?? 0
-                  setPctStr(String(Math.max(0, Math.round((base - (e.shiftKey ? 1 : 0.5)) * 10) / 10)))
+                  const base = Number.isFinite(parsedQty) ? parsedQty : serverQty ?? 0
+                  const step = e.shiftKey ? 1 : 0.5
+                  setQtyStr(String(Math.max(0, Math.round((base - step) * 1000) / 1000)))
                 }
               }}
               placeholder="0"
-              aria-label="Completion percent"
+              aria-label={`Completed quantity in ${COMPLETION_QTY_UNIT}`}
             />
-            <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
-              %
+            <span className="pointer-events-none absolute right-1 top-1/2 max-w-[2.5rem] -translate-y-1/2 truncate text-[10px] font-medium text-muted-foreground">
+              {COMPLETION_QTY_UNIT}
             </span>
           </div>
           <Button
@@ -515,7 +533,7 @@ export function WorkOrderCompletionTracker({ workOrderTitle, workOrderNumber, co
         typeof comp.approved_quantity === "number" && Number.isFinite(comp.approved_quantity)
           ? comp.approved_quantity
           : parseNum(it.planned_quantity)
-      if (it.progress_type === "quantity" && Number.isFinite(ap) && ap > 0) {
+      if (Number.isFinite(ap) && ap > 0) {
         plannedSum += ap
         const cq = typeof comp.completed_quantity === "number" && Number.isFinite(comp.completed_quantity) ? comp.completed_quantity : 0
         doneSum += Math.min(cq, ap)

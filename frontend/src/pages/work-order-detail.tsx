@@ -30,6 +30,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { LineWithCompletion } from "@/components/work-orders/work-order-completion-tracker"
 import { WorkOrderLineCompletionInline } from "@/components/work-orders/work-order-completion-tracker"
 import { ApiError, deleteJson, getJson, patchJson, postJson } from "@/lib/api"
+import {
+  invoiceDisplayStatus,
+  invoiceDisplayStatusBadgeVariant,
+  invoiceDisplayStatusLabel,
+} from "@/lib/invoice-validation-display"
 import { workOrderStatusBadgeVariant } from "@/lib/work-order-status-badge"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
@@ -59,6 +64,7 @@ type WorkOrder = {
   updated_at?: string | null
   approved_value_total?: string | number | null
   invoiced_ex_tax_total?: string | number | null
+  committed_invoiced_ex_tax_total?: string | number | null
   remaining_invoiceable_value?: string | number | null
   items?: {
     id: number
@@ -98,6 +104,7 @@ type LinkedInvoice = {
   invoice_number: string
   invoice_date: string
   status: string
+  validation_status?: string | null
   total_amount: string | number
 }
 
@@ -117,7 +124,7 @@ function fallbackLineCompletion(it: NonNullable<WorkOrder["items"]>[number]): Li
   const apPct = parseNum(it.planned_percentage)
   return {
     progress_type: it.progress_type,
-    unit_type: it.unit_type ?? "",
+    unit_type: it.planned_quantity != null && String(it.planned_quantity) !== "" ? "qty" : (it.unit_type ?? "qty"),
     approved_quantity: Number.isFinite(aq) ? aq : null,
     approved_percentage: Number.isFinite(apPct) ? apPct : null,
     completed_quantity: null,
@@ -343,7 +350,7 @@ export function WorkOrderDetailPage() {
         id: it.id,
         part_code: it.part_code ?? null,
         part_name: it.part_name ?? null,
-        unit_type: it.completion?.unit_type ?? it.unit_type ?? "",
+        unit_type: "qty",
         progress_type: it.progress_type,
         planned_quantity: it.planned_quantity,
         planned_percentage: it.planned_percentage,
@@ -428,8 +435,18 @@ export function WorkOrderDetailPage() {
     if (!row?.items?.length) return false
     for (const it of row.items) {
       const comp = it.completion ?? fallbackLineCompletion(it)
-      const cp = comp.completed_percentage
-      if (typeof cp !== "number" || !Number.isFinite(cp) || cp < 99.99) return false
+      const cq = comp.completed_quantity
+      const approved =
+        typeof comp.approved_quantity === "number" && Number.isFinite(comp.approved_quantity)
+          ? comp.approved_quantity
+          : parseNum(it.planned_quantity)
+      if (typeof cq !== "number" || !Number.isFinite(cq)) return false
+      if (Number.isFinite(approved) && approved > 0) {
+        if (cq + 1e-9 < approved) return false
+      } else {
+        const cp = comp.completed_percentage
+        if (typeof cp !== "number" || !Number.isFinite(cp) || cp < 99.99) return false
+      }
     }
     return true
   }, [row?.items])
@@ -544,7 +561,7 @@ export function WorkOrderDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
             {row.approved_value_total != null ? (
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="rounded-md border bg-muted/30 px-3 py-2">
                   <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Approved work order value (ex. tax)
@@ -553,8 +570,10 @@ export function WorkOrderDetailPage() {
                   {/* <p className="mt-1 text-xs text-muted-foreground">Set when the work order was approved; not editable here.</p> */}
                 </div>
                 <div className="rounded-md border px-3 py-2">
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Invoiced to date (ex. tax)</div>
-                  <div className="mt-1 font-medium tabular-nums">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Passed validation (ex. tax)
+                  </div>
+                  <div className="mt-1 font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
                     {fmtMoney(parseNum(row.invoiced_ex_tax_total ?? 0))}
                   </div>
                 </div>
@@ -592,7 +611,14 @@ export function WorkOrderDetailPage() {
                           <td className="px-3 py-2 font-mono text-xs">{inv.invoice_number}</td>
                           <td className="px-3 py-2 tabular-nums">{inv.invoice_date}</td>
                           <td className="px-3 py-2">
-                            <Badge variant="secondary">{inv.status}</Badge>
+                            {(() => {
+                              const d = invoiceDisplayStatus(inv)
+                              return (
+                                <Badge variant={invoiceDisplayStatusBadgeVariant(d)}>
+                                  {invoiceDisplayStatusLabel(d)}
+                                </Badge>
+                              )
+                            })()}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(parseNum(inv.total_amount))}</td>
                           <td className="px-3 py-2 text-right">

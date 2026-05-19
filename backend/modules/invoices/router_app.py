@@ -14,6 +14,7 @@ from modules.errors import ConflictError, NotFoundError
 from modules.invoices.models import Invoice
 from modules.invoices.schema import (
     InvoiceCreate,
+    InvoiceUpdate,
     InvoicePreflightResponse,
     InvoicePublic,
     InvoiceIssueJustificationUpdate,
@@ -32,6 +33,11 @@ from modules.work_orders.models import WorkOrder, WorkOrderItem
 
 router = APIRouter(tags=["app", "invoices"])
 
+# Informational completion-qty warnings (no longer raised; hide if present on older validations).
+_HIDDEN_INFORMATIONAL_ISSUE_CODES = frozenset(
+    {"QTY_EXCEEDS_COMPLETION", "CUMULATIVE_QTY_EXCEEDS_ALLOWED"}
+)
+
 
 def _svc(db: Session = Depends(get_db)) -> InvoiceService:
     return InvoiceService(db)
@@ -46,16 +52,17 @@ def _q2(x: Decimal) -> Decimal:
 
 
 def _line_validation_status(inv: Invoice, *, line_pk: int) -> str | None:
+    """Per-line UI status: ``blocked`` when line has blocker/error issues; else unset (= pass)."""
     ranked: str | None = None
     for iss in inv.issues or []:
         if iss.line_id is None or int(iss.line_id) != int(line_pk):
+            continue
+        if str(iss.code) in _HIDDEN_INFORMATIONAL_ISSUE_CODES:
             continue
         if iss.severity == "blocker":
             return "blocked"
         if iss.severity == "error":
             ranked = "blocked"
-        elif iss.severity == "warning" and ranked != "blocked":
-            ranked = "warn"
     return ranked
 
 
@@ -150,6 +157,19 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
         "status": inv.status,
         "currency": inv.currency,
         "total_amount": inv.total_amount,
+        "extra_amount_ex_vat": inv.extra_amount_ex_vat,
+        "extra_lines": [
+            {
+                "id": int(x.id),
+                "description": x.description,
+                "quantity": x.quantity,
+                "unit": x.unit,
+                "unit_price": x.unit_price,
+                "amount_ex_vat": x.amount_ex_vat,
+            }
+            for x in (inv.extra_lines or [])
+        ],
+        "lines_subtotal_ex_vat": sum((l.amount for l in (inv.lines or [])), Decimal("0")),
         "validation_status": inv.validation_status,
         "validation_score": inv.validation_score,
         "last_validated_at": inv.last_validated_at,
@@ -180,6 +200,7 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
                 "created_at": i.created_at,
             }
             for i in (inv.issues or [])
+            if str(i.code) not in _HIDDEN_INFORMATIONAL_ISSUE_CODES
         ],
         "attachments": [
             {
@@ -370,6 +391,27 @@ def get_invoice(
         inv = svc.get(invoice_id)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return InvoicePublic.model_validate(_to_public(inv, db))
+
+
+@router.patch(
+    "/invoices/{invoice_id:int}",
+    response_model=InvoicePublic,
+    dependencies=[Depends(require_permission("invoices.update"))],
+)
+def update_invoice_draft(
+    invoice_id: int,
+    payload: InvoiceUpdate,
+    svc: Annotated[InvoiceService, Depends(_svc)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> InvoicePublic:
+    try:
+        inv = svc.update_draft(invoice_id, payload, actor_user_id=int(current.subject))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return InvoicePublic.model_validate(_to_public(inv, db))
 
 

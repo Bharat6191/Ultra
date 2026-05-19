@@ -129,7 +129,7 @@ class CommercialInsights(BaseModel):
 
 class PendingItem(BaseModel):
     kind: str
-    severity: str  # info | warning | danger
+    severity: str  # info | warning | danger | success
     title: str
     detail: str | None = None
     href_hint: str | None = None

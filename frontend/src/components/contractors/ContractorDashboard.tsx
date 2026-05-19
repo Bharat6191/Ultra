@@ -97,14 +97,11 @@ export function ContractorDashboard({
               <ArrowUpRight className="ml-2 size-4 opacity-70" aria-hidden />
             </Link>
           </Button>
-          <Button
-            size="sm"
-            disabled={!canCreate}
-            onClick={onCreate}
-            title={!canCreate ? "Missing permission: contractor.create" : undefined}
-          >
-            Add contractor
-          </Button>
+          {canCreate ? (
+            <Button size="sm" onClick={onCreate}>
+              Add contractor
+            </Button>
+          ) : null}
         </div>
       </div>
 

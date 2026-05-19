@@ -52,6 +52,8 @@ import type {
   ContractorWorkOrderRow,
   NegotiationAnalytics,
   NegotiationRow,
+  PendingActions,
+  PendingItem,
   WorkOrderAnalytics,
 } from "@/components/contractors/analytics/types"
 
@@ -329,6 +331,7 @@ export function ContractorAnalyticsDashboard({
   const [neg, setNeg] = React.useState<NegotiationAnalytics | null>(null)
   const [wo, setWo] = React.useState<WorkOrderAnalytics | null>(null)
   const [commercial, setCommercial] = React.useState<CommercialInsights | null>(null)
+  const [invoicePending, setInvoicePending] = React.useState<PendingItem[]>([])
   const [selectedNegotiation, setSelectedNegotiation] = React.useState<NegotiationRow | null>(null)
   const [selectedWorkOrder, setSelectedWorkOrder] = React.useState<ContractorWorkOrderRow | null>(null)
   const [woPage, setWoPage] = React.useState(0)
@@ -372,16 +375,18 @@ export function ContractorAnalyticsDashboard({
     setError(null)
     const base = q(filterParams)
     try {
-      const [s, n, w, c] = await Promise.all([
+      const [s, n, w, c, pending] = await Promise.all([
         getJson<ContractorAnalyticsSummary>(`/contractors/${contractorId}/analytics/summary${base}`),
         getJson<NegotiationAnalytics>(`/contractors/${contractorId}/analytics/negotiations${base}`),
         getJson<WorkOrderAnalytics>(`/contractors/${contractorId}/analytics/work-orders${base}`),
         getJson<CommercialInsights>(`/contractors/${contractorId}/analytics/commercial${base}`),
+        getJson<PendingActions>(`/contractors/${contractorId}/analytics/pending`).catch(() => ({ items: [] })),
       ])
       setSummary(s)
       setNeg(n)
       setWo(w)
       setCommercial(c)
+      setInvoicePending((pending.items ?? []).filter((i) => i.kind === "invoice"))
     } catch (e) {
       setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to load analytics")
       setSummary(null)
@@ -673,6 +678,39 @@ export function ContractorAnalyticsDashboard({
           <AlertTitle>Partial refresh issue</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
+      ) : null}
+
+      {invoicePending.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Invoices</CardTitle>
+            <CardDescription>Drafts, validation, and recent approvals for this contractor.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {invoicePending.slice(0, 8).map((item) => (
+              <button
+                key={`${item.kind}-${item.entity_id}-${item.title}`}
+                type="button"
+                className={
+                  "flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50 " +
+                  (item.severity === "success"
+                    ? "border-emerald-300/60 bg-emerald-50/80 dark:border-emerald-800/50 dark:bg-emerald-950/30"
+                    : item.severity === "danger"
+                      ? "border-destructive/40 bg-destructive/5"
+                      : item.severity === "warning"
+                        ? "border-amber-300/50 bg-amber-50/60 dark:bg-amber-950/20"
+                        : "border-border/80 bg-muted/20")
+                }
+                onClick={() => {
+                  if (item.href_hint) navigate(item.href_hint)
+                }}
+              >
+                <span className="font-medium">{item.title}</span>
+                {item.detail ? <span className="text-xs text-muted-foreground tabular-nums">{item.detail}</span> : null}
+              </button>
+            ))}
+          </CardContent>
+        </Card>
       ) : null}
 
       <div className="space-y-6">

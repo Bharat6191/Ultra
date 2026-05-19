@@ -46,6 +46,16 @@ STATUSES_COUNTING_TOWARD_WO_VALUE_CAP = (
     "blocked",
 )
 
+VALIDATION_PASSED_STATUSES: tuple[str, ...] = ("pass", "warn")
+
+_INVOICE_EXCLUDED_FROM_PASSED_SUM = ("draft", "cancelled", "rejected")
+
+
+def invoice_ex_vat_total(invoice: Invoice) -> Decimal:
+    lines = sum((_dec(ln.amount) for ln in invoice.lines or []), Decimal("0"))
+    extra = _dec(getattr(invoice, "extra_amount_ex_vat", None) or 0)
+    return _q2(lines + extra)
+
 
 def _tolerance_pct(db: Session) -> Decimal:
     # Config key (admin editable): invoice.validation.tolerance_pct
@@ -76,18 +86,107 @@ def work_order_ex_vat_cap(db: Session, wo: WorkOrder) -> Decimal:
     return _q2(_dec(tot or 0))
 
 
-def prior_invoiced_ex_vat_for_work_order(
-    db: Session, *, work_order_id: int, exclude_invoice_id: int | None
-) -> Decimal:
-    """Sum of ex-VAT line amounts on invoices counted toward the WO cap."""
+def _passed_invoice_line_amount_stmt(
+    *,
+    work_order_item_id: int | None,
+    work_order_id: int | None,
+    exclude_invoice_id: int | None,
+):
+    """Line ex-VAT on invoices that passed validation (no separate approval workflow)."""
     stmt = (
         select(func.coalesce(func.sum(InvoiceLine.amount), 0))
         .select_from(InvoiceLine)
         .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
-        .join(WorkOrderItem, WorkOrderItem.id == InvoiceLine.work_order_item_id)
         .where(
-            WorkOrderItem.work_order_id == int(work_order_id),
-            Invoice.status.in_(STATUSES_COUNTING_TOWARD_WO_VALUE_CAP),
+            Invoice.validation_status.in_(VALIDATION_PASSED_STATUSES),
+            Invoice.status.notin_(_INVOICE_EXCLUDED_FROM_PASSED_SUM),
+        )
+    )
+    if work_order_item_id is not None:
+        stmt = stmt.where(InvoiceLine.work_order_item_id == int(work_order_item_id))
+    if work_order_id is not None:
+        stmt = stmt.join(WorkOrderItem, WorkOrderItem.id == InvoiceLine.work_order_item_id).where(
+            WorkOrderItem.work_order_id == int(work_order_id)
+        )
+    if exclude_invoice_id is not None:
+        stmt = stmt.where(Invoice.id != int(exclude_invoice_id))
+    return stmt
+
+
+def prior_passed_invoiced_ex_vat_for_work_order_item(
+    db: Session,
+    *,
+    work_order_item_id: int,
+    exclude_invoice_id: int | None,
+) -> Decimal:
+    row = db.scalar(
+        _passed_invoice_line_amount_stmt(
+            work_order_item_id=int(work_order_item_id),
+            work_order_id=None,
+            exclude_invoice_id=exclude_invoice_id,
+        )
+    )
+    return _q2(_dec(row or 0))
+
+
+def prior_passed_extra_ex_vat_for_work_order(
+    db: Session,
+    *,
+    work_order_id: int,
+    exclude_invoice_id: int | None,
+) -> Decimal:
+    inv_ids = (
+        select(InvoiceLine.invoice_id)
+        .join(WorkOrderItem, WorkOrderItem.id == InvoiceLine.work_order_item_id)
+        .where(WorkOrderItem.work_order_id == int(work_order_id))
+        .distinct()
+    )
+    stmt = select(func.coalesce(func.sum(Invoice.extra_amount_ex_vat), 0)).where(
+        Invoice.id.in_(inv_ids),
+        Invoice.validation_status.in_(VALIDATION_PASSED_STATUSES),
+        Invoice.status.notin_(_INVOICE_EXCLUDED_FROM_PASSED_SUM),
+    )
+    if exclude_invoice_id is not None:
+        stmt = stmt.where(Invoice.id != int(exclude_invoice_id))
+    row = db.scalar(stmt)
+    return _q2(_dec(row or 0))
+
+
+def prior_passed_invoiced_ex_vat_for_work_order(
+    db: Session,
+    *,
+    work_order_id: int,
+    exclude_invoice_id: int | None,
+) -> Decimal:
+    row = db.scalar(
+        _passed_invoice_line_amount_stmt(
+            work_order_item_id=None,
+            work_order_id=int(work_order_id),
+            exclude_invoice_id=exclude_invoice_id,
+        )
+    )
+    lines = _q2(_dec(row or 0))
+    extra = prior_passed_extra_ex_vat_for_work_order(
+        db, work_order_id=int(work_order_id), exclude_invoice_id=exclude_invoice_id
+    )
+    return _q2(lines + extra)
+
+
+def prior_invoiced_ex_vat_for_work_order_item(
+    db: Session,
+    *,
+    work_order_item_id: int,
+    exclude_invoice_id: int | None,
+    statuses: tuple[str, ...] | None = None,
+) -> Decimal:
+    st = statuses or STATUSES_COUNTING_TOWARD_WO_VALUE_CAP
+    stmt = (
+        select(func.coalesce(func.sum(InvoiceLine.amount), 0))
+        .select_from(InvoiceLine)
+        .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
+        .where(
+            InvoiceLine.work_order_item_id == int(work_order_item_id),
+            Invoice.status.in_(st),
         )
     )
     if exclude_invoice_id is not None:
@@ -96,13 +195,67 @@ def prior_invoiced_ex_vat_for_work_order(
     return _q2(_dec(row or 0))
 
 
+def prior_extra_ex_vat_for_work_order(
+    db: Session,
+    *,
+    work_order_id: int,
+    exclude_invoice_id: int | None,
+    statuses: tuple[str, ...] | None = None,
+) -> Decimal:
+    st = statuses or STATUSES_COUNTING_TOWARD_WO_VALUE_CAP
+    inv_ids = (
+        select(InvoiceLine.invoice_id)
+        .join(WorkOrderItem, WorkOrderItem.id == InvoiceLine.work_order_item_id)
+        .where(WorkOrderItem.work_order_id == int(work_order_id))
+        .distinct()
+    )
+    stmt = select(func.coalesce(func.sum(Invoice.extra_amount_ex_vat), 0)).where(
+        Invoice.id.in_(inv_ids),
+        Invoice.status.in_(st),
+    )
+    if exclude_invoice_id is not None:
+        stmt = stmt.where(Invoice.id != int(exclude_invoice_id))
+    row = db.scalar(stmt)
+    return _q2(_dec(row or 0))
+
+
+def prior_invoiced_ex_vat_for_work_order(
+    db: Session,
+    *,
+    work_order_id: int,
+    exclude_invoice_id: int | None,
+    statuses: tuple[str, ...] | None = None,
+) -> Decimal:
+    """Sum of ex-VAT line amounts + invoice extra adjustments for the work order."""
+    st = statuses or STATUSES_COUNTING_TOWARD_WO_VALUE_CAP
+    stmt = (
+        select(func.coalesce(func.sum(InvoiceLine.amount), 0))
+        .select_from(InvoiceLine)
+        .join(Invoice, Invoice.id == InvoiceLine.invoice_id)
+        .join(WorkOrderItem, WorkOrderItem.id == InvoiceLine.work_order_item_id)
+        .where(
+            WorkOrderItem.work_order_id == int(work_order_id),
+            Invoice.status.in_(st),
+        )
+    )
+    if exclude_invoice_id is not None:
+        stmt = stmt.where(Invoice.id != int(exclude_invoice_id))
+    line_row = db.scalar(stmt)
+    lines = _q2(_dec(line_row or 0))
+    extra = prior_extra_ex_vat_for_work_order(
+        db, work_order_id=int(work_order_id), exclude_invoice_id=exclude_invoice_id, statuses=st
+    )
+    return _q2(lines + extra)
+
+
 def raise_if_new_invoice_breaches_work_order_caps(
     db: Session,
     *,
     exclude_invoice_id: int | None,
     item_amounts: list[tuple[int, Decimal]],
+    wo_extra_ex_vat: dict[int, Decimal] | None = None,
 ) -> None:
-    """Reject create when ex-VAT totals would exceed the approved work order value (strict, no tolerance)."""
+    """Reject create when ex-VAT totals would exceed remaining approved value (strict, no tolerance)."""
     by_wo: dict[int, Decimal] = defaultdict(Decimal)
     for item_id, amt in item_amounts:
         item = db.get(WorkOrderItem, int(item_id))
@@ -111,6 +264,17 @@ def raise_if_new_invoice_breaches_work_order_caps(
         wo = db.get(WorkOrder, int(item.work_order_id))
         if wo is None or str(wo.status) != "active":
             continue
+        planned_line = _q2(_dec(item.taxable_value))
+        if planned_line > 0:
+            prev_line = prior_invoiced_ex_vat_for_work_order_item(
+                db, work_order_item_id=int(item.id), exclude_invoice_id=exclude_invoice_id
+            )
+            pending_line = _q2(planned_line - prev_line)
+            if _q2(amt) > pending_line:
+                raise ConflictError(
+                    f"Invoice amount for work order line exceeds the remaining approved value "
+                    f"({pending_line} ex. tax pending; line total {planned_line} ex. tax)."
+                )
         by_wo[int(wo.id)] += _q2(amt)
     for wid, add_amt in by_wo.items():
         wo_row = db.get(WorkOrder, int(wid))
@@ -120,11 +284,43 @@ def raise_if_new_invoice_breaches_work_order_caps(
         prev = prior_invoiced_ex_vat_for_work_order(
             db, work_order_id=int(wid), exclude_invoice_id=exclude_invoice_id
         )
-        if _q2(prev + add_amt) > _q2(cap):
+        extra_add = _q2((wo_extra_ex_vat or {}).get(int(wid), Decimal("0")))
+        pending_wo = _q2(cap - prev)
+        if _q2(add_amt + extra_add) > pending_wo:
             raise ConflictError(
-                f"Cumulative invoice amounts for work order {wo_row.work_order_number} would exceed "
-                f"the approved work order value ({_q2(cap)} ex. tax; already invoiced {_q2(prev)} ex. tax)."
+                f"Invoice amount for work order {wo_row.work_order_number} exceeds the remaining approved "
+                f"value ({pending_wo} ex. tax pending; work order total {cap} ex. tax)."
             )
+
+
+def invoice_within_pending_limits(db: Session, invoice: Invoice) -> bool:
+    """True when this invoice's ex-VAT amounts fit within remaining WO and line budgets."""
+    wo_add: dict[int, Decimal] = defaultdict(Decimal)
+    for line in invoice.lines or []:
+        item = db.get(WorkOrderItem, int(line.work_order_item_id))
+        if item is None:
+            return False
+        amt = _q2(_dec(line.amount))
+        planned_line = _q2(_dec(item.taxable_value))
+        if planned_line > 0:
+            prev_line = prior_invoiced_ex_vat_for_work_order_item(
+                db, work_order_item_id=int(item.id), exclude_invoice_id=int(invoice.id)
+            )
+            if _q2(prev_line + amt) > planned_line:
+                return False
+        wo_add[int(item.work_order_id)] += amt
+    if len(wo_add) != 1:
+        return False
+    wid = next(iter(wo_add.keys()))
+    wo_row = db.get(WorkOrder, int(wid))
+    if wo_row is None:
+        return False
+    cap = work_order_ex_vat_cap(db, wo_row)
+    prev = prior_invoiced_ex_vat_for_work_order(
+        db, work_order_id=int(wid), exclude_invoice_id=int(invoice.id)
+    )
+    extra = _q2(_dec(getattr(invoice, "extra_amount_ex_vat", None) or 0))
+    return _q2(prev + wo_add[wid] + extra) <= cap
 
 
 @dataclass(frozen=True)
@@ -251,19 +447,6 @@ class InvoiceValidationEngine:
                     allowed_qty = _dec(latest_p.completed_quantity)
                 else:
                     allowed_qty = Decimal("0")
-                # Apply tolerance.
-                allowed_qty_tol = allowed_qty * (Decimal("1") + (tol / Decimal("100")))
-                if _dec(line.quantity) > allowed_qty_tol:
-                    add_issue(
-                        line_id=int(line.id),
-                        code="QTY_EXCEEDS_COMPLETION",
-                        severity="warning",
-                        message="Invoiced quantity is above recorded completion (informational).",
-                        allowed_qty=allowed_qty,
-                        actual_qty=_dec(line.quantity),
-                        requires_justification=False,
-                        requires_attachments=False,
-                    )
             else:
                 latest_p = self._db.scalar(
                     select(WorkOrderItemProgress)
@@ -351,21 +534,6 @@ class InvoiceValidationEngine:
                         },
                     )
 
-            if allowed_qty is not None:
-                allowed_cum = allowed_qty * (Decimal("1") + (tol / Decimal("100")))
-                if prev_qty_dec + _dec(line.quantity) > allowed_cum:
-                    add_issue(
-                        line_id=int(line.id),
-                        code="CUMULATIVE_QTY_EXCEEDS_ALLOWED",
-                        severity="warning",
-                        message="Cumulative invoiced quantity is above completion (informational).",
-                        allowed_qty=allowed_qty,
-                        actual_qty=prev_qty_dec + _dec(line.quantity),
-                        requires_justification=False,
-                        requires_attachments=False,
-                        metadata={"previous_invoiced_qty": str(prev_qty_dec)},
-                    )
-
             # Amount guardrail: stored line amount vs commercial rule (weight: qty × kg × rate/kg).
             try:
                 r = _dec(line.rate) if line.rate is not None else _dec(item.resolved_rate)
@@ -389,6 +557,11 @@ class InvoiceValidationEngine:
             tax_pct_ln = _dec(line.tax_pct or 0)
             gross_line = _q2(_dec(line.amount) * (Decimal("1") + tax_pct_ln / Decimal("100")))
             total += gross_line
+
+        extra_ex = _q2(_dec(getattr(invoice, "extra_amount_ex_vat", None) or 0))
+        total += extra_ex
+        for wid in list(wo_add_by_id.keys()):
+            wo_add_by_id[wid] += extra_ex
 
         for wid, add_amt in wo_add_by_id.items():
             wo_row = self._db.get(WorkOrder, int(wid))

@@ -8,50 +8,20 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson } from "@/lib/api"
+import {
+  invoiceDisplayStatus,
+  invoiceDisplayStatusBadgeVariant,
+  invoiceDisplayStatusLabel,
+} from "@/lib/invoice-validation-display"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
-/** Tabs: all invoices, validation passed only, or any non-pass outcome (warn / fail / blocked). */
-type InvoiceValidationTab = "all" | "pass" | "blocked"
+type InvoiceStatusTab = "all" | "pass" | "blocked"
 
-const INVOICE_VALIDATION_TABS: { id: InvoiceValidationTab; label: string }[] = [
+const INVOICE_STATUS_TABS: { id: InvoiceStatusTab; label: string }[] = [
   { id: "all", label: "All" },
   { id: "pass", label: "Pass" },
   { id: "blocked", label: "Blocked" },
 ]
-
-function normalizedValidation(row: { validation_status?: string | null }): string | null {
-  const v = row?.validation_status
-  if (v == null || String(v).trim() === "") return null
-  return String(v).trim().toLowerCase()
-}
-
-function invoiceStatusLabel(status: string): string {
-  switch (String(status || "").toLowerCase()) {
-    case "pending_exception_approval":
-      return "Exception approval"
-    default:
-      return status
-  }
-}
-
-function invoiceStatusBadgeVariant(
-  status: string,
-): React.ComponentProps<typeof Badge>["variant"] {
-  switch (String(status || "").toLowerCase()) {
-    case "approved":
-      return "success"
-    case "blocked":
-    case "rejected":
-      return "destructive"
-    case "submitted":
-    case "pending_exception_approval":
-      return "warning"
-    case "draft":
-      return "secondary"
-    default:
-      return "outline"
-  }
-}
 
 export function InvoicesPage() {
   const canCreate = hasPermission("invoices.create")
@@ -59,7 +29,7 @@ export function InvoicesPage() {
 
   const [rows, setRows] = React.useState<any[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
-  const [validationTab, setValidationTab] = React.useState<InvoiceValidationTab>("all")
+  const [statusTab, setStatusTab] = React.useState<InvoiceStatusTab>("all")
   const [contractors, setContractors] = React.useState<{ id: number; name: string }[]>([])
   const [plants, setPlants] = React.useState<{ id: number; name: string }[]>([])
 
@@ -72,27 +42,6 @@ export function InvoicesPage() {
     (id: number) => plants.find((p) => p.id === id)?.name ?? `#${id}`,
     [plants],
   )
-
-  const validationBadgeVariant = React.useCallback((status: string): React.ComponentProps<typeof Badge>["variant"] => {
-    switch (String(status || "").toLowerCase()) {
-      case "pass":
-        return "success"
-      case "warn":
-        return "warning"
-      case "fail":
-        return "destructive"
-      case "blocked":
-        return "destructive"
-      default:
-        return "outline"
-    }
-  }, [])
-
-  const validationLabel = React.useCallback((status: string | null | undefined) => {
-    const k = normalizedValidation({ validation_status: status ?? null })
-    if (k === null) return "—"
-    return k.charAt(0).toUpperCase() + k.slice(1)
-  }, [])
 
   const load = React.useCallback(async () => {
     if (!canView) return
@@ -129,34 +78,30 @@ export function InvoicesPage() {
     })()
   }, [canView, canCreate])
 
-  const validationCounts = React.useMemo(() => {
+  const statusCounts = React.useMemo(() => {
     let pass = 0
     let blocked = 0
     if (!rows) return { pass, blocked }
     for (const r of rows) {
-      const k = normalizedValidation(r)
-      if (k === "pass") pass += 1
-      else if (k === "warn" || k === "fail" || k === "blocked") blocked += 1
+      const d = invoiceDisplayStatus(r)
+      if (d === "pass") pass += 1
+      else if (d === "blocked") blocked += 1
     }
     return { pass, blocked }
   }, [rows])
 
   const filtered = React.useMemo(() => {
     if (!rows) return []
-    if (validationTab === "all") return rows
-    if (validationTab === "pass") return rows.filter((r) => normalizedValidation(r) === "pass")
-    return rows.filter((r) => {
-      const k = normalizedValidation(r)
-      return k === "warn" || k === "fail" || k === "blocked"
-    })
-  }, [rows, validationTab])
+    if (statusTab === "all") return rows
+    if (statusTab === "pass") return rows.filter((r) => invoiceDisplayStatus(r) === "pass")
+    return rows.filter((r) => invoiceDisplayStatus(r) === "blocked")
+  }, [rows, statusTab])
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-medium">Invoices</h2>
-          
         </div>
         {canCreate ? (
           <Button asChild type="button">
@@ -176,32 +121,27 @@ export function InvoicesPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          {/* <CardTitle className="text-sm font-medium">Invoices</CardTitle> */}
-          {/* <CardDescription> */}
-            {/* Tabs filter by validation engine outcome. Blocked / fail usually need fixes or exception approval before an */}
-            {/* invoice can progress. */}
-          {/* </CardDescription> */}
           <div className="mt-3 flex flex-wrap gap-2">
-            {INVOICE_VALIDATION_TABS.map((t) => {
+            {INVOICE_STATUS_TABS.map((t) => {
               const n =
                 t.id === "all"
                   ? (rows?.length ?? 0)
                   : t.id === "pass"
-                    ? validationCounts.pass
-                    : validationCounts.blocked
+                    ? statusCounts.pass
+                    : statusCounts.blocked
               return (
                 <Button
                   key={t.id}
                   type="button"
                   size="sm"
-                  variant={validationTab === t.id ? "default" : "outline"}
+                  variant={statusTab === t.id ? "default" : "outline"}
                   className="h-8"
-                  onClick={() => setValidationTab(t.id)}
+                  onClick={() => setStatusTab(t.id)}
                 >
                   {t.label}
                   <span
                     className={
-                      validationTab === t.id
+                      statusTab === t.id
                         ? "ml-1.5 tabular-nums text-primary-foreground/85"
                         : "ml-1.5 tabular-nums text-muted-foreground"
                     }
@@ -221,58 +161,51 @@ export function InvoicesPage() {
                 <TableHead>Contractor</TableHead>
                 <TableHead>Plant</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead>Workflow</TableHead>
-                <TableHead>Validation</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Open</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {!rows ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                     No invoices yet.
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                     No invoices in this view.
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">{r.invoice_number}</TableCell>
-                    <TableCell className="text-muted-foreground">{contractorLabel(Number(r.contractor_id))}</TableCell>
-                    <TableCell className="text-muted-foreground">{plantLabel(Number(r.org_unit_id))}</TableCell>
-                    <TableCell className="text-xs tabular-nums">{r.invoice_date}</TableCell>
-                    <TableCell>
-                      <Badge variant={invoiceStatusBadgeVariant(r.status)}>
-                        {invoiceStatusLabel(r.status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {r.validation_status ? (
-                        <Badge variant={validationBadgeVariant(r.validation_status)}>
-                          {validationLabel(r.validation_status)}
+                filtered.map((r) => {
+                  const d = invoiceDisplayStatus(r)
+                  return (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-medium">{r.invoice_number}</TableCell>
+                      <TableCell className="text-muted-foreground">{contractorLabel(Number(r.contractor_id))}</TableCell>
+                      <TableCell className="text-muted-foreground">{plantLabel(Number(r.org_unit_id))}</TableCell>
+                      <TableCell className="text-xs tabular-nums">{r.invoice_date}</TableCell>
+                      <TableCell>
+                        <Badge variant={invoiceDisplayStatusBadgeVariant(d)}>
+                          {invoiceDisplayStatusLabel(d)}
                         </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">Not validated</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button asChild size="sm" variant="ghost">
-                        <Link to={`/dashboard/invoices/${r.id}`}>Open</Link>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button asChild size="sm" variant="ghost">
+                          <Link to={`/dashboard/invoices/${r.id}`}>Open</Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
               )}
             </TableBody>
           </Table>

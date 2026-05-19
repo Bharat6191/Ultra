@@ -6,42 +6,40 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
-import { ApiError, getJson, patchJson, postJson, postForm } from "@/lib/api"
+import { ApiError, getJson, patchJson, postJson } from "@/lib/api"
+import {
+  invoiceDisplayStatus,
+  invoiceDisplayStatusBadgeVariant,
+  invoiceDisplayStatusLabel,
+  invoiceLineValidationDisplay,
+} from "@/lib/invoice-validation-display"
 import { hasPermission } from "@/lib/permissions"
 import { InvoicePdfDownloadButton } from "@/components/invoices/invoice-pdf"
 import { InvoicePreview } from "@/components/invoices/invoice-preview"
 import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
 
-function InvoiceLineCommercialBadge({ line, validated }: { line: any; validated: boolean }) {
-  if (!validated) {
+function InvoiceLineStatusBadge({ line, validated }: { line: any; validated: boolean }) {
+  const d = invoiceLineValidationDisplay(line, validated)
+  if (d === "pending") {
     return (
       <Badge variant="secondary" className="font-normal">
         Pending
       </Badge>
     )
   }
-  const s = line.validation_line_status
-  if (s === "blocked") {
+  if (d === "blocked") {
     return (
       <Badge variant="destructive" className="font-normal">
         Blocked
       </Badge>
     )
   }
-  if (s === "warn") {
-    return (
-      <Badge variant="warning" className="font-normal">
-        Warning
-      </Badge>
-    )
-  }
   return (
     <Badge variant="success" className="font-normal">
-      Passed
+      Pass
     </Badge>
   )
 }
@@ -59,40 +57,26 @@ type InvoiceAuditEntry = {
   metadata?: any
 }
 
-function invoiceStatusVariant(status: string): React.ComponentProps<typeof Badge>["variant"] {
-  switch (String(status || "").toLowerCase()) {
-    case "draft":
-      return "secondary"
-    case "submitted":
-      return "outline"
-    case "pending_exception_approval":
-      return "warning"
-    case "blocked":
-      return "destructive"
-    case "approved":
-      return "success"
-    case "rejected":
-      return "destructive"
-    case "paid":
-      return "success"
-    default:
-      return "outline"
-  }
+const HIDDEN_VALIDATION_ISSUE_CODES = new Set(["QTY_EXCEEDS_COMPLETION", "CUMULATIVE_QTY_EXCEEDS_ALLOWED"])
+
+function issueAllowedActual(i: { allowed_qty?: unknown; allowed_value?: unknown; actual_qty?: unknown; actual_value?: unknown }) {
+  const allowed = i.allowed_qty ?? i.allowed_value
+  const actual = i.actual_qty ?? i.actual_value
+  if (allowed == null && actual == null) return null
+  return (
+    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+      allowed {String(allowed ?? "—")} · actual {String(actual ?? "—")}
+    </span>
+  )
 }
 
-function validationVariant(status: string): React.ComponentProps<typeof Badge>["variant"] {
-  switch (String(status || "").toLowerCase()) {
-    case "pass":
-      return "success"
-    case "warn":
-      return "warning"
-    case "fail":
-      return "destructive"
-    case "blocked":
-      return "destructive"
-    default:
-      return "outline"
-  }
+function mergedBlockerJustification(issues: { justification?: string | null }[]): string {
+  const texts = [
+    ...new Set(
+      issues.map((i) => String(i.justification ?? "").trim()).filter(Boolean),
+    ),
+  ]
+  return texts[0] ?? ""
 }
 
 function issueSeverityVariant(sev: string): React.ComponentProps<typeof Badge>["variant"] {
@@ -118,10 +102,8 @@ export function InvoiceDetailPage() {
   const [audit, setAudit] = React.useState<InvoiceAuditEntry[]>([])
 
   const canSubmit = hasPermission("invoices.submit")
-  const canValidate = hasPermission("invoices.validate")
   const canUpdate = hasPermission("invoices.update")
-
-  const [file, setFile] = React.useState<File | null>(null)
+  const canEditDraft = canUpdate && (row?.status === "draft" || row?.status === "rejected")
 
   const load = React.useCallback(async () => {
     if (!Number.isFinite(invId) || invId <= 0) return
@@ -147,25 +129,20 @@ export function InvoiceDetailPage() {
     if (!row) return
     setActing(true)
     try {
-      await postJson(`/invoices/${row.id}/submit`, {})
-      toast.success("Submitted")
+      const inv = await postJson<{ status: string; validation_status?: string | null }>(
+        `/invoices/${row.id}/submit`,
+        {},
+      )
+      if (inv.validation_status === "pass" || inv.validation_status === "warn") {
+        toast.success(`Submitted — validation ${inv.validation_status}`)
+      } else if (inv.status === "blocked" || inv.validation_status === "blocked") {
+        toast.warning("Submitted but blocked — request approval or adjust amounts")
+      } else {
+        toast.success("Submitted")
+      }
       await load()
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Submit failed")
-    } finally {
-      setActing(false)
-    }
-  }
-
-  async function validate() {
-    if (!row) return
-    setActing(true)
-    try {
-      await postJson(`/invoices/${row.id}/validate`, {})
-      toast.success("Validated")
-      await load()
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Validate failed")
     } finally {
       setActing(false)
     }
@@ -185,32 +162,20 @@ export function InvoiceDetailPage() {
     }
   }
 
-  async function saveJustification(issueId: number, justification: string) {
-    if (!justification.trim()) return
+  async function saveJustificationForBlockers(justification: string, issueIds: number[]) {
+    const text = justification.trim()
+    if (!text || issueIds.length === 0) return
     setActing(true)
     try {
-      await patchJson(`/invoices/issues/${issueId}/justification`, { justification: justification.trim() })
+      await Promise.all(
+        issueIds.map((issueId) =>
+          patchJson(`/invoices/issues/${issueId}/justification`, { justification: text }),
+        ),
+      )
       toast.success("Justification saved")
       await load()
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Save failed")
-    } finally {
-      setActing(false)
-    }
-  }
-
-  async function uploadAttachment() {
-    if (!row || !file) return
-    setActing(true)
-    try {
-      const fd = new FormData()
-      fd.append("file", file)
-      await postForm(`/invoices/${row.id}/attachments`, fd)
-      toast.success("Attachment uploaded")
-      setFile(null)
-      await load()
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Upload failed")
     } finally {
       setActing(false)
     }
@@ -271,6 +236,15 @@ export function InvoiceDetailPage() {
 
   const invoiceValidationDone = Boolean(row.last_validated_at ?? row.validation_status)
 
+  const visibleIssues = (row.issues ?? []).filter(
+    (i: { code?: string }) => !HIDDEN_VALIDATION_ISSUE_CODES.has(String(i.code ?? "")),
+  )
+  const issuesNeedingJustification = visibleIssues.filter((i: { requires_justification?: boolean }) =>
+    Boolean(i.requires_justification),
+  )
+  const otherVisibleIssues = visibleIssues.filter((i: { requires_justification?: boolean }) => !i.requires_justification)
+  const blockerJustificationKey = issuesNeedingJustification.map((i: { id: number }) => i.id).join(",")
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -280,26 +254,28 @@ export function InvoiceDetailPage() {
             Contractor #{row.contractor_id} · Plant #{row.org_unit_id}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={invoiceStatusVariant(row.status)}>{row.status}</Badge>
-          {row.validation_status ? <Badge variant={validationVariant(row.validation_status)}>{row.validation_status}</Badge> : null}
-          <Button asChild size="sm" variant="outline">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Badge variant={invoiceDisplayStatusBadgeVariant(invoiceDisplayStatus(row))}>
+            {invoiceDisplayStatusLabel(invoiceDisplayStatus(row))}
+          </Badge>
+          <Button asChild variant="outline" size="default" className="min-h-10 bg-background shadow-sm">
             <Link to="/dashboard/invoices">Back</Link>
           </Button>
-          <Button asChild size="sm" variant="outline">
-            <InvoicePdfDownloadButton
-              data={pdfData}
-              filename={`${String(row.invoice_number ?? "invoice").replace(/\s+/g, "_")}.pdf`}
-            />
-          </Button>
-          {canSubmit && row.status === "draft" ? (
-            <Button size="sm" onClick={() => void submit()} disabled={acting}>
-              Submit
+          <InvoicePdfDownloadButton
+            data={pdfData}
+            filename={`${String(row.invoice_number ?? "invoice").replace(/\s+/g, "_")}.pdf`}
+            variant="outline"
+            size="default"
+            className="min-h-10 bg-background shadow-sm"
+          />
+          {canEditDraft ? (
+            <Button asChild variant="outline" size="default" className="min-h-10 bg-background shadow-sm">
+              <Link to={`/dashboard/invoices/${row.id}/edit`}>Edit draft</Link>
             </Button>
           ) : null}
-          {canValidate ? (
-            <Button size="sm" variant="outline" onClick={() => void validate()} disabled={acting}>
-              Validate
+          {canSubmit && (row.status === "draft" || row.status === "rejected") ? (
+            <Button size="default" onClick={() => void submit()} disabled={acting}>
+              Submit
             </Button>
           ) : null}
           {canSubmit &&
@@ -307,8 +283,8 @@ export function InvoiceDetailPage() {
           ["blocked", "fail"].includes(row.validation_status) &&
           row.status === "blocked" &&
           !row.approval_request_id ? (
-            <Button size="sm" variant="destructive" onClick={() => void requestVariance()} disabled={acting}>
-              Request variance approval
+            <Button size="default" variant="destructive" onClick={() => void requestVariance()} disabled={acting}>
+              Request approval
             </Button>
           ) : null}
         </div>
@@ -317,16 +293,12 @@ export function InvoiceDetailPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Lines</CardTitle>
-          <CardDescription>
-            Each line is checked against its approved work order line total and the work order total (ex. tax). Tint
-            reflects validation posture; badges show per-line result after validation runs.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[100px]">WO value check</TableHead>
+                <TableHead className="w-[88px]">Status</TableHead>
                 <TableHead className="w-[110px]">Work order</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right w-[72px]">Qty</TableHead>
@@ -343,15 +315,13 @@ export function InvoiceDetailPage() {
                 <TableRow
                   key={l.id}
                   className={
-                    l.validation_line_status === "blocked"
+                    invoiceLineValidationDisplay(l, invoiceValidationDone) === "blocked"
                       ? "bg-destructive/10"
-                      : l.validation_line_status === "warn"
-                        ? "bg-amber-500/10"
-                        : undefined
+                      : undefined
                   }
                 >
                   <TableCell className="align-middle">
-                    <InvoiceLineCommercialBadge line={l} validated={invoiceValidationDone} />
+                    <InvoiceLineStatusBadge line={l} validated={invoiceValidationDone} />
                   </TableCell>
                   <TableCell className="text-xs font-mono whitespace-nowrap">{l.work_order_number ?? "—"}</TableCell>
                   <TableCell className="text-xs max-w-[200px]">
@@ -403,88 +373,76 @@ export function InvoiceDetailPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Validation issues</CardTitle>
-          <CardDescription>Blockers require justification + attachments and may trigger exception approvals.</CardDescription>
+          <CardDescription>
+            Provide one justification for all blockers below before requesting exception approval.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {(row.issues ?? []).length === 0 ? (
+          {visibleIssues.length === 0 ? (
             <div className="text-sm text-muted-foreground">No issues.</div>
-          ) : (
-            (row.issues ?? []).map((i: any) => (
-              <div
-                key={i.id}
-                className={
-                  i.severity === "blocker" || i.severity === "error"
-                    ? "rounded-md border border-destructive/30 bg-destructive/5 p-3"
-                    : i.severity === "warning"
-                      ? "rounded-md border border-amber-300/40 bg-amber-500/5 p-3"
-                      : "rounded-md border bg-muted/20 p-3"
-                }
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">
-                      {i.code} <span className="text-muted-foreground">·</span>{" "}
-                      <Badge variant={issueSeverityVariant(i.severity)}>{i.severity}</Badge>
+          ) : null}
+          {issuesNeedingJustification.length > 0 ? (
+            <div className="space-y-4 rounded-md border border-destructive/30 bg-destructive/5 p-4">
+              <ul className="space-y-3">
+                {issuesNeedingJustification.map((i: any) => (
+                  <li key={i.id} className="border-b border-destructive/15 pb-3 last:border-0 last:pb-0">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium">{i.code}</span>
+                          <Badge variant={issueSeverityVariant(i.severity)}>{i.severity}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{i.message}</p>
+                      </div>
+                      {issueAllowedActual(i)}
                     </div>
-                    <div className="text-sm text-muted-foreground">{i.message}</div>
-                  </div>
-                  <div className="text-xs text-muted-foreground tabular-nums">
-                    allowed {String(i.allowed_qty ?? i.allowed_value ?? "—")} · actual{" "}
-                    {String(i.actual_qty ?? i.actual_value ?? "—")}
-                  </div>
+                  </li>
+                ))}
+              </ul>
+              {canUpdate ? (
+                <div className="grid gap-2 border-t border-destructive/15 pt-3">
+                  <Label className="text-xs" showRequired>
+                    Justification
+                  </Label>
+                  <Textarea
+                    key={blockerJustificationKey}
+                    defaultValue={mergedBlockerJustification(issuesNeedingJustification)}
+                    rows={3}
+                    onBlur={(e) =>
+                      void saveJustificationForBlockers(
+                        e.target.value,
+                        issuesNeedingJustification.map((i: { id: number }) => i.id),
+                      )
+                    }
+                    placeholder="Explain why this invoice should be approved despite the exceptions above"
+                    disabled={acting}
+                  />
+                  <p className="text-xs text-muted-foreground">Click outside the field to save for all blockers.</p>
                 </div>
-                {canUpdate && i.requires_justification ? (
-                  <div className="mt-2 grid gap-2">
-                    <Label className="text-xs" showRequired>
-                      Justification
-                    </Label>
-                    <Textarea
-                      defaultValue={i.justification ?? ""}
-                      rows={2}
-                      onBlur={(e) => void saveJustification(i.id, e.target.value)}
-                      placeholder="Required"
-                      disabled={acting}
-                    />
-                    <div className="text-xs text-muted-foreground">Tip: click out of the field to save.</div>
+              ) : null}
+            </div>
+          ) : null}
+          {otherVisibleIssues.map((i: any) => (
+            <div
+              key={i.id}
+              className={
+                i.severity === "warning"
+                  ? "rounded-md border border-amber-300/40 bg-amber-500/5 p-3"
+                  : "rounded-md border bg-muted/20 p-3"
+              }
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium">{i.code}</span>
+                    <Badge variant={issueSeverityVariant(i.severity)}>{i.severity}</Badge>
                   </div>
-                ) : null}
+                  <p className="text-sm text-muted-foreground">{i.message}</p>
+                </div>
+                {issueAllowedActual(i)}
               </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      {(row.attachments ?? []).length > 0 ? (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Uploaded attachments</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs space-y-1">
-            {(row.attachments ?? []).map((a: any) => (
-              <div key={a.id} className="flex justify-between gap-2 border rounded-md px-2 py-1">
-                <span className="truncate">{a.file_name ?? a.file_path}</span>
-                <span className="tabular-nums text-muted-foreground">#{a.id}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Attachments</CardTitle>
-          <CardDescription>Upload proofs required for exception approvals.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          <div className="grid gap-1.5">
-            <Label>File</Label>
-            <Input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} disabled={!canUpdate || acting} />
-          </div>
-          <div className="flex items-end justify-end">
-            <Button variant="outline" onClick={() => void uploadAttachment()} disabled={!canUpdate || !file || acting}>
-              Upload
-            </Button>
-          </div>
+            </div>
+          ))}
         </CardContent>
       </Card>
 

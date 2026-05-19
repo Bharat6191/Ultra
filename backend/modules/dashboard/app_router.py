@@ -5,52 +5,208 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from core.auth import CurrentUser, get_current_user
 from core.permissions import get_flat_permission_codes_for_user
 from db.session import get_db
-from modules.approvals.model import ApprovalTask
-from modules.rbac_association import user_role
-from modules.roles.model import Role
-from modules.users.model import User
 from modules.contractor.models import (
     Contractor,
     ContractorDocument,
     ContractorPlant,
 )
-from modules.contractor.compliance import evaluate_contractor_compliance
 from modules.contractor_rates.models import ContractorRate
 from modules.part_master.models import PartMaster
 from modules.org_units.model import OrgUnit
 from modules.work_orders.models import WorkOrder
-from modules.invoices.models import Invoice, ContractorInvoiceCompliance
+from modules.invoices.models import Invoice
 from modules.dashboard.intelligence_service import DashboardIntelligenceService, IntelligenceFilters
 
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
-def _variants(code: str) -> set[str]:
-    v = {code}
-    if "." in code:
-        v.add(code.replace(".", ":", 1))
-    if ":" in code:
-        v.add(code.replace(":", ".", 1))
-    return v
+def _contractors_module(db: Session) -> dict[str, Any]:
+    today = date.today()
+    seven_days = today + timedelta(days=7)
+
+    total_contractors = int(db.scalar(select(func.count()).select_from(Contractor)) or 0)
+    active_contractors = int(
+        db.scalar(select(func.count()).select_from(Contractor).where(Contractor.status == "active")) or 0
+    )
+    non_compliant = int(
+        db.scalar(select(func.count()).select_from(Contractor).where(Contractor.status == "non_compliant")) or 0
+    )
+    suspended = int(
+        db.scalar(select(func.count()).select_from(Contractor).where(Contractor.status == "suspended")) or 0
+    )
+    blacklisted = int(
+        db.scalar(select(func.count()).select_from(Contractor).where(Contractor.status == "blacklisted")) or 0
+    )
+    pending = int(db.scalar(select(func.count()).select_from(Contractor).where(Contractor.status == "pending")) or 0)
+    expiring_documents_7_days = int(
+        db.scalar(
+            select(func.count())
+            .select_from(ContractorDocument)
+            .where(
+                ContractorDocument.expiry_date.is_not(None),
+                ContractorDocument.expiry_date >= today,
+                ContractorDocument.expiry_date <= seven_days,
+            )
+        )
+        or 0
+    )
+    expired_documents = int(
+        db.scalar(
+            select(func.count())
+            .select_from(ContractorDocument)
+            .where(
+                ContractorDocument.expiry_date.is_not(None),
+                ContractorDocument.expiry_date < today,
+            )
+        )
+        or 0
+    )
+
+    by_status_rows = db.execute(
+        select(Contractor.status, func.count()).group_by(Contractor.status).order_by(Contractor.status.asc())
+    ).all()
+    by_status = [{"status": str(s or "unknown"), "count": int(c)} for s, c in by_status_rows]
+
+    plants_rows = db.execute(
+        select(OrgUnit.id, OrgUnit.name, func.count(ContractorPlant.id))
+        .join(ContractorPlant, ContractorPlant.org_unit_id == OrgUnit.id)
+        .group_by(OrgUnit.id, OrgUnit.name)
+        .order_by(func.count(ContractorPlant.id).desc())
+        .limit(8)
+    ).all()
+    contractors_by_plant = [
+        {"org_unit_id": int(pid), "name": str(pname), "count": int(cnt)} for pid, pname, cnt in plants_rows
+    ]
+
+    return {
+        "total": total_contractors,
+        "active": active_contractors,
+        "non_compliant": non_compliant,
+        "suspended": suspended,
+        "blacklisted": blacklisted,
+        "pending": pending,
+        "expiring_documents_7_days": expiring_documents_7_days,
+        "expired_documents": expired_documents,
+        "by_status": by_status,
+        "contractors_by_plant": contractors_by_plant,
+        "total_contractors": total_contractors,
+        "documents_with_expiry": expiring_documents_7_days + expired_documents,
+    }
 
 
-def _has(grants: set[str], code: str) -> bool:
-    return not grants.isdisjoint(_variants(code))
+def _contractor_rates_module(db: Session) -> dict[str, Any]:
+    rate_status_rows = db.execute(select(ContractorRate.status, func.count()).group_by(ContractorRate.status)).all()
+    by_rate_status: dict[str, int] = {str(s or "unknown"): int(c) for s, c in rate_status_rows}
+    total_negotiations = sum(by_rate_status.values())
+    pending_approvals = by_rate_status.get("pending_approval", 0)
+    approved_count = by_rate_status.get("approved", 0)
+    rejected_count = by_rate_status.get("rejected", 0)
+
+    total_savings = db.scalar(
+        select(func.coalesce(func.sum(ContractorRate.savings_amount), 0)).where(
+            ContractorRate.status == "approved",
+            ContractorRate.savings_amount.is_not(None),
+        )
+    ) or 0
+    avg_savings_pct = db.scalar(
+        select(func.coalesce(func.avg(ContractorRate.savings_percentage), 0)).where(
+            ContractorRate.status == "approved",
+            ContractorRate.savings_percentage.is_not(None),
+        )
+    ) or 0
+
+    approved_above_base = 0
+    approved_below_base = 0
+    approved_at_base = 0
+    total_premium_above_base = 0.0
+    total_below_base_savings = 0.0
+    try:
+        rows = db.execute(
+            select(ContractorRate.negotiated_rate, PartMaster.base_rate)
+            .join(PartMaster, PartMaster.id == ContractorRate.part_master_id)
+            .where(ContractorRate.status == "approved")
+        ).all()
+    except ProgrammingError:
+        rows = []
+    for negotiated, base in rows:
+        if negotiated is None or base is None:
+            continue
+        diff = float(negotiated) - float(base)
+        if diff > 0:
+            approved_above_base += 1
+            total_premium_above_base += diff
+        elif diff < 0:
+            approved_below_base += 1
+            total_below_base_savings += -diff
+        else:
+            approved_at_base += 1
+
+    return {
+        "total_negotiations": total_negotiations,
+        "pending_approvals": pending_approvals,
+        "approved": approved_count,
+        "rejected": rejected_count,
+        "total_savings": float(total_savings or 0),
+        "avg_savings_percentage": float(avg_savings_pct or 0),
+        "total_premium_above_base": round(total_premium_above_base, 2),
+        "total_below_base_savings": round(total_below_base_savings, 2),
+        "approved_above_base": approved_above_base,
+        "approved_below_base": approved_below_base,
+        "approved_at_base": approved_at_base,
+        "by_status": [{"status": k, "count": v} for k, v in sorted(by_rate_status.items())],
+    }
 
 
-def _has_any(grants: set[str], *codes: str) -> bool:
-    for c in codes:
-        if _has(grants, c):
-            return True
-    return False
+def _work_orders_module(db: Session) -> dict[str, Any]:
+    wo_by_status_rows = db.execute(select(WorkOrder.status, func.count()).group_by(WorkOrder.status)).all()
+    wo_by_status: dict[str, int] = {str(s or "unknown"): int(c) for s, c in wo_by_status_rows}
+    return {
+        "total": int(sum(wo_by_status.values())),
+        "active": int(wo_by_status.get("active", 0)),
+        "pending_approval": int(wo_by_status.get("pending_approval", 0)),
+        "draft": int(wo_by_status.get("draft", 0)),
+        "by_status": [{"status": k, "count": v} for k, v in sorted(wo_by_status.items())],
+    }
+
+
+def _invoices_module(db: Session) -> dict[str, Any]:
+    inv_by_status_rows = db.execute(select(Invoice.status, func.count()).group_by(Invoice.status)).all()
+    inv_by_status: dict[str, int] = {str(s or "unknown"): int(c) for s, c in inv_by_status_rows}
+    blocked = int(inv_by_status.get("blocked", 0))
+    pending_ex = int(inv_by_status.get("pending_exception_approval", 0))
+    draft = int(inv_by_status.get("draft", 0))
+    pass_count = int(
+        db.scalar(
+            select(func.count())
+            .select_from(Invoice)
+            .where(Invoice.validation_status.in_(("pass", "warn")))
+        )
+        or 0
+    )
+    blocked_validation = int(
+        db.scalar(
+            select(func.count())
+            .select_from(Invoice)
+            .where(Invoice.validation_status.in_(("blocked", "fail")))
+        )
+        or 0
+    )
+    return {
+        "total": int(sum(inv_by_status.values())),
+        "draft": draft,
+        "pass": pass_count,
+        "blocked": max(blocked, blocked_validation),
+        "pending_exception_approval": pending_ex,
+        "by_status": [{"status": k, "count": v} for k, v in sorted(inv_by_status.items())],
+    }
 
 
 @router.get("/summary")
@@ -59,318 +215,17 @@ def get_dashboard_summary(
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, Any]:
     """
-    Dynamic dashboard summary. Modules are enabled based on the caller's permission snapshot.
+    Workspace overview for all authenticated users (contractors, negotiations, work orders, invoices).
     """
-    user_id = int(current.subject)
-    grants = set(get_flat_permission_codes_for_user(db, user_id))
-
-    has_users = _has(grants, "users.view")
-    # UI currently gates tasks by `approval.view`, but backend tasks are under `task.*`.
-    has_tasks = _has_any(grants, "approval.view", "task.view")
-    has_contractors = _has_any(grants, "contractor.view", "contractor.create", "contractor.update")
-    has_rates = _has_any(
-        grants,
-        "contractor_rates.view",
-        "contractor_rates.create",
-        "contractor_rates.update",
-        "contractor_rates.approve",
-    )
-    has_work_orders = _has_any(
-        grants,
-        "work_orders.view",
-        "work_orders.create",
-        "work_orders.update",
-        "work_orders.approve",
-        "work_orders.manage_completion",
-        "work_orders.track_completion",
-    )
-    has_invoices = _has_any(
-        grants,
-        "invoices.view",
-        "invoices.create",
-        "invoices.update",
-        "invoices.validate",
-        "invoices.submit",
-    )
-
-    modules: dict[str, Any] = {}
-
-    if has_users:
-        total_users = int(db.scalar(select(func.count()).select_from(User)) or 0)
-        active_users = int(db.scalar(select(func.count()).select_from(User).where(User.is_active.is_(True))) or 0)
-        inactive_users = total_users - active_users
-
-        seven_days_ago = date.today() - timedelta(days=6)
-        new_last_7_days = int(
-            db.scalar(select(func.count()).select_from(User).where(func.date(User.created_at) >= seven_days_ago)) or 0
-        )
-
-        users_by_role_rows = db.execute(
-            select(Role.name, func.count(func.distinct(user_role.c.user_id)))
-            .select_from(user_role)
-            .join(Role, Role.id == user_role.c.role_id)
-            .group_by(Role.name)
-            .order_by(Role.name.asc())
-        ).all()
-        users_by_role = [{"role": str(name), "count": int(cnt)} for name, cnt in users_by_role_rows]
-
-        modules["users"] = {
-            "total_users": total_users,
-            "active_users": active_users,
-            "inactive_users": inactive_users,
-            "new_users_last_7_days": new_last_7_days,
-            "users_by_role": users_by_role,
+    del current
+    return {
+        "modules": {
+            "contractors": _contractors_module(db),
+            "contractor_rates": _contractor_rates_module(db),
+            "work_orders": _work_orders_module(db),
+            "invoices": _invoices_module(db),
         }
-
-    if has_tasks:
-        # Same visibility as TaskService.my_tasks (direct assignee, creator, or role-based inbox).
-        role_ids_set = {
-            int(rid)
-            for rid in db.execute(select(user_role.c.role_id).where(user_role.c.user_id == user_id)).scalars().all()
-        }
-        visibility = (ApprovalTask.assigned_to_user_id == user_id) | (ApprovalTask.assigned_user_id == user_id) | (
-            ApprovalTask.created_by == user_id
-        )
-        if role_ids_set:
-            visibility = visibility | (
-                ApprovalTask.assigned_role_id.is_not(None) & ApprovalTask.assigned_role_id.in_(role_ids_set)
-            )
-        base = (
-            select(ApprovalTask.status, func.count())
-            .select_from(ApprovalTask)
-            .where(visibility)
-            .group_by(ApprovalTask.status)
-        )
-        rows = db.execute(base).all()
-        by_status: dict[str, int] = {str(s): int(c) for s, c in rows if s is not None}
-        # "Pending" matches actionable inbox work: approval `pending` plus manual `open` / `in_progress`.
-        pending_actionable = (
-            by_status.get("pending", 0) + by_status.get("open", 0) + by_status.get("in_progress", 0)
-        )
-        modules["tasks"] = {
-            "pending": pending_actionable,
-            "approved": by_status.get("approved", 0),
-            "rejected": by_status.get("rejected", 0),
-            # "Completed" should reflect finished work:
-            # - approval tasks: approved
-            # - manual tasks: completed / closed
-            "completed": by_status.get("approved", 0) + by_status.get("completed", 0) + by_status.get("closed", 0),
-        }
-
-    if has_contractors:
-        today = date.today()
-        seven_days = today + timedelta(days=7)
-
-        total_contractors = int(db.scalar(select(func.count()).select_from(Contractor)) or 0)
-        active_contractors = int(
-            db.scalar(
-                select(func.count())
-                .select_from(Contractor)
-                .where(Contractor.status == "active")
-            )
-            or 0
-        )
-        non_compliant = int(
-            db.scalar(
-                select(func.count())
-                .select_from(Contractor)
-                .where(Contractor.status == "non_compliant")
-            )
-            or 0
-        )
-        suspended = int(
-            db.scalar(
-                select(func.count())
-                .select_from(Contractor)
-                .where(Contractor.status == "suspended")
-            )
-            or 0
-        )
-        blacklisted = int(
-            db.scalar(
-                select(func.count())
-                .select_from(Contractor)
-                .where(Contractor.status == "blacklisted")
-            )
-            or 0
-        )
-        pending = int(
-            db.scalar(
-                select(func.count())
-                .select_from(Contractor)
-                .where(Contractor.status == "pending")
-            )
-            or 0
-        )
-        expiring_documents_7_days = int(
-            db.scalar(
-                select(func.count())
-                .select_from(ContractorDocument)
-                .where(
-                    ContractorDocument.expiry_date.is_not(None),
-                    ContractorDocument.expiry_date >= today,
-                    ContractorDocument.expiry_date <= seven_days,
-                )
-            )
-            or 0
-        )
-        expired_documents = int(
-            db.scalar(
-                select(func.count())
-                .select_from(ContractorDocument)
-                .where(
-                    ContractorDocument.expiry_date.is_not(None),
-                    ContractorDocument.expiry_date < today,
-                )
-            )
-            or 0
-        )
-
-        # By status (for donut)
-        by_status_rows = db.execute(
-            select(Contractor.status, func.count())
-            .group_by(Contractor.status)
-            .order_by(Contractor.status.asc())
-        ).all()
-        by_status = [
-            {"status": str(s or "unknown"), "count": int(c)} for s, c in by_status_rows
-        ]
-
-        # Top plants by contractor count (bar)
-        plants_rows = db.execute(
-            select(OrgUnit.id, OrgUnit.name, func.count(ContractorPlant.id))
-            .join(ContractorPlant, ContractorPlant.org_unit_id == OrgUnit.id)
-            .group_by(OrgUnit.id, OrgUnit.name)
-            .order_by(func.count(ContractorPlant.id).desc())
-            .limit(8)
-        ).all()
-        contractors_by_plant = [
-            {"org_unit_id": int(pid), "name": str(pname), "count": int(cnt)}
-            for pid, pname, cnt in plants_rows
-        ]
-
-        modules["contractors"] = {
-            "total": total_contractors,
-            "active": active_contractors,
-            "non_compliant": non_compliant,
-            "suspended": suspended,
-            "blacklisted": blacklisted,
-            "pending": pending,
-            "expiring_documents_7_days": expiring_documents_7_days,
-            "expired_documents": expired_documents,
-            "by_status": by_status,
-            "contractors_by_plant": contractors_by_plant,
-            # Backward-compat fields read by older clients.
-            "total_contractors": total_contractors,
-            "documents_with_expiry": expiring_documents_7_days + expired_documents,
-        }
-
-    if has_rates:
-        # Aggregate KPIs for the negotiation workflow widget.
-        rate_status_rows = db.execute(
-            select(ContractorRate.status, func.count())
-            .group_by(ContractorRate.status)
-        ).all()
-        by_rate_status: dict[str, int] = {str(s or "unknown"): int(c) for s, c in rate_status_rows}
-        total_negotiations = sum(by_rate_status.values())
-        pending_approvals = by_rate_status.get("pending_approval", 0)
-        approved_count = by_rate_status.get("approved", 0)
-        rejected_count = by_rate_status.get("rejected", 0)
-
-        # Negotiation savings — anchored on the contractor's initial ask
-        # (clamped at 0). This is procurement's "we shaved X off the opening
-        # price" story and is always non-negative.
-        total_savings = db.scalar(
-            select(func.coalesce(func.sum(ContractorRate.savings_amount), 0)).where(
-                ContractorRate.status == "approved",
-                ContractorRate.savings_amount.is_not(None),
-            )
-        ) or 0
-        avg_savings_pct = db.scalar(
-            select(func.coalesce(func.avg(ContractorRate.savings_percentage), 0)).where(
-                ContractorRate.status == "approved",
-                ContractorRate.savings_percentage.is_not(None),
-            )
-        ) or 0
-
-        # Vs-base metrics — signed differences against the procurement
-        # baseline. Computed in Python because we want bucketed counts
-        # (above/below/at) along with the totals, which is easier than three
-        # separate aggregate queries.
-        approved_above_base = 0
-        approved_below_base = 0
-        approved_at_base = 0
-        total_premium_above_base = 0.0
-        total_below_base_savings = 0.0
-        try:
-            rows = db.execute(
-                select(ContractorRate.negotiated_rate, PartMaster.base_rate)
-                .join(PartMaster, PartMaster.id == ContractorRate.part_master_id)
-                .where(ContractorRate.status == "approved")
-            ).all()
-        except ProgrammingError:
-            # e.g. Alembic not upgraded — ``part_master`` missing while ``contractor_rates`` exists.
-            rows = []
-        for negotiated, base in rows:
-            if negotiated is None or base is None:
-                continue
-            diff = float(negotiated) - float(base)
-            if diff > 0:
-                approved_above_base += 1
-                total_premium_above_base += diff
-            elif diff < 0:
-                approved_below_base += 1
-                total_below_base_savings += -diff
-            else:
-                approved_at_base += 1
-
-        modules["contractor_rates"] = {
-            "total_negotiations": total_negotiations,
-            "pending_approvals": pending_approvals,
-            "approved": approved_count,
-            "rejected": rejected_count,
-            # Negotiation savings (initial ask -> final agreement, always >= 0).
-            "total_savings": float(total_savings or 0),
-            "avg_savings_percentage": float(avg_savings_pct or 0),
-            # Vs-base KPIs (signed).
-            "total_premium_above_base": round(total_premium_above_base, 2),
-            "total_below_base_savings": round(total_below_base_savings, 2),
-            "approved_above_base": approved_above_base,
-            "approved_below_base": approved_below_base,
-            "approved_at_base": approved_at_base,
-            "by_status": [
-                {"status": k, "count": v} for k, v in sorted(by_rate_status.items())
-            ],
-        }
-
-    if has_work_orders:
-        wo_by_status_rows = db.execute(
-            select(WorkOrder.status, func.count()).group_by(WorkOrder.status)
-        ).all()
-        wo_by_status: dict[str, int] = {str(s or "unknown"): int(c) for s, c in wo_by_status_rows}
-        modules["work_orders"] = {
-            "total": int(sum(wo_by_status.values())),
-            "active": int(wo_by_status.get("active", 0)),
-            "pending_approval": int(wo_by_status.get("pending_approval", 0)),
-            "draft": int(wo_by_status.get("draft", 0)),
-            "by_status": [{"status": k, "count": v} for k, v in sorted(wo_by_status.items())],
-        }
-
-    if has_invoices:
-        inv_by_status_rows = db.execute(
-            select(Invoice.status, func.count()).group_by(Invoice.status)
-        ).all()
-        inv_by_status: dict[str, int] = {str(s or "unknown"): int(c) for s, c in inv_by_status_rows}
-        blocked = int(inv_by_status.get("blocked", 0))
-        pending_ex = int(inv_by_status.get("pending_exception_approval", 0))
-        modules["invoices"] = {
-            "total": int(sum(inv_by_status.values())),
-            "blocked": blocked,
-            "pending_exception_approval": pending_ex,
-            "by_status": [{"status": k, "count": v} for k, v in sorted(inv_by_status.items())],
-        }
-
-    return {"modules": modules}
+    }
 
 
 @router.get("/intelligence")

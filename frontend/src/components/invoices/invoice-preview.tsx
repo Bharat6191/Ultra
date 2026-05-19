@@ -1,5 +1,6 @@
 import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
 import { invoicePreviewTotals } from "@/components/invoices/invoice-line-types"
+import { cn } from "@/lib/utils"
 
 export type InvoicePreviewLine = InvoiceDisplayLine
 
@@ -20,7 +21,27 @@ function money(n: number, symbol: string) {
   return `${symbol}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-export function InvoicePreview({ data }: { data: InvoicePreviewData }) {
+function hasText(v: string | undefined | null): v is string {
+  const s = (v ?? "").trim()
+  return s.length > 0 && s !== "—"
+}
+
+function MetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[7.5rem_1fr] items-baseline gap-3 border-b border-zinc-200/80 py-2 last:border-0">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</span>
+      <span className="text-right text-sm font-medium tabular-nums text-zinc-900">{value}</span>
+    </div>
+  )
+}
+
+export function InvoicePreview({
+  data,
+  className,
+}: {
+  data: InvoicePreviewData
+  className?: string
+}) {
   const symbol = data.currencySymbol ?? "₹"
   const { subtotalEx, lineTaxSum } = invoicePreviewTotals(data.lines)
   const headerTaxPct = Number.isFinite(data.taxPct ?? NaN) ? (data.taxPct as number) : 0
@@ -29,111 +50,114 @@ export function InvoicePreview({ data }: { data: InvoicePreviewData }) {
   const total = subtotalEx + tax
 
   return (
-    <div className="box-border w-full min-w-0 max-w-full rounded-xl border bg-white text-zinc-900 shadow-sm">
-      <div className="p-8">
-        <div className="flex items-center justify-between gap-6">
-          <div className="h-px flex-1 bg-zinc-900/40" />
-          <div className="text-3xl font-semibold tracking-[0.5em]">INVOICE</div>
+    <article
+      className={cn(
+        "mx-auto w-full min-w-0 rounded-xl border border-zinc-200 bg-white text-zinc-900",
+        className,
+      )}
+    >
+      <div className="border-b border-zinc-200 px-6 py-8 sm:px-10 sm:py-10">
+        <div className="flex items-center gap-4">
+          <div className="h-px flex-1 bg-zinc-300" aria-hidden />
+          <h1 className="text-2xl font-semibold tracking-[0.35em] text-zinc-900 sm:text-3xl">INVOICE</h1>
+          <div className="h-px flex-1 bg-zinc-300" aria-hidden />
         </div>
 
-        <div className="mt-10 grid gap-8 md:grid-cols-2">
-          <div className="space-y-6">
-            <div>
-              <div className="text-[11px] font-semibold tracking-wider text-zinc-900/80">ISSUED TO:</div>
-              <div className="mt-1 text-sm">{data.issuedTo.name}</div>
-              {data.issuedTo.address ? <div className="text-sm text-zinc-700">{data.issuedTo.address}</div> : null}
-            </div>
+        <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_min(220px,280px)] lg:gap-12">
+          <div className="min-w-0 space-y-8">
+            <section>
+              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Issued to</h2>
+              <p className="mt-2 text-base font-medium text-zinc-900">{data.issuedTo.name}</p>
+              {hasText(data.issuedTo.address) ? (
+                <p className="mt-1 max-w-md text-sm leading-relaxed text-zinc-600">{data.issuedTo.address}</p>
+              ) : null}
+            </section>
 
-            <div>
-              <div className="text-[11px] font-semibold tracking-wider text-zinc-900/80">PAY TO:</div>
-              <div className="mt-1 text-sm">{data.payTo.name}</div>
-              {data.payTo.bank ? <div className="text-sm text-zinc-700">{data.payTo.bank}</div> : null}
-              {data.payTo.accountName ? <div className="text-sm text-zinc-700">Account Name: {data.payTo.accountName}</div> : null}
-              {data.payTo.accountNoMasked ? <div className="text-sm text-zinc-700">Account No.: {data.payTo.accountNoMasked}</div> : null}
-            </div>
+            <section>
+              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Pay to</h2>
+              <p className="mt-2 text-base font-medium text-zinc-900">{data.payTo.name}</p>
+              {hasText(data.payTo.bank) ? <p className="mt-1 text-sm text-zinc-600">{data.payTo.bank}</p> : null}
+              {hasText(data.payTo.accountName) ? (
+                <p className="mt-1 text-sm text-zinc-600">Account name: {data.payTo.accountName}</p>
+              ) : null}
+              {hasText(data.payTo.accountNoMasked) ? (
+                <p className="mt-1 text-sm text-zinc-600">Account no.: {data.payTo.accountNoMasked}</p>
+              ) : null}
+            </section>
           </div>
 
-          <div className="space-y-2 text-sm">
-            <div className="flex items-baseline justify-end gap-3">
-              <div className="text-[11px] font-semibold tracking-wider text-zinc-900/70">INVOICE NO:</div>
-              <div className="min-w-[140px] text-right font-semibold">{data.invoiceNo}</div>
-            </div>
-            <div className="flex items-baseline justify-end gap-3">
-              <div className="text-[11px] font-semibold tracking-wider text-zinc-900/70">DATE:</div>
-              <div className="min-w-[140px] text-right">{data.invoiceDate}</div>
-            </div>
-            {data.dueDate ? (
-              <div className="flex items-baseline justify-end gap-3">
-                <div className="text-[11px] font-semibold tracking-wider text-zinc-900/70">DUE DATE:</div>
-                <div className="min-w-[140px] text-right">{data.dueDate}</div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="mt-10 overflow-x-auto rounded-lg">
-          <div className="min-w-[620px]">
-            <div className="grid grid-cols-[minmax(120px,1.6fr)_40px_72px_52px_80px_80px_88px] gap-1 border-b border-zinc-900/50 pb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-900/70">
-              <div>Description</div>
-              <div className="text-right">Qty</div>
-              <div className="text-right">WT (kg)</div>
-              <div>Unit</div>
-              <div className="text-right">Unit rate</div>
-              <div className="text-right">Taxable</div>
-              <div className="text-right">Total</div>
-            </div>
-            <div className="divide-y divide-zinc-200">
-              {data.lines.map((l, idx) => (
-                <div
-                  key={idx}
-                  className="grid grid-cols-[minmax(120px,1.6fr)_40px_72px_52px_80px_80px_88px] gap-1 py-2 text-xs"
-                >
-                  <div className="min-w-0 break-words pr-1">{l.description}</div>
-                  <div className="text-right tabular-nums">{l.qty}</div>
-                  <div className="text-right tabular-nums text-zinc-700">
-                    {l.weightKg != null && Number.isFinite(l.weightKg)
-                      ? l.weightKg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                      : "—"}
-                  </div>
-                  <div className="text-[11px] text-zinc-700">{l.unit ?? "—"}</div>
-                  <div className="text-right tabular-nums">{money(l.unitPrice, symbol)}</div>
-                  <div className="text-right tabular-nums">{money(l.taxable, symbol)}</div>
-                  <div className="text-right tabular-nums font-medium">{money(l.totalInclTax, symbol)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-8 flex justify-end">
-          <div className="w-[320px] space-y-2 text-sm">
-            <div className="flex justify-between">
-              <div className="text-[11px] font-semibold tracking-wider text-zinc-900/70">Taxable subtotal</div>
-              <div className="tabular-nums font-semibold">{money(subtotalEx, symbol)}</div>
-            </div>
-            {tax > 0 ? (
-              <div className="flex justify-between">
-                <div className="text-[11px] font-semibold tracking-wider text-zinc-900/70">Tax</div>
-                <div className="tabular-nums font-semibold">
-                  {lineTaxSum <= 0 && headerTaxPct > 0 ? `${headerTaxPct.toFixed(2)}% · ` : ""}
-                  {money(tax, symbol)}
-                </div>
-              </div>
-            ) : null}
-            <div className="flex justify-between pt-1">
-              <div className="text-[11px] font-semibold tracking-wider text-zinc-900">Total (incl. tax)</div>
-              <div className="tabular-nums text-base font-semibold">{money(total, symbol)}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-10 flex justify-end">
-          <div className="w-[220px] text-right">
-            <div className="h-px bg-zinc-900/40" />
-            <div className="mt-2 text-[11px] font-semibold tracking-wider text-zinc-900/70">AUTHORIZED SIGNATURE</div>
+          <div className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50/80 px-4 py-2">
+            <MetaRow label="Invoice no." value={data.invoiceNo} />
+            <MetaRow label="Date" value={data.invoiceDate} />
+            {data.dueDate ? <MetaRow label="Due date" value={data.dueDate} /> : null}
           </div>
         </div>
       </div>
-    </div>
+
+      <div className="overflow-x-auto px-4 py-6 sm:px-8">
+        <table className="w-full min-w-[640px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b-2 border-zinc-900/40 text-left text-[10px] font-semibold uppercase tracking-wide text-zinc-600">
+              <th className="pb-3 pr-3 font-semibold">Description</th>
+              <th className="w-16 pb-3 pr-2 text-right font-semibold">Qty</th>
+              <th className="w-20 pb-3 pr-2 text-right font-semibold">WT (kg)</th>
+              <th className="w-14 pb-3 pr-2 font-semibold">Unit</th>
+              <th className="w-24 pb-3 pr-2 text-right font-semibold">Unit rate</th>
+              <th className="w-24 pb-3 pr-2 text-right font-semibold">Taxable</th>
+              <th className="w-24 pb-3 text-right font-semibold">Total</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-200">
+            {data.lines.map((l, idx) => (
+              <tr key={idx} className="text-zinc-800">
+                <td className="max-w-[280px] py-3 pr-3 align-top">
+                  <span className="break-words font-medium">{l.description}</span>
+                </td>
+                <td className="py-3 pr-2 text-right tabular-nums align-top">
+                  {l.qty.toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                </td>
+                <td className="py-3 pr-2 text-right tabular-nums text-zinc-600 align-top">
+                  {l.weightKg != null && Number.isFinite(l.weightKg)
+                    ? l.weightKg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : "—"}
+                </td>
+                <td className="py-3 pr-2 text-xs text-zinc-600 align-top">{l.unit ?? "—"}</td>
+                <td className="py-3 pr-2 text-right tabular-nums align-top">{money(l.unitPrice, symbol)}</td>
+                <td className="py-3 pr-2 text-right tabular-nums align-top">{money(l.taxable, symbol)}</td>
+                <td className="py-3 text-right tabular-nums font-medium align-top">{money(l.totalInclTax, symbol)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="border-t border-zinc-200 px-6 py-6 sm:px-10">
+        <div className="flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
+          <div className="hidden w-[220px] sm:block">
+            <div className="h-px bg-zinc-300" aria-hidden />
+            <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Authorized signature</p>
+          </div>
+
+          <div className="w-full max-w-sm space-y-2 text-sm sm:ml-auto">
+            <div className="flex justify-between gap-4">
+              <span className="text-zinc-600">Taxable subtotal</span>
+              <span className="tabular-nums font-medium">{money(subtotalEx, symbol)}</span>
+            </div>
+            {tax > 0 ? (
+              <div className="flex justify-between gap-4">
+                <span className="text-zinc-600">
+                  Tax{lineTaxSum <= 0 && headerTaxPct > 0 ? ` (${headerTaxPct.toFixed(2)}%)` : ""}
+                </span>
+                <span className="tabular-nums font-medium">{money(tax, symbol)}</span>
+              </div>
+            ) : null}
+            <div className="flex justify-between gap-4 border-t border-zinc-200 pt-3">
+              <span className="font-semibold text-zinc-900">Total (incl. tax)</span>
+              <span className="text-lg tabular-nums font-semibold">{money(total, symbol)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
   )
 }

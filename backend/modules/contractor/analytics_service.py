@@ -536,17 +536,42 @@ class ContractorAnalyticsService:
                 )
             )
 
+        recent_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+
         for inv in self._db.scalars(
             select(Invoice).where(
                 Invoice.contractor_id == int(contractor_id),
-                Invoice.status.in_(("draft", "submitted", "blocked", "pending_exception_approval")),
+                Invoice.status.in_(
+                    ("draft", "submitted", "blocked", "pending_exception_approval", "approved")
+                ),
             )
         ).all():
+            vs = str(inv.validation_status or "").lower()
+            st = str(inv.status or "").lower()
+            if st == "approved":
+                if inv.approved_at is None or inv.approved_at < recent_cutoff:
+                    continue
+            if st == "approved" and vs in ("pass", "warn"):
+                severity = "success"
+                label = f"passed ({vs})"
+            elif st == "blocked" or vs == "blocked":
+                severity = "danger"
+                label = st if st == "blocked" else f"{st} · {vs}"
+            elif st == "pending_exception_approval":
+                severity = "warning"
+                label = "awaiting exception approval"
+            elif st == "draft":
+                severity = "info"
+                label = "draft — not submitted"
+            else:
+                severity = "warning"
+                label = f"{st}" + (f" · {vs}" if vs else "")
             items.append(
                 PendingItem(
                     kind="invoice",
-                    severity="danger" if inv.status == "blocked" else "warning",
-                    title=f"Invoice {inv.invoice_number} ({inv.status})",
+                    severity=severity,
+                    title=f"Invoice {inv.invoice_number} ({label})",
+                    detail=f"Total {inv.total_amount} {inv.currency}",
                     entity_id=int(inv.id),
                     href_hint=f"/dashboard/invoices/{inv.id}",
                 )

@@ -257,6 +257,14 @@ function App() {
                 </RequirePermission>
               }
             />
+            <Route
+              path=":id/edit"
+              element={
+                <RequirePermission anyOf={["invoices.create", "invoices.update"]}>
+                  <InvoiceCreatePage />
+                </RequirePermission>
+              }
+            />
             <Route path=":id" element={<InvoiceDetailPage />} />
           </Route>
         </Route>
