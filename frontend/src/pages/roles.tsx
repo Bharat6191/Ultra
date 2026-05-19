@@ -1,15 +1,16 @@
 import * as React from "react"
+import { ChevronDown, Search } from "lucide-react"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { getJson, patchJson, postJson } from "@/lib/api"
 import {
@@ -104,6 +105,65 @@ function orderedActionColumns(actions: string[]): string[] {
   return out
 }
 
+const MODULE_DESCRIPTIONS: Record<string, string> = {
+  settings: "Workspace defaults, policy controls, and operational guardrails.",
+  features: "Feature visibility and configuration controls.",
+  approvals: "Workflow visibility, acting rights, and routing control.",
+  tasks: "Operational task lifecycle, assignment, and closure.",
+  notification_settings: "Notification recipients and trigger settings.",
+  email_templates: "Template management for outbound communication.",
+  contractor_master: "Vendor onboarding, activation, plant mapping, and document control.",
+  part_master: "Part and baseline access used by commercial and operations teams.",
+  contractor_rates: "Negotiated rate visibility, editing, and approval.",
+  work_orders: "Work order creation, updates, and approval handling.",
+  invoices: "Invoice creation, validation, and finance controls.",
+  users: "User administration, profile changes, and access assignment.",
+  roles: "Role definitions, scope assignment, and permission control.",
+  permissions: "Action-level permission catalog visibility and maintenance.",
+  org_units: "Clusters, plants, and organizational structure maintenance.",
+}
+
+function countRolePermissionStats(
+  modules: CatalogModule[],
+  selectedPermissionIds: Set<number>
+): { total: number; enabled: number; fullModules: number } {
+  let total = 0
+  let enabled = 0
+  let fullModules = 0
+  for (const mod of modules) {
+    let moduleTotal = 0
+    let moduleEnabled = 0
+    for (const tab of mod.tabs) {
+      for (const permission of tab.permissions) {
+        if (permission.id == null) continue
+        moduleTotal += 1
+        if (selectedPermissionIds.has(permission.id)) moduleEnabled += 1
+      }
+    }
+    total += moduleTotal
+    enabled += moduleEnabled
+    if (moduleTotal > 0 && moduleEnabled === moduleTotal) fullModules += 1
+  }
+  return { total, enabled, fullModules }
+}
+
+function countModulePermissionStats(mod: CatalogModule, selectedPermissionIds: Set<number>) {
+  let total = 0
+  let enabled = 0
+  for (const tab of mod.tabs) {
+    for (const permission of tab.permissions) {
+      if (permission.id == null) continue
+      total += 1
+      if (selectedPermissionIds.has(permission.id)) enabled += 1
+    }
+  }
+  return { total, enabled, isFull: total > 0 && enabled === total }
+}
+
+function scopeLabel(orgUnitCount: number): string {
+  return orgUnitCount === 0 ? "Global role" : `${orgUnitCount} plant${orgUnitCount === 1 ? "" : "s"}`
+}
+
 /** Fits below app chrome so permission matrices scroll inside the panel (not clipped). */
 const ROLES_SPLIT_MAX_H = "max-h-[calc(100svh-11rem)]"
 
@@ -126,6 +186,8 @@ export function RolesPage() {
   const [createDescription, setCreateDescription] = React.useState("")
   const [creating, setCreating] = React.useState(false)
   const [createOrgUnitIds, setCreateOrgUnitIds] = React.useState<Set<number>>(() => new Set())
+  const [search, setSearch] = React.useState("")
+  const [expandedModules, setExpandedModules] = React.useState<Set<string>>(() => new Set())
 
   const canCreateRole = hasPermission("roles.create") || isSuperuser()
   /** Same as ``GET /admin/org-units`` (plant pickers for roles vs. Plants admin module). */
@@ -184,6 +246,12 @@ export function RolesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRoleId])
 
+  React.useEffect(() => {
+    if (catalog?.modules?.length && expandedModules.size === 0) {
+      setExpandedModules(new Set(catalog.modules.slice(0, 4).map((mod) => mod.key)))
+    }
+  }, [catalog, expandedModules.size])
+
   const hasDirtyPermissions = React.useMemo(() => {
     if (!selectedRole) return false
     const original = new Set(selectedRole.permissions.map((p) => p.id))
@@ -216,6 +284,60 @@ export function RolesPage() {
   }, [catalog])
 
   const canSaveRole = hasPermission("roles.update") || isSuperuser()
+  const filteredRoles = React.useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return roles ?? []
+    return (roles ?? []).filter((role) => {
+      const haystack = `${role.name} ${role.description ?? ""}`.toLowerCase()
+      return haystack.includes(query)
+    })
+  }, [roles, search])
+
+  React.useEffect(() => {
+    if (filteredRoles.length === 0) return
+    if (!filteredRoles.some((role) => role.id === selectedRoleId)) {
+      setSelectedRoleId(filteredRoles[0].id)
+    }
+  }, [filteredRoles, selectedRoleId])
+
+  const selectedRoleListItem = React.useMemo(
+    () => roles?.find((role) => role.id === selectedRoleId) ?? null,
+    [roles, selectedRoleId]
+  )
+
+  const permissionSummary = React.useMemo(() => {
+    return countRolePermissionStats(catalog?.modules ?? [], selectedPermissionIds)
+  }, [catalog, selectedPermissionIds])
+
+  function resetEditorState() {
+    if (!selectedRole) return
+    setSelectedPermissionIds(new Set(selectedRole.permissions.map((permission) => permission.id)))
+    setLinkedOrgUnitIds(new Set(selectedRole.org_units.map((orgUnit) => orgUnit.id)))
+  }
+
+  function toggleModule(moduleKey: string) {
+    setExpandedModules((current) => {
+      const next = new Set(current)
+      if (next.has(moduleKey)) next.delete(moduleKey)
+      else next.add(moduleKey)
+      return next
+    })
+  }
+
+  function setModuleEnabled(module: CatalogModule, enabled: boolean) {
+    if (!canSaveRole) return
+    setSelectedPermissionIds((current) => {
+      const next = new Set(current)
+      for (const tab of module.tabs) {
+        for (const permission of tab.permissions) {
+          if (permission.id == null) continue
+          if (enabled) next.add(permission.id)
+          else next.delete(permission.id)
+        }
+      }
+      return next
+    })
+  }
 
   async function createRole() {
     const name = createName.trim()
@@ -280,20 +402,14 @@ export function RolesPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="truncate text-sm font-medium">Roles</h2>
-          <p className="text-sm text-muted-foreground">
-            Link roles to plants, assign permissions by module. Leave all plants unchecked for a
-            global role (any plant). Run{" "}
-            <span className="font-mono text-xs">python scripts/sync_modules.py</span> for missing
-            permission rows.
-          </p>
-        </div>
-        <Button size="sm" onClick={save} disabled={!selectedRoleId || !hasDirty || !canSaveRole}>
-          Save
-        </Button>
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h2 className="text-2xl font-semibold tracking-tight text-zinc-950">Roles</h2>
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          Link roles to plants, assign permissions by module, and leave all plants unchecked for a
+          global role. Run <span className="font-mono text-xs">python scripts/sync_modules.py</span>{" "}
+          for missing permission rows.
+        </p>
       </div>
 
       {error ? (
@@ -307,228 +423,440 @@ export function RolesPage() {
         <Alert>
           <AlertTitle>Permission rows missing in the database</AlertTitle>
           <AlertDescription>
-            {catalogMissingPermissionCount} checkbox(es) are disabled because there is no matching row in{" "}
-            <span className="font-mono">permissions</span> yet (the Roles UI cannot tick them until they exist). From
-            the repo root run{" "}
-            <span className="font-mono">python scripts/sync_modules.py</span> against this environment&apos;s
-            database, then reload this page.
+            {catalogMissingPermissionCount} action(s) are disabled because there is no matching row
+            in <span className="font-mono">permissions</span> yet. Run{" "}
+            <span className="font-mono">python scripts/sync_modules.py</span> against this
+            environment&apos;s database, then reload this page.
           </AlertDescription>
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:items-stretch">
-        <div
-          className={cn(
-            "flex min-h-[240px] flex-col overflow-hidden rounded-lg border",
-            ROLES_SPLIT_MAX_H,
-          )}
-        >
-          <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2">
-            <div className="text-sm font-medium">Roles</div>
-            {canCreateRole ? (
-              <Dialog
-                open={createOpen}
-                onOpenChange={(open) => {
-                  setCreateOpen(open)
-                  if (!open) setCreateOrgUnitIds(new Set())
-                }}
-              >
-                <DialogTrigger asChild>
-                  <Button type="button" variant="outline" size="sm">
-                    Create role
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Create role</DialogTitle>
-                    <DialogDescription>
-                      Add a new role, optionally restrict it to specific plants, then assign
-                      permissions on the right.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="role-name" showRequired>
-                        Name
-                      </Label>
-                      <Input
-                        id="role-name"
-                        value={createName}
-                        onChange={(e) => setCreateName(e.target.value)}
-                        placeholder="e.g. Plant operator"
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="role-desc">Description (optional)</Label>
-                      <Input
-                        id="role-desc"
-                        value={createDescription}
-                        onChange={(e) => setCreateDescription(e.target.value)}
-                        placeholder="What this role is for"
-                      />
-                    </div>
-                    {canLoadPlantList ? (
-                      <div className="space-y-2">
-                        <Label>Plants (optional)</Label>
+      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <Card className={cn("flex min-h-[420px] flex-col border-zinc-200 bg-white", ROLES_SPLIT_MAX_H)}>
+          <CardHeader className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle>Roles</CardTitle>
+                <CardDescription>Search, scan scope, and jump into a role without losing context.</CardDescription>
+              </div>
+              {canCreateRole ? (
+                <Dialog
+                  open={createOpen}
+                  onOpenChange={(open) => {
+                    setCreateOpen(open)
+                    if (!open) setCreateOrgUnitIds(new Set())
+                  }}
+                >
+                  <DialogTrigger asChild>
+                    <Button type="button" variant="outline" size="sm">
+                      Create role
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Create role</DialogTitle>
+                      <DialogDescription>
+                        Add a new role, optionally restrict it to specific plants, then assign
+                        permissions on the right.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="role-name" showRequired>
+                          Name
+                        </Label>
+                        <Input
+                          id="role-name"
+                          value={createName}
+                          onChange={(e) => setCreateName(e.target.value)}
+                          placeholder="e.g. Plant operator"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="role-desc">Description (optional)</Label>
+                        <Input
+                          id="role-desc"
+                          value={createDescription}
+                          onChange={(e) => setCreateDescription(e.target.value)}
+                          placeholder="What this role is for"
+                        />
+                      </div>
+                      {canLoadPlantList ? (
+                        <div className="space-y-2">
+                          <Label>Plants (optional)</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Leave none selected so this role applies at every plant. Otherwise pick
+                            one or more plants.
+                          </p>
+                          <ScrollArea className="h-[160px] rounded-md border p-2">
+                            {plants === null || plants.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">
+                                No plants yet. Create plants under Plants.
+                              </p>
+                            ) : (
+                              <div className="space-y-2">
+                                {plants.map((pl) => {
+                                  const checked = createOrgUnitIds.has(pl.id)
+                                  return (
+                                    <label key={pl.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                                      <Checkbox
+                                        checked={checked}
+                                        onCheckedChange={(v) => {
+                                          const next = new Set(createOrgUnitIds)
+                                          if (v) next.add(pl.id)
+                                          else next.delete(pl.id)
+                                          setCreateOrgUnitIds(next)
+                                        }}
+                                      />
+                                      <span>{pl.name}</span>
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </ScrollArea>
+                        </div>
+                      ) : (
                         <p className="text-xs text-muted-foreground">
-                          Leave none selected so this role applies at every plant. Otherwise pick one or
-                          more plants.
+                          Plant checkboxes need <span className="font-medium">Plants View</span>, or{" "}
+                          <span className="font-medium">Roles Create/Edit</span>.
                         </p>
-                        <ScrollArea className="h-[160px] rounded-md border p-2">
-                          {plants === null || plants.length === 0 ? (
-                            <p className="text-xs text-muted-foreground">No plants yet. Create plants under Plants.</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {plants.map((pl) => {
-                                const checked = createOrgUnitIds.has(pl.id)
+                      )}
+                      <div className="flex justify-end gap-2 pt-1">
+                        <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button type="button" size="sm" disabled={creating} onClick={() => void createRole()}>
+                          {creating ? "Creating…" : "Create"}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              ) : null}
+            </div>
+
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search roles"
+                className="pl-9"
+              />
+            </div>
+          </CardHeader>
+
+          <CardContent className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+            {roles === null ? (
+              <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-muted-foreground">
+                Loading roles…
+              </div>
+            ) : filteredRoles.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-muted-foreground">
+                No roles match this search.
+              </div>
+            ) : (
+              filteredRoles.map((role) => {
+                const active = selectedRoleId === role.id
+                return (
+                  <button
+                    key={role.id}
+                    type="button"
+                    onClick={() => setSelectedRoleId(role.id)}
+                    className={cn(
+                      "w-full rounded-2xl border px-4 py-3 text-left transition",
+                      active
+                        ? "border-zinc-300 bg-zinc-50 shadow-sm"
+                        : "border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-zinc-950">{role.name}</div>
+                        {role.description ? (
+                          <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                            {role.description}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-600">
+                        {role.org_unit_ids.length === 0 ? "All" : role.org_unit_ids.length}
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{scopeLabel(role.org_unit_ids.length)}</Badge>
+                      {active ? <Badge variant="secondary">Selected</Badge> : null}
+                    </div>
+                  </button>
+                )
+              })
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="space-y-6">
+          <Card className="overflow-hidden border-zinc-200 bg-white shadow-sm">
+            <CardContent className="px-6 pb-6 pt-6">
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">
+                        {scopeLabel(
+                          selectedRole?.org_units.length ?? selectedRoleListItem?.org_unit_ids.length ?? 0
+                        )}
+                      </Badge>
+                      <Badge variant="outline">
+                        {permissionSummary.enabled}/{permissionSummary.total} actions enabled
+                      </Badge>
+                      {!canSaveRole ? <Badge variant="secondary">Read only</Badge> : null}
+                    </div>
+                    <div>
+                      <h3 className="text-3xl font-semibold tracking-tight text-zinc-950">
+                        {selectedRole?.name ?? selectedRoleListItem?.name ?? "Permissions"}
+                      </h3>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-600">
+                        {selectedRole?.description ??
+                          selectedRoleListItem?.description ??
+                          "Select a role to adjust plants and permissions."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" onClick={resetEditorState} disabled={!hasDirty}>
+                      Discard
+                    </Button>
+                    <Button
+                      onClick={save}
+                      disabled={!selectedRoleId || !hasDirty || !canSaveRole}
+                      className="border border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800"
+                    >
+                      Save changes
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      Coverage
+                    </div>
+                    <div className="mt-2 text-2xl font-semibold text-zinc-950">
+                      {permissionSummary.total > 0
+                        ? `${Math.round((permissionSummary.enabled / permissionSummary.total) * 100)}%`
+                        : "0%"}
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      Enabled actions across all modules
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      Module depth
+                    </div>
+                    <div className="mt-2 text-2xl font-semibold text-zinc-950">
+                      {permissionSummary.fullModules}/{catalog?.modules.length ?? 0}
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      Modules currently at full access
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      Status
+                    </div>
+                    <div className="mt-2 text-2xl font-semibold text-zinc-950">
+                      {!canSaveRole ? "Locked" : hasDirty ? "Draft" : "Saved"}
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {!canSaveRole
+                        ? "You need roles.update to change this role."
+                        : hasDirty
+                          ? "You have unsaved changes in this editor."
+                          : "This editor matches the latest saved state."}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="space-y-4">
+              {catalog === null ? (
+                <Card className="border-zinc-200 bg-white">
+                  <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                    Loading permissions…
+                  </CardContent>
+                </Card>
+              ) : selectedRoleId == null ? (
+                <Card className="border-zinc-200 bg-white">
+                  <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                    Select a role.
+                  </CardContent>
+                </Card>
+              ) : catalog.modules.length === 0 ? (
+                <Card className="border-zinc-200 bg-white">
+                  <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                    No catalog modules defined.
+                  </CardContent>
+                </Card>
+              ) : (
+                catalog.modules.map((mod) => {
+                  const stats = countModulePermissionStats(mod, selectedPermissionIds)
+                  const isExpanded = expandedModules.has(mod.key)
+                  const coverage = stats.total > 0 ? Math.round((stats.enabled / stats.total) * 100) : 0
+                  return (
+                    <Card key={mod.key} className="border-zinc-200 bg-white">
+                      <CardContent className="px-5 pb-5 pt-5">
+                        <div className="flex flex-col gap-4">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className="text-base font-semibold text-zinc-950">{mod.title}</h4>
+                                <Badge
+                                  variant={stats.isFull ? "secondary" : "outline"}
+                                  className={stats.isFull ? "bg-zinc-100 text-zinc-700" : undefined}
+                                >
+                                  {stats.isFull ? "Full access" : `${stats.enabled}/${stats.total} actions`}
+                                </Badge>
+                              </div>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                {MODULE_DESCRIPTIONS[mod.key] ?? "Permissions for this module."}
+                              </p>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="mr-1 flex items-center gap-3 rounded-full border border-zinc-200 bg-white px-3 py-2">
+                                <div className="h-2 w-24 overflow-hidden rounded-full bg-zinc-200">
+                                  <div
+                                    className="h-full rounded-full bg-zinc-900 transition-[width]"
+                                    style={{ width: `${coverage}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs font-medium text-zinc-600">{coverage}%</span>
+                              </div>
+                              <Button variant="outline" size="xs" onClick={() => setModuleEnabled(mod, true)} disabled={!canSaveRole}>
+                                Select all
+                              </Button>
+                              <Button variant="outline" size="xs" onClick={() => setModuleEnabled(mod, false)} disabled={!canSaveRole}>
+                                Clear
+                              </Button>
+                              <Button variant="secondary" size="icon-xs" onClick={() => toggleModule(mod.key)}>
+                                <ChevronDown
+                                  className={cn("size-4 transition-transform", isExpanded ? "rotate-0" : "-rotate-90")}
+                                />
+                              </Button>
+                            </div>
+                          </div>
+
+                          {isExpanded ? (
+                            <div className="space-y-3">
+                              {mod.tabs.map((tab) => {
+                                const tabActions = orderedActionColumns(
+                                  Array.isArray(tab.actions) && tab.actions.length
+                                    ? tab.actions
+                                    : tab.permissions.map((permission) => permission.action)
+                                )
                                 return (
-                                  <label
-                                    key={pl.id}
-                                    className="flex cursor-pointer items-center gap-2 text-sm"
+                                  <div
+                                    key={`${mod.key}.${tab.key}`}
+                                    className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-4 lg:flex-row lg:items-center lg:justify-between"
                                   >
-                                    <Checkbox
-                                      checked={checked}
-                                      onCheckedChange={(v) => {
-                                        const next = new Set(createOrgUnitIds)
-                                        if (v) next.add(pl.id)
-                                        else next.delete(pl.id)
-                                        setCreateOrgUnitIds(next)
-                                      }}
-                                    />
-                                    <span>{pl.name}</span>
-                                  </label>
+                                    <div className="min-w-0">
+                                      <div className="text-sm font-medium text-zinc-900">{tab.title}</div>
+                                      <div className="mt-1 text-xs text-muted-foreground">
+                                        Compact action pills make scanning easier than detached checkboxes.
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {tabActions.map((act) => {
+                                        const cell = tab.permissions.find((permission) => permission.action === act)
+                                        if (!cell) return null
+                                        const checked = cell.id != null && selectedPermissionIds.has(cell.id)
+                                        const disabled = cell.id == null || !canSaveRole
+                                        return (
+                                          <button
+                                            key={act}
+                                            type="button"
+                                            disabled={disabled}
+                                            title={
+                                              cell.id == null
+                                                ? "Run scripts/sync_modules.py to create this permission"
+                                                : cell.code
+                                            }
+                                            onClick={() => {
+                                              if (cell.id == null || !canSaveRole) return
+                                              const next = new Set(selectedPermissionIds)
+                                              if (checked) next.delete(cell.id)
+                                              else next.add(cell.id)
+                                              setSelectedPermissionIds(next)
+                                            }}
+                                            className={cn(
+                                              "rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                                              disabled
+                                                ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"
+                                                : checked
+                                                  ? "border-zinc-300 bg-zinc-100 text-zinc-900 shadow-sm"
+                                                  : "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50"
+                                            )}
+                                          >
+                                            {ACTION_LABEL[act] ?? act}
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
                                 )
                               })}
                             </div>
-                          )}
-                        </ScrollArea>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">
-                        Plant checkboxes need{" "}
-                        <span className="font-medium">Plants (org units) View</span>, or{" "}
-                        <span className="font-medium">Roles Create/Edit</span> (same as listing plants for user
-                        assignment).
-                      </p>
-                    )}
-                    <div className="flex justify-end gap-2 pt-1">
-                      <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button type="button" size="sm" disabled={creating} onClick={() => void createRole()}>
-                        {creating ? "Creating…" : "Create"}
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            ) : null}
-          </div>
-          <Separator />
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {roles === null ? (
-                <TableRow>
-                  <TableCell className="py-8 text-center text-sm text-muted-foreground">
-                    Loading…
-                  </TableCell>
-                </TableRow>
-              ) : roles.length === 0 ? (
-                <TableRow>
-                  <TableCell className="py-8 text-center text-sm text-muted-foreground">
-                    No roles found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                roles.map((r) => {
-                  const active = selectedRoleId === r.id
-                  return (
-                    <TableRow
-                      key={r.id}
-                      className={cn(active && "bg-muted/50")}
-                      onClick={() => setSelectedRoleId(r.id)}
-                      role="button"
-                    >
-                      <TableCell className="cursor-pointer">
-                        <div className="text-sm font-medium">{r.name}</div>
-                        {r.description ? (
-                          <div className="line-clamp-1 text-sm text-muted-foreground">
-                            {r.description}
-                          </div>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
+                          ) : null}
+                        </div>
+                      </CardContent>
+                    </Card>
                   )
                 })
               )}
-            </TableBody>
-          </Table>
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            "flex min-h-[280px] flex-col overflow-hidden rounded-lg border",
-            ROLES_SPLIT_MAX_H,
-          )}
-        >
-          <div className="flex shrink-0 items-center justify-between gap-3 px-3 py-2">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium">
-                {selectedRole ? selectedRole.name : "Permissions"}
-              </div>
-              <div className="truncate text-sm text-muted-foreground">
-                Adjust plants and permissions, then save.{" "}
-                {!canSaveRole ? "You need roles.update to save." : null}
-              </div>
             </div>
-            {hasDirty ? (
-              <span className="rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
-                Unsaved changes
-              </span>
-            ) : null}
-          </div>
-          <Separator />
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
-            {catalog === null ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">Loading…</div>
-            ) : selectedRoleId == null ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">Select a role.</div>
-            ) : catalog.modules.length === 0 ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                No catalog modules defined.
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <div className="text-sm font-semibold">Plants for this role</div>
+            <div className="space-y-4">
+              <Card className="border-zinc-200 bg-white">
+                <CardHeader>
+                  <CardTitle>Plant scope</CardTitle>
+                  <CardDescription>
+                    No plant selected means the role is global. Otherwise it can only be assigned at
+                    selected plants.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
                   {canLoadPlantList ? (
                     <>
-                      <p className="text-xs text-muted-foreground">
-                        No selection = role is available at every plant. Otherwise limit to selected
-                        plants (used when assigning users).
-                      </p>
-                      <div className="rounded-md border p-2">
+                      <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4">
+                        <div className="text-sm font-semibold text-zinc-900">
+                          {scopeLabel(linkedOrgUnitIds.size)}
+                        </div>
+                        <div className="mt-1 text-sm text-zinc-700">
+                          {linkedOrgUnitIds.size === 0
+                            ? "This role can be assigned at any plant."
+                            : "This role is restricted to the plants selected below."}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-zinc-200 p-3">
                         {plants === null || plants.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No plants defined.</p>
+                          <p className="text-sm text-muted-foreground">No plants defined.</p>
                         ) : (
-                          <div className="flex max-h-40 flex-col gap-2 overflow-y-auto pr-1">
+                          <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
                             {plants.map((pl) => {
                               const checked = linkedOrgUnitIds.has(pl.id)
                               return (
                                 <label
                                   key={pl.id}
                                   className={cn(
-                                    "flex items-center gap-2 text-sm",
-                                    canSaveRole ? "cursor-pointer" : "cursor-not-allowed opacity-70"
+                                    "flex items-center gap-2 rounded-xl px-2 py-2 text-sm",
+                                    canSaveRole ? "cursor-pointer hover:bg-zinc-50" : "cursor-not-allowed opacity-70"
                                   )}
                                 >
                                   <Checkbox
@@ -551,84 +879,32 @@ export function RolesPage() {
                       </div>
                     </>
                   ) : (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       Plant linking needs <span className="font-medium">Plants View</span> or{" "}
                       <span className="font-medium">Roles Create/Edit</span>.
                     </p>
                   )}
-                </div>
-                {catalog.modules.map((mod) => (
-                  <div key={mod.key} className="space-y-2">
-                    <div className="text-sm font-semibold">{mod.title}</div>
-                    <div className="rounded-md border">
-                      {(() => {
-                        const moduleActions = orderedActionColumns(
-                          mod.tabs.flatMap((t) => (Array.isArray(t.actions) ? t.actions : []))
-                        )
-                        return (
-                      <Table className="w-max min-w-[40rem] table-fixed">
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-[220px] min-w-[220px]">Tab</TableHead>
-                            {moduleActions.map((act) => (
-                              <TableHead key={act} className="w-[96px] min-w-[96px] text-center">
-                                {ACTION_LABEL[act] ?? act}
-                              </TableHead>
-                            ))}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {mod.tabs.map((tab) => (
-                            <TableRow key={`${mod.key}.${tab.key}`}>
-                              <TableCell className="w-[220px] min-w-[220px] text-sm text-muted-foreground">
-                                {tab.title}
-                              </TableCell>
-                              {moduleActions.map((act) => {
-                                const cell = tab.permissions.find((p) => p.action === act)
-                                if (!cell) {
-                                  return (
-                                    <TableCell key={act} className="w-[96px] min-w-[96px] text-center">
-                                      <span className="text-xs text-muted-foreground">—</span>
-                                    </TableCell>
-                                  )
-                                }
-                                const id = cell.id
-                                const checked = id != null && selectedPermissionIds.has(id)
-                                const disabled = id == null || !canSaveRole
-                                return (
-                                  <TableCell key={act} className="w-[96px] min-w-[96px] text-center">
-                                    <div className="flex justify-center">
-                                      <Checkbox
-                                        checked={checked}
-                                        disabled={disabled}
-                                        title={
-                                          id == null
-                                            ? "Run scripts/sync_modules.py to create this permission"
-                                            : cell.code
-                                        }
-                                        onCheckedChange={(v) => {
-                                          if (id == null) return
-                                          const next = new Set(selectedPermissionIds)
-                                          if (v) next.add(id)
-                                          else next.delete(id)
-                                          setSelectedPermissionIds(next)
-                                        }}
-                                      />
-                                    </div>
-                                  </TableCell>
-                                )
-                              })}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                        )
-                      })()}
-                    </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-zinc-200 bg-white">
+                <CardHeader>
+                  <CardTitle>Notes</CardTitle>
+                  <CardDescription>Keep the editing model explicit and predictable.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm text-muted-foreground">
+                  <div className="rounded-2xl bg-zinc-50 px-4 py-3">
+                    Each module exposes only its real actions. Missing DB rows stay visibly disabled.
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="rounded-2xl bg-zinc-50 px-4 py-3">
+                    Compact action pills reduce horizontal scanning compared with the old matrix.
+                  </div>
+                  <div className="rounded-2xl bg-zinc-50 px-4 py-3">
+                    The save state and plant scope stay visible without dominating the page.
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
       </div>

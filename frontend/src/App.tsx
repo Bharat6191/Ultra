@@ -9,6 +9,7 @@ import { DashboardPage } from "@/pages/dashboard"
 import { LoginPage } from "@/pages/login"
 import { PermissionsPage } from "@/pages/permissions"
 import { PlantsPage } from "@/pages/plants"
+import { RolesRedesignDemoPage } from "@/pages/roles-demo"
 import { RolesPage } from "@/pages/roles"
 import { SettingsPage } from "@/pages/settings"
 import { UsersPage } from "@/pages/users"
@@ -64,6 +65,7 @@ function App() {
       <AppToaster />
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/demo/roles-redesign" element={<RolesRedesignDemoPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/mfa/setup" element={<MfaSetupPage />} />
@@ -106,10 +108,13 @@ function App() {
             path="roles"
             element={
               <RequirePermission anyOf={["roles.view", "roles.update", "roles.create"]}>
-                <RolesPage />
+                <Outlet />
               </RequirePermission>
             }
-          />
+          >
+            <Route index element={<RolesPage />} />
+            <Route path="demo" element={<RolesRedesignDemoPage />} />
+          </Route>
           <Route
             path="permissions"
             element={
@@ -283,10 +288,13 @@ function App() {
             path="roles"
             element={
               <RequirePermission anyOf={["roles.view", "roles.update", "roles.create"]}>
-                <RolesPage />
+                <Outlet />
               </RequirePermission>
             }
-          />
+          >
+            <Route index element={<RolesPage />} />
+            <Route path="demo" element={<RolesRedesignDemoPage />} />
+          </Route>
           <Route
             path="permissions"
             element={

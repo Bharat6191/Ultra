@@ -1,17 +1,24 @@
 import * as React from "react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
-import { Plus, Search } from "lucide-react"
+import { Eye, History, MoreHorizontal, Pencil, Plus, Search } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ApiError, getJson, patchJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission, isSuperuser } from "@/lib/permissions"
-import { RateVersionHistoryButton } from "@/components/contractors/RateVersionHistoryDrawer"
+import { RateVersionHistoryDrawer } from "@/components/contractors/RateVersionHistoryDrawer"
 
 type OrgUnitLite = { id: number; name: string; type: string; parent_id?: number | null }
 
@@ -43,6 +50,7 @@ export type PartMasterPublic = {
 }
 
 export function PartMasterPage() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const highlightId = searchParams.get("highlight")
 
@@ -55,6 +63,7 @@ export function PartMasterPage() {
   const [plantFilter, setPlantFilter] = React.useState<string>("")
   const [search, setSearch] = React.useState("")
   const [loading, setLoading] = React.useState(true)
+  const [historyRow, setHistoryRow] = React.useState<PartMasterPublic | null>(null)
 
   const canView = hasPermission("part_master.view") || isSuperuser()
   const canCreate = hasPermission("part_master.create") || isSuperuser()
@@ -215,55 +224,116 @@ export function PartMasterPage() {
                   <TableHead className="text-right">Cost / days</TableHead>
                   <TableHead>Effective</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-[120px]" />
+                  <TableHead className="w-[72px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((r) => (
-                  <TableRow key={r.id} data-part-master-id={r.id}>
-                    <TableCell className="font-mono text-xs">{r.part_code}</TableCell>
-                    <TableCell className="font-medium">{r.part_name}</TableCell>
-                    <TableCell className="uppercase text-xs">{r.unit_type}</TableCell>
-                    <TableCell className="text-xs capitalize">{r.pricing_method.replace(/_/g, " ")}</TableCell>
-                    <TableCell className="text-xs">{r.rate_unit_type}</TableCell>
-                    <TableCell className="text-right text-sm">{String(r.base_rate)}</TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">
-                      {r.labour_cost != null || r.man_days != null ? (
-                        <>
-                          {r.labour_cost != null ? String(r.labour_cost) : "—"}
-                          {r.man_days != null ? ` · ${String(r.man_days)} d` : ""}
-                        </>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {r.effective_from}
-                      {r.effective_to ? ` → ${r.effective_to}` : ""}
-                    </TableCell>
-                    <TableCell className="text-xs">{r.is_active ? "active" : "inactive"}</TableCell>
-                    <TableCell className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" asChild>
-                        <Link to={`/dashboard/part-master/${r.id}`}>Open</Link>
-                      </Button>
-                      {canUpdate ? (
-                        <div className="flex items-center gap-2 text-xs">
-                          <Switch checked={r.is_active} onCheckedChange={() => void toggleActive(r)} />
-                        </div>
-                      ) : null}
-                      <RateVersionHistoryButton
-                        resource="part-master"
-                        parentId={r.id}
-                        title={`${r.part_code} · ${r.part_name}`}
-                      />
+                {rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="py-10 text-center text-sm text-muted-foreground">
+                      No parts match this filter.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  rows.map((r) => (
+                    <TableRow
+                      key={r.id}
+                      data-part-master-id={r.id}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/dashboard/part-master/${r.id}`)}
+                    >
+                      <TableCell className="font-mono text-xs">{r.part_code}</TableCell>
+                      <TableCell className="font-medium">{r.part_name}</TableCell>
+                      <TableCell className="uppercase text-xs">{r.unit_type}</TableCell>
+                      <TableCell className="text-xs capitalize">{r.pricing_method.replace(/_/g, " ")}</TableCell>
+                      <TableCell className="text-xs">{r.rate_unit_type}</TableCell>
+                      <TableCell className="text-right text-sm">{String(r.base_rate)}</TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {r.labour_cost != null || r.man_days != null ? (
+                          <>
+                            {r.labour_cost != null ? String(r.labour_cost) : "—"}
+                            {r.man_days != null ? ` · ${String(r.man_days)} d` : ""}
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {r.effective_from}
+                        {r.effective_to ? ` → ${r.effective_to}` : ""}
+                      </TableCell>
+                      <TableCell className="text-xs">{r.is_active ? "active" : "inactive"}</TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" className="rounded-lg" aria-label="Row actions">
+                              <MoreHorizontal className="size-4 opacity-70" aria-hidden />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={(e) => {
+                                e.preventDefault()
+                                navigate(`/dashboard/part-master/${r.id}`)
+                              }}
+                            >
+                              <Eye className="mr-2 size-4 opacity-70" aria-hidden />
+                              View
+                            </DropdownMenuItem>
+                            {canUpdate ? (
+                              <DropdownMenuItem
+                                onSelect={(e) => {
+                                  e.preventDefault()
+                                  navigate(`/dashboard/part-master/${r.id}`)
+                                }}
+                              >
+                                <Pencil className="mr-2 size-4 opacity-70" aria-hidden />
+                                Edit
+                              </DropdownMenuItem>
+                            ) : null}
+                            <DropdownMenuItem
+                              onSelect={(e) => {
+                                e.preventDefault()
+                                setHistoryRow(r)
+                              }}
+                            >
+                              <History className="mr-2 size-4 opacity-70" aria-hidden />
+                              Version history
+                            </DropdownMenuItem>
+                            {canUpdate ? (
+                              <DropdownMenuItem
+                                onSelect={(e) => {
+                                  e.preventDefault()
+                                  void toggleActive(r)
+                                }}
+                              >
+                                {r.is_active ? "Deactivate" : "Activate"}
+                              </DropdownMenuItem>
+                            ) : null}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
+      {historyRow ? (
+        <RateVersionHistoryDrawer
+          open={historyRow != null}
+          onOpenChange={(open) => {
+            if (!open) setHistoryRow(null)
+          }}
+          resource="part-master"
+          parentId={historyRow.id}
+          title={`${historyRow.part_code} · ${historyRow.part_name}`}
+        />
+      ) : null}
     </div>
   )
 }
