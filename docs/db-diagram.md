@@ -2,6 +2,8 @@
 
 This diagram is based on the current SQLAlchemy models under `Ultra/backend/modules`.
 
+For a full column-by-column reference, see `Ultra/docs/db-field-reference.md`.
+
 It focuses on the main business schema:
 - RBAC and org structure
 - Contractor master and compliance
@@ -210,7 +212,7 @@ erDiagram
         int org_unit_id FK
         int contractor_id FK
         string title
-        date work_date
+        string description
         string status
         bool is_active
         decimal approved_value_total
@@ -224,12 +226,15 @@ erDiagram
         int id PK
         int work_order_id FK
         int part_master_id FK
+        json pricing_snapshot
         int contractor_rate_id FK
         string progress_type
         decimal planned_quantity
         decimal planned_percentage
         decimal resolved_rate
         string rate_source
+        decimal override_rate
+        string override_status
         decimal taxable_value
         int override_approval_request_id
     }
@@ -256,7 +261,10 @@ erDiagram
         string invoice_number
         date invoice_date
         string status
+        string currency
         decimal total_amount
+        decimal extra_amount_ex_vat
+        string validation_status
         int submitted_by FK
         int approved_by FK
         int rejected_by FK
@@ -271,8 +279,19 @@ erDiagram
         decimal quantity
         decimal rate
         decimal amount
+        decimal tax_pct
         int resolved_contractor_rate_id
         int resolved_part_master_id
+    }
+
+    INVOICE_EXTRA_LINES {
+        int id PK
+        int invoice_id FK
+        string description
+        decimal quantity
+        string unit
+        decimal unit_price
+        decimal amount_ex_vat
     }
 
     INVOICE_VALIDATION_ISSUES {
@@ -416,6 +435,7 @@ erDiagram
     CONTRACTORS ||--o{ INVOICES : submits
     ORG_UNITS ||--o{ INVOICES : billed_at
     INVOICES ||--o{ INVOICE_LINES : contains
+    INVOICES ||--o{ INVOICE_EXTRA_LINES : adds
     WORK_ORDER_ITEMS ||--o{ INVOICE_LINES : billed_from
     INVOICES ||--o{ INVOICE_VALIDATION_ISSUES : raises
     INVOICE_LINES ||--o{ INVOICE_VALIDATION_ISSUES : may_trigger

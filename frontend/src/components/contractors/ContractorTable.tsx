@@ -1,18 +1,9 @@
 import { useNavigate } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Building2, Eye, MoreHorizontal, Pencil } from "lucide-react"
+import { Building2 } from "lucide-react"
 
 import {
   complianceLabel,
@@ -78,19 +69,19 @@ export function ContractorTable({
           <TableHead>Compliance</TableHead>
           <TableHead>Plants</TableHead>
           <TableHead>Statutory IDs</TableHead>
-          <TableHead className="w-[72px] text-right">Actions</TableHead>
+          {/* <TableHead className="w-[72px] text-right">Actions</TableHead> */}
         </TableRow>
       </TableHeader>
       <TableBody>
         {loading || rows === null ? (
           <TableRow>
-            <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+            <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
               Loading…
             </TableCell>
           </TableRow>
         ) : rows.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+            <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
               No contractors match this filter.
             </TableCell>
           </TableRow>
@@ -173,7 +164,7 @@ export function ContractorTable({
                     </div>
                   </div>
                 </TableCell>
-
+                {/*
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -205,6 +196,7 @@ export function ContractorTable({
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
+                */}
               </TableRow>
             )
           })

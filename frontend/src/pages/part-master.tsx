@@ -1,24 +1,14 @@
 import * as React from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
-import { toast } from "sonner"
-import { Eye, History, MoreHorizontal, Pencil, Plus, Search } from "lucide-react"
+import { Plus, Search } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ApiError, getJson, patchJson } from "@/lib/api"
+import { getJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission, isSuperuser } from "@/lib/permissions"
-import { RateVersionHistoryDrawer } from "@/components/contractors/RateVersionHistoryDrawer"
 
 type OrgUnitLite = { id: number; name: string; type: string; parent_id?: number | null }
 
@@ -63,11 +53,9 @@ export function PartMasterPage() {
   const [plantFilter, setPlantFilter] = React.useState<string>("")
   const [search, setSearch] = React.useState("")
   const [loading, setLoading] = React.useState(true)
-  const [historyRow, setHistoryRow] = React.useState<PartMasterPublic | null>(null)
 
   const canView = hasPermission("part_master.view") || isSuperuser()
   const canCreate = hasPermission("part_master.create") || isSuperuser()
-  const canUpdate = hasPermission("part_master.update") || isSuperuser()
 
   const load = React.useCallback(async () => {
     if (!canView) return
@@ -113,16 +101,6 @@ export function PartMasterPage() {
     }, 400)
     return () => window.clearTimeout(t)
   }, [highlightId, rows])
-
-  async function toggleActive(row: PartMasterPublic) {
-    if (!canUpdate) return
-    try {
-      await patchJson<PartMasterPublic>(`/part-master/${row.id}`, { is_active: !row.is_active })
-      await load()
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Update failed")
-    }
-  }
 
   if (!canView) {
     return (
@@ -224,13 +202,13 @@ export function PartMasterPage() {
                   <TableHead className="text-right">Cost / days</TableHead>
                   <TableHead>Effective</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-[72px] text-right">Actions</TableHead>
+                  {/* <TableHead className="w-[72px] text-right">Actions</TableHead> */}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="py-10 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
                       No parts match this filter.
                     </TableCell>
                   </TableRow>
@@ -263,6 +241,7 @@ export function PartMasterPage() {
                         {r.effective_to ? ` → ${r.effective_to}` : ""}
                       </TableCell>
                       <TableCell className="text-xs">{r.is_active ? "active" : "inactive"}</TableCell>
+                      {/*
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -315,6 +294,7 @@ export function PartMasterPage() {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
+                      */}
                     </TableRow>
                   ))
                 )}
@@ -323,17 +303,6 @@ export function PartMasterPage() {
           )}
         </CardContent>
       </Card>
-      {historyRow ? (
-        <RateVersionHistoryDrawer
-          open={historyRow != null}
-          onOpenChange={(open) => {
-            if (!open) setHistoryRow(null)
-          }}
-          resource="part-master"
-          parentId={historyRow.id}
-          title={`${historyRow.part_code} · ${historyRow.part_name}`}
-        />
-      ) : null}
     </div>
   )
 }

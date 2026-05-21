@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -59,6 +59,7 @@ function workOrderStatusLabel(status: string): string {
 }
 
 export function WorkOrdersPage() {
+  const navigate = useNavigate()
   const canCreate = hasPermission("work_orders.create")
   const canView = hasPermission("work_orders.view")
 
@@ -163,25 +164,29 @@ export function WorkOrdersPage() {
                 <TableHead>Plant</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Open</TableHead>
+                {/* <TableHead className="text-right">Open</TableHead> */}
               </TableRow>
             </TableHeader>
             <TableBody>
               {!rows ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                     No work orders in this view.
                   </TableCell>
                 </TableRow>
               ) : (
                 rows.map((r) => (
-                  <TableRow key={r.id}>
+                  <TableRow
+                    key={r.id}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/dashboard/work-orders/${r.id}`)}
+                  >
                     <TableCell className="font-medium">{r.work_order_number}</TableCell>
                     <TableCell>{r.title}</TableCell>
                     <TableCell className="text-muted-foreground">{plantName(Number(r.org_unit_id))}</TableCell>
@@ -195,11 +200,11 @@ export function WorkOrdersPage() {
                     <TableCell>
                       <Badge variant={workOrderStatusBadgeVariant(r.status)}>{workOrderStatusLabel(r.status)}</Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    {/* <TableCell className="text-right">
                       <Button asChild size="sm" variant="ghost">
                         <Link to={`/dashboard/work-orders/${r.id}`}>Open</Link>
                       </Button>
-                    </TableCell>
+                    </TableCell> */}
                   </TableRow>
                 ))
               )}

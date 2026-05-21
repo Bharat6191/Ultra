@@ -117,20 +117,8 @@ def seed_demo_data_if_empty() -> None:
         )
         return
 
-    print("Database business tables are empty. Running demo seed suite.", flush=True)
-    demo_user_password = os.environ.get("DEMO_USER_PASSWORD", "DemoPass123!").strip() or "DemoPass123!"
-    admin_seed_password = os.environ.get("ADMIN_TEST_PASSWORD", "TestPass123!").strip() or "TestPass123!"
-
-    steps: list[list[str]] = [
-        [sys.executable, str(REPO_ROOT / "scripts/seed_manual_test_contractors.py")],
-        [sys.executable, str(REPO_ROOT / "scripts/seed_admin_test_data.py"), "--password", admin_seed_password],
-        [sys.executable, str(REPO_ROOT / "scripts/seed_manual_test_rates.py")],
-        [sys.executable, str(REPO_ROOT / "scripts/seed_demo_users.py"), "--password", demo_user_password],
-        [sys.executable, str(REPO_ROOT / "scripts/seed_demo_work_orders.py")],
-        [sys.executable, str(REPO_ROOT / "scripts/seed_demo_completions_and_invoices.py")],
-    ]
-    for step in steps:
-        _run(step)
+    print("Database business tables are empty. Running status-matrix demo seed.", flush=True)
+    _run([sys.executable, str(REPO_ROOT / "scripts/seed_demo_status_matrix.py")])
 
 
 def main() -> None:

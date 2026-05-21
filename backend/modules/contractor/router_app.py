@@ -130,11 +130,21 @@ def contractor_lookup(
     can legitimately create rates/work orders/invoices but should not browse the contractor module.
     """
     parsed_status = status_filter.strip().lower() if status_filter else None
+    is_active: bool | None = None
+    if parsed_status in ("active", "1", "true"):
+        parsed_status = None
+        is_active = True
+    elif parsed_status in ("inactive", "0", "false"):
+        parsed_status = None
+        is_active = False
+    elif parsed_status in ("all", ""):
+        parsed_status = None
     rows, _total = svc.list_contractors(
         offset=0,
         limit=int(limit),
         search=q,
-        status=parsed_status if parsed_status not in ("all", "") else None,
+        status=parsed_status,
+        is_active=is_active,
     )
     return [{"id": int(r.id), "name": str(r.name)} for r in rows]
 

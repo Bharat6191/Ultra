@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { Plus } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -24,6 +24,7 @@ const INVOICE_STATUS_TABS: { id: InvoiceStatusTab; label: string }[] = [
 ]
 
 export function InvoicesPage() {
+  const navigate = useNavigate()
   const canCreate = hasPermission("invoices.create")
   const canView = hasPermission("invoices.view")
 
@@ -162,25 +163,25 @@ export function InvoicesPage() {
                 <TableHead>Plant</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Open</TableHead>
+                {/* <TableHead className="text-right">Open</TableHead> */}
               </TableRow>
             </TableHeader>
             <TableBody>
               {!rows ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                     No invoices yet.
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                     No invoices in this view.
                   </TableCell>
                 </TableRow>
@@ -188,7 +189,11 @@ export function InvoicesPage() {
                 filtered.map((r) => {
                   const d = invoiceDisplayStatus(r)
                   return (
-                    <TableRow key={r.id}>
+                    <TableRow
+                      key={r.id}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/dashboard/invoices/${r.id}`)}
+                    >
                       <TableCell className="font-medium">{r.invoice_number}</TableCell>
                       <TableCell className="text-muted-foreground">{contractorLabel(Number(r.contractor_id))}</TableCell>
                       <TableCell className="text-muted-foreground">{plantLabel(Number(r.org_unit_id))}</TableCell>
@@ -198,11 +203,11 @@ export function InvoicesPage() {
                           {invoiceDisplayStatusLabel(d)}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">
+                      {/* <TableCell className="text-right">
                         <Button asChild size="sm" variant="ghost">
                           <Link to={`/dashboard/invoices/${r.id}`}>Open</Link>
                         </Button>
-                      </TableCell>
+                      </TableCell> */}
                     </TableRow>
                   )
                 })

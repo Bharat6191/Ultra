@@ -56,6 +56,7 @@ type WorkOrder = {
   work_order_number: string
   org_unit_id: number
   contractor_id: number
+  contractor_name?: string | null
   title: string
   description: string | null
   status: string
@@ -171,6 +172,12 @@ export function WorkOrderDetailPage() {
     (id: number) => contractors.find((c) => c.id === id)?.name ?? `Contractor #${id}`,
     [contractors],
   )
+
+  const workOrderContractorLabel = React.useMemo(() => {
+    const apiName = row?.contractor_name?.trim()
+    if (apiName) return apiName
+    return row ? contractorName(row.contractor_id) : undefined
+  }, [contractorName, row])
 
   const plantLabel = React.useMemo(() => {
     const hit = plants.find((p) => p.id === row?.org_unit_id)
@@ -523,7 +530,7 @@ export function WorkOrderDetailPage() {
         lines={editableDraft ? draftLines : []}
         onLinesChange={editableDraft ? setDraftLines : () => {}}
         detailRows={editableDraft ? undefined : detailRows}
-        contractorSummaryLabel={!editableDraft ? contractorName(row.contractor_id) : undefined}
+        contractorSummaryLabel={!editableDraft ? workOrderContractorLabel : undefined}
         pricingWorkDate={editableDraft ? pricingDateFromCreatedAt(row.created_at) : undefined}
       />
 

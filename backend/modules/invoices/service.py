@@ -96,7 +96,7 @@ class InvoiceService:
         return org
 
     def get(self, invoice_id: int) -> Invoice:
-        row = self._db.scalar(
+        stmt = (
             select(Invoice)
             .where(Invoice.id == int(invoice_id))
             .options(
@@ -105,6 +105,9 @@ class InvoiceService:
                 selectinload(Invoice.attachments),
             )
         )
+        # Session uses expire_on_commit=False, so callers that create/update an invoice and
+        # immediately re-read it in the same session need a DB refresh to see current lines.
+        row = self._db.execute(stmt, execution_options={"populate_existing": True}).scalars().first()
         if row is None:
             raise NotFoundError("Invoice", invoice_id)
         return row
@@ -124,7 +127,7 @@ class InvoiceService:
         if status:
             stmt = stmt.where(Invoice.status == status.strip().lower())
         stmt = stmt.limit(int(limit))
-        return list(self._db.scalars(stmt).unique().all())
+        return list(self._db.execute(stmt, execution_options={"populate_existing": True}).scalars().unique().all())
 
     _INV_NUM_SEQ = re.compile(r"^INV(\d+)$", re.IGNORECASE)
 
@@ -770,4 +773,3 @@ class InvoiceService:
             score = Decimal("0")
         agg.compliance_score = score.quantize(Decimal("0.01"))
         agg.last_computed_at = _now_utc()
-

@@ -1,7 +1,6 @@
 import * as React from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import {
-  ChevronRight,
   Hourglass,
   MessagesSquare,
   Plus,
@@ -103,6 +102,7 @@ const SELECT_CLASS =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
 
 export function NegotiatedRatesPage() {
+  const navigate = useNavigate()
   const [rows, setRows] = React.useState<ContractorRatePublic[] | null>(null)
   const [summary, setSummary] = React.useState<Summary | null>(null)
   const [orgScopes, setOrgScopes] = React.useState<OrgUnitLite[]>([])
@@ -343,25 +343,29 @@ export function NegotiatedRatesPage() {
                 <TableHead className="text-right">Savings</TableHead>
                 <TableHead>Effective</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Open</TableHead>
+                {/* <TableHead className="text-right">Open</TableHead> */}
               </TableRow>
             </TableHeader>
             <TableBody>
               {!rows ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
                     No negotiations match the current filters.
                   </TableCell>
                 </TableRow>
               ) : (
                 filtered.map((r) => (
-                  <TableRow key={r.id}>
+                  <TableRow
+                    key={r.id}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/dashboard/negotiated-rates/${r.id}`)}
+                  >
                     <TableCell>
                       <div className="font-medium text-foreground">
                         {r.contractor_name ?? `Contractor #${r.contractor_id}`}
@@ -405,13 +409,13 @@ export function NegotiatedRatesPage() {
                         {rateStatusLabel(r.status)}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    {/* <TableCell className="text-right">
                       <Button asChild size="sm" variant="ghost">
                         <Link to={`/dashboard/negotiated-rates/${r.id}`}>
-                          Open <ChevronRight className="size-3.5" />
+                          Open
                         </Link>
                       </Button>
-                    </TableCell>
+                    </TableCell> */}
                   </TableRow>
                 ))
               )}
