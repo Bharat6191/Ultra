@@ -425,25 +425,56 @@ export function ContractorAnalyticsDashboard({
   //   return wo.donut_status
   // }, [wo])
 
-  const negotiationChart = React.useMemo(() => {
-    if (!neg) return null
+  // Negotiation graph kept in source but hidden per current UI request.
+  // const negotiationChart = React.useMemo(() => {
+  //   if (!neg) return null
+  //   return (
+  //     <div className="h-80 min-h-[300px] w-full min-w-0">
+  //       <div className="mb-2 text-xs font-medium text-muted-foreground">Base vs negotiated (sample)</div>
+  //       <ResponsiveContainer width="100%" height="100%">
+  //         <BarChart data={neg.bar_chart_parts.slice(0, 14)} margin={{ left: 8, right: 8, bottom: 48 }}>
+  //           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+  //           <XAxis dataKey="part_code" angle={-35} textAnchor="end" interval={0} height={60} tick={{ fontSize: 10 }} />
+  //           <YAxis tick={{ fontSize: 10 }} />
+  //           <Tooltip formatter={(v) => formatMoney(Number(v ?? 0))} />
+  //           <Legend />
+  //           <Bar dataKey="base_rate" name="Base" fill="#0D2E20" />
+  //           <Bar dataKey="negotiated_rate" name="Negotiated" fill="#059669" />
+  //         </BarChart>
+  //       </ResponsiveContainer>
+  //     </div>
+  //   )
+  // }, [neg])
+
+  const workOrderStatusChart = React.useMemo(() => {
+    const activeCount = woRows.filter((row) => String(row.status).toLowerCase() === "active").length
+    const inactiveCount = Math.max(0, woRows.length - activeCount)
     return (
-      <div className="h-80 min-h-[300px] w-full min-w-0">
-        <div className="mb-2 text-xs font-medium text-muted-foreground">Base vs negotiated (sample)</div>
+      <div className="h-72 min-h-[280px] w-full min-w-0">
+        <div className="mb-2 text-xs font-medium text-muted-foreground">Active vs inactive work orders</div>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={neg.bar_chart_parts.slice(0, 14)} margin={{ left: 8, right: 8, bottom: 48 }}>
+          <BarChart
+            data={[
+              {
+                bucket: "Work orders",
+                active: activeCount,
+                inactive: inactiveCount,
+              },
+            ]}
+            margin={{ left: 8, right: 8, bottom: 24 }}
+          >
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-            <XAxis dataKey="part_code" angle={-35} textAnchor="end" interval={0} height={60} tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} />
-            <Tooltip formatter={(v) => formatMoney(Number(v ?? 0))} />
+            <XAxis dataKey="bucket" tick={{ fontSize: 11 }} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+            <Tooltip formatter={(value) => String(value)} />
             <Legend />
-            <Bar dataKey="base_rate" name="Base" fill="#0D2E20" />
-            <Bar dataKey="negotiated_rate" name="Negotiated" fill="#059669" />
+            <Bar dataKey="active" name="Active" fill="#059669" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="inactive" name="Inactive" fill="#94a3b8" radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
     )
-  }, [neg])
+  }, [woRows])
 
   // const workOrderChart = React.useMemo(() => {
   //   if (!wo) return null
@@ -716,22 +747,17 @@ export function ContractorAnalyticsDashboard({
       <div className="space-y-6">
         {/* Negotiation analytics */}
         <div className="space-y-6">
-          <Card>
+          {/* <Card>
             <CardHeader>
               <CardTitle className="text-base">Negotiation analytics</CardTitle>
               <CardDescription>Per-part commercial posture and approval state.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* <ChartSelector
-                value={negChartView}
-                options={NEGOTIATION_CHART_OPTIONS}
-                onChange={(value) => setNegChartView(value as NegotiationChartView)}
-              /> */}
               <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
                 {negotiationChart}
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
 
           <Card>
             <CardHeader>
@@ -882,7 +908,12 @@ export function ContractorAnalyticsDashboard({
                 {formatMoney(wo.total_invoiced)} invoiced, {formatMoney(wo.pending_invoice_amount)} pending.
               </CardDescription>
             </CardHeader>
-            <CardContent className="px-0 pb-3">
+            <CardContent className="space-y-4 px-0 pb-3">
+              <div className="px-6">
+                <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
+                  {workOrderStatusChart}
+                </div>
+              </div>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>

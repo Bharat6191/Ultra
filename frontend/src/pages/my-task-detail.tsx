@@ -13,6 +13,7 @@ import {
   WorkOrderApprovalReview,
   WorkOrderRateOverrideApprovalReview,
 } from "@/components/tasks/work-order-task-review"
+import { InvoiceExceptionApprovalReview } from "@/components/tasks/invoice-task-review"
 import { ApiError, getJson, postJson } from "@/lib/api"
 import { hasPermission, isSuperuser, persistAuthFromMe } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
@@ -626,6 +627,7 @@ export function MyTaskDetailPage() {
                   title?: unknown
                   work_order_number?: unknown
                   work_order_title?: unknown
+                  invoice_number?: unknown
                 }
                 if (task.approval.entity_type === "user_creation" && typeof p.full_name === "string" && p.full_name.trim() !== "")
                   return p.full_name
@@ -638,6 +640,10 @@ export function MyTaskDetailPage() {
                 if (task.approval.entity_type === "work_order_rate_override") {
                   if (typeof p.work_order_title === "string" && p.work_order_title.trim() !== "") return p.work_order_title
                   return "Rate override request"
+                }
+                if (task.approval.entity_type === "invoice_exception_approval") {
+                  if (typeof p.invoice_number === "string" && p.invoice_number.trim() !== "") return p.invoice_number
+                  return "Invoice exception review"
                 }
                 return task.approval.entity_type.replace(/_/g, " ")
               }
@@ -753,7 +759,8 @@ export function MyTaskDetailPage() {
                 className={cn(
                   "grid grid-cols-1 gap-4 lg:items-start",
                   task.approval.entity_type === "work_order_approval" ||
-                    task.approval.entity_type === "work_order_rate_override"
+                    task.approval.entity_type === "work_order_rate_override" ||
+                    task.approval.entity_type === "invoice_exception_approval"
                     ? ""
                     : "lg:grid-cols-2",
                 )}
@@ -769,6 +776,10 @@ export function MyTaskDetailPage() {
                       <CardDescription className="text-xs">
                         Governed rate vs requested override for this line item.
                       </CardDescription>
+                    ) : task.approval.entity_type === "invoice_exception_approval" ? (
+                      <CardDescription className="text-xs">
+                        Live invoice data with the exact blocker reasons, work order references, and invoice preview.
+                      </CardDescription>
                     ) : null}
                   </CardHeader>
                   <CardContent className="pt-3">
@@ -781,6 +792,13 @@ export function MyTaskDetailPage() {
                       />
                     ) : task.approval.entity_type === "work_order_rate_override" ? (
                       <WorkOrderRateOverrideApprovalReview payload={task.approval.payload ?? {}} />
+                    ) : task.approval.entity_type === "invoice_exception_approval" &&
+                      task.approval.entity_id != null &&
+                      Number.isFinite(Number(task.approval.entity_id)) ? (
+                      <InvoiceExceptionApprovalReview
+                        invoiceId={Number(task.approval.entity_id)}
+                        fallbackPayload={task.approval.payload ?? {}}
+                      />
                     ) : (
                       (() => {
                         const rows = approvalPayloadEntries(task.approval!.payload, task.approval!.entity_type)
@@ -805,13 +823,15 @@ export function MyTaskDetailPage() {
                     </p>
                   </CardContent>
                 </Card>
-                <TaskCommentsCard
-                  comment={comment}
-                  onCommentChange={setComment}
-                  sortedComments={sortedComments}
-                  onAddComment={() => void addComment()}
-                  commenting={commenting}
-                />
+                {task.approval.entity_type === "invoice_exception_approval" ? null : (
+                  <TaskCommentsCard
+                    comment={comment}
+                    onCommentChange={setComment}
+                    sortedComments={sortedComments}
+                    onAddComment={() => void addComment()}
+                    commenting={commenting}
+                  />
+                )}
               </div>
               {task.approval.workflow_steps && task.approval.workflow_steps.length > 0 ? (
                 <ApprovalWorkflowTimeline

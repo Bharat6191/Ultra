@@ -229,7 +229,10 @@ export function InvoiceDetailPage() {
     invoiceNo: String(row.invoice_number ?? "—"),
     invoiceDate: String(row.invoice_date ?? "—"),
     dueDate: undefined,
-    issuedTo: { name: `Contractor #${row.contractor_id}`, address: `Plant #${row.org_unit_id}` },
+    issuedTo: {
+      name: row.contractor_name?.trim() || `Contractor #${row.contractor_id}`,
+      address: row.org_unit_name?.trim() || `Plant #${row.org_unit_id}`,
+    },
     payTo: { name: "Ultra Workspace", bank: "—", accountName: "—", accountNoMasked: "—" },
     currencySymbol: "₹",
     taxPct: taxPctHeader,
@@ -253,7 +256,7 @@ export function InvoiceDetailPage() {
         <div className="min-w-0">
           <h2 className="text-base font-medium">{row.invoice_number}</h2>
           <p className="text-sm text-muted-foreground">
-            Contractor #{row.contractor_id} · Plant #{row.org_unit_id}
+            {row.contractor_name?.trim() || `Contractor #${row.contractor_id}`} · {row.org_unit_name?.trim() || `Plant #${row.org_unit_id}`}
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">

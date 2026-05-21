@@ -22,10 +22,12 @@ from modules.invoices.schema import (
     SuggestedInvoiceNumber,
 )
 from modules.invoices.commercial_amount import invoice_line_ex_vat_amount
+from modules.contractor.models import Contractor
 from modules.invoices.models import InvoiceAttachment
 from modules.invoices.line_format import rate_basis_label, unit_label_from_type
 from modules.invoices.storage import save_invoice_attachment
 from modules.invoices.service import InvoiceService
+from modules.org_units.model import OrgUnit
 from modules.work_orders.schema import WorkOrderPublic
 from modules.work_orders.service import WorkOrderService
 from modules.work_orders.models import WorkOrder, WorkOrderItem
@@ -68,6 +70,7 @@ def _line_validation_status(inv: Invoice, *, line_pk: int) -> str | None:
 
 def _to_public(inv: Invoice, db: Session | None = None) -> dict:
     line_rows: list[dict] = []
+    work_order_numbers: set[str] = set()
     for l in inv.lines or []:
         qty = Decimal(str(l.quantity))
         rate_dec = Decimal(str(l.rate))
@@ -88,6 +91,8 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
             wo = db.get(WorkOrder, int(wit.work_order_id))
             if wo is not None:
                 wo_no = wo.work_order_number
+                if wo_no:
+                    work_order_numbers.add(str(wo_no))
         else:
             base_expect = _q2(qty * rate_dec)
         amt = Decimal(str(l.amount))
@@ -148,10 +153,20 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
             }
         )
 
+    contractor_name: str | None = None
+    org_unit_name: str | None = None
+    if db is not None:
+        contractor = db.get(Contractor, int(inv.contractor_id))
+        org = db.get(OrgUnit, int(inv.org_unit_id))
+        contractor_name = getattr(contractor, "name", None) if contractor is not None else None
+        org_unit_name = getattr(org, "name", None) if org is not None else None
+
     return {
         "id": int(inv.id),
         "contractor_id": int(inv.contractor_id),
+        "contractor_name": contractor_name,
         "org_unit_id": int(inv.org_unit_id),
+        "org_unit_name": org_unit_name,
         "invoice_number": inv.invoice_number,
         "invoice_date": inv.invoice_date,
         "status": inv.status,
@@ -179,6 +194,7 @@ def _to_public(inv: Invoice, db: Session | None = None) -> dict:
         "created_by": inv.created_by,
         "created_at": inv.created_at,
         "updated_at": inv.updated_at,
+        "work_order_numbers": sorted(work_order_numbers),
         "lines": line_rows,
         "issues": [
             {
@@ -526,4 +542,3 @@ async def upload_attachment(
     db.add(row)
     db.commit()
     return {"ok": True, "id": int(row.id), "file_path": path}
-

@@ -122,7 +122,9 @@ class InvoiceAttachmentPublic(BaseModel):
 class InvoicePublic(BaseModel):
     id: int
     contractor_id: int
+    contractor_name: str | None = None
     org_unit_id: int
+    org_unit_name: str | None = None
     invoice_number: str
     invoice_date: date
     status: str
@@ -140,6 +142,7 @@ class InvoicePublic(BaseModel):
     created_by: int | None
     created_at: datetime | None
     updated_at: datetime | None
+    work_order_numbers: list[str] = Field(default_factory=list)
     lines: list[InvoiceLinePublic]
     issues: list[InvoiceValidationIssuePublic]
     attachments: list[InvoiceAttachmentPublic] = Field(default_factory=list)
@@ -207,4 +210,3 @@ class InvoiceAuditEntry(BaseModel):
     new_value: dict[str, Any] | None = None
     metadata: dict[str, Any] | None = None
     created_at: datetime | None = None
-
