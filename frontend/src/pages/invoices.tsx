@@ -44,6 +44,23 @@ export function InvoicesPage() {
     [plants],
   )
 
+  const workOrderSummary = React.useCallback((row: any) => {
+    const labels: string[] = Array.from(
+      new Set<string>(
+        Array.isArray(row?.lines)
+          ? row.lines
+              .map((line: any) =>
+                typeof line?.work_order_number === "string" ? line.work_order_number.trim() : "",
+              )
+              .filter((value: string) => Boolean(value))
+          : [],
+      ),
+    )
+    if (labels.length === 0) return "—"
+    if (labels.length === 1) return labels[0]
+    return `${labels[0]} +${labels.length - 1} more`
+  }, [])
+
   const load = React.useCallback(async () => {
     if (!canView) return
     setError(null)
@@ -159,6 +176,7 @@ export function InvoicesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Invoice #</TableHead>
+                <TableHead>Work order</TableHead>
                 <TableHead>Contractor</TableHead>
                 <TableHead>Plant</TableHead>
                 <TableHead>Date</TableHead>
@@ -169,19 +187,19 @@ export function InvoicesPage() {
             <TableBody>
               {!rows ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                     No invoices yet.
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                     No invoices in this view.
                   </TableCell>
                 </TableRow>
@@ -195,6 +213,7 @@ export function InvoicesPage() {
                       onClick={() => navigate(`/dashboard/invoices/${r.id}`)}
                     >
                       <TableCell className="font-medium">{r.invoice_number}</TableCell>
+                      <TableCell className="text-muted-foreground">{workOrderSummary(r)}</TableCell>
                       <TableCell className="text-muted-foreground">{contractorLabel(Number(r.contractor_id))}</TableCell>
                       <TableCell className="text-muted-foreground">{plantLabel(Number(r.org_unit_id))}</TableCell>
                       <TableCell className="text-xs tabular-nums">{r.invoice_date}</TableCell>
