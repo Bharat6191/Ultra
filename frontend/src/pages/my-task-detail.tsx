@@ -363,7 +363,14 @@ export function MyTaskDetailPage() {
   const [actionComment, setActionComment] = React.useState("")
 
   const [, forcePermRefresh] = React.useReducer((x: number) => x + 1, 0)
-  const canApprovalAct = hasPermission("approval.act")
+  const approvalActionCode =
+    task?.approval?.entity_type === "invoice_exception_approval"
+      ? "invoices.approve_exceptions"
+      : "approval.act"
+  const canApprovalAct =
+    hasPermission("approval.act") ||
+    (task?.approval?.entity_type === "invoice_exception_approval" &&
+      hasPermission("invoices.approve_exceptions"))
   const canTaskAct = hasPermission("task.act")
   const canTaskClose = hasPermission("task.close")
 
@@ -526,6 +533,57 @@ export function MyTaskDetailPage() {
       : null
 
   const isApprovalLike = Boolean(task && (task.task_type === "approval" || task.task_type === "rework") && task.approval)
+  const approvalStepNeedsDecision = Boolean(
+    task &&
+      task.task_type === "approval" &&
+      task.approval &&
+      task.approval.status === "pending" &&
+      (task.status === "pending" || task.status === "open" || task.status === "in_progress"),
+  )
+
+  function renderApprovalDecisionEditor(extraClassName?: string) {
+    if (!task || task.task_type !== "approval" || !task.approval) return null
+    return (
+      <div className={cn("flex w-full min-w-0 max-w-2xl flex-col gap-2", extraClassName)}>
+        <textarea
+          className={cn(
+            "min-h-[64px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40",
+          )}
+          value={actionComment}
+          onChange={(e) => setActionComment(e.target.value)}
+          rows={2}
+          placeholder="Optional note for the approver record…"
+          disabled={acting}
+        />
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            onClick={() => void approveOrReject("reject")}
+            disabled={acting || !canApprovalAct}
+          >
+            Reject
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="default"
+            onClick={() => void approveOrReject("approve")}
+            disabled={acting || !canApprovalAct}
+          >
+            Approve
+          </Button>
+        </div>
+        {!canApprovalAct ? (
+          <p className="text-right text-xs text-muted-foreground">
+            Needs <span className="font-mono">{approvalActionCode}</span>
+            {task?.approval?.entity_type === "invoice_exception_approval" ? " or approval.act" : ""} on your role.
+          </p>
+        ) : null}
+      </div>
+    )
+  }
 
   async function resubmitForApproval() {
     if (!task?.approval) return
@@ -655,6 +713,29 @@ export function MyTaskDetailPage() {
             </p>
           </AlertDescription>
         </Alert>
+      ) : null}
+
+      {approvalStepNeedsDecision && task?.approval && !loading ? (
+        <Card className="border-emerald-200/80 bg-emerald-50/40 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/20">
+          <CardHeader className="space-y-1 pb-2 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="space-y-0.5">
+              <CardTitle className="text-base">Approve or reject this step</CardTitle>
+              <CardDescription className="text-sm">
+                {task.approval.step_order != null
+                  ? `Step ${task.approval.step_order}${
+                      task.approval.approver_role_name ? ` of ${task.approval.approver_role_name}` : ""
+                    }${task.approval.required_approvals != null ? ` · ${task.approval.required_approvals} approval(s) required` : ""}`
+                  : "Approval step"}
+              </CardDescription>
+            </div>
+            <Badge variant={taskStatusBadgeVariant(task.status)} className="w-fit shrink-0">
+              {task.status}
+            </Badge>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {renderApprovalDecisionEditor("max-w-none")}
+          </CardContent>
+        </Card>
       ) : null}
 
       {loading ? (
@@ -834,37 +915,9 @@ export function MyTaskDetailPage() {
               <CardContent className="pt-0">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-end sm:gap-6">
                   <div className="flex w-full min-w-0 max-w-2xl flex-col gap-2 sm:ml-auto sm:items-stretch">
-                    {task.status === "pending" ? (
+                    {approvalStepNeedsDecision ? (
                       <>
-                        <textarea
-                          className={cn(
-                            "min-h-[64px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40",
-                          )}
-                          value={actionComment}
-                          onChange={(e) => setActionComment(e.target.value)}
-                          rows={2}
-                          placeholder="Optional note for the approver record…"
-                          disabled={acting}
-                        />
-                        <div className="flex flex-wrap justify-end gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => void approveOrReject("reject")}
-                            disabled={acting || !canApprovalAct}
-                          >
-                            Reject
-                          </Button>
-                          <Button type="button" size="sm" variant="default" onClick={() => void approveOrReject("approve")} disabled={acting || !canApprovalAct}>
-                            Approve
-                          </Button>
-                        </div>
-                        {!canApprovalAct ? (
-                          <p className="text-right text-xs text-muted-foreground">
-                            Needs <span className="font-mono">approval.act</span> on your role.
-                          </p>
-                        ) : null}
+                        {renderApprovalDecisionEditor("sm:ml-auto sm:items-stretch")}
                       </>
                     ) : (
                       <p className="text-xs text-muted-foreground sm:text-right">No further actions on this step.</p>
@@ -953,4 +1006,3 @@ export function MyTaskDetailPage() {
     </div>
   )
 }
-

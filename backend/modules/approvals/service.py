@@ -801,12 +801,25 @@ class ApprovalEngineService:
                     comment=comment,
                 )
             if req.entity_type == "invoice_exception_approval":
-                from modules.invoices.service import InvoiceService
+                from modules.invoices.models import Invoice
+                from modules.invoices import audit as invoice_audit
 
-                invoice = InvoiceService(self._db).get(int(req.entity_id))
-                invoice.status = "rejected"
-                invoice.rejected_by = rejector_user_id
-                invoice.rejected_at = _now_utc()
+                invoice = self._db.get(Invoice, int(req.entity_id))
+                if invoice is not None:
+                    invoice.status = "rejected"
+                    invoice.rejected_by = rejector_user_id
+                    invoice.rejected_at = _now_utc()
+                    invoice_audit.write_audit(
+                        self._db,
+                        invoice_id=int(invoice.id),
+                        action=invoice_audit.ACTION_REJECTED,
+                        actor_user_id=rejector_user_id,
+                        new_value={"status": "rejected"},
+                        metadata={
+                            "approval_request_id": int(req.id),
+                            "comment": comment or None,
+                        },
+                    )
         except Exception:
             # Rejection must not be blocked by an entity-specific failure;
             # the rework path still creates the rework task so the requester is notified.
@@ -989,8 +1002,8 @@ class ApprovalEngineService:
             return
 
         if req.entity_type == "invoice_exception_approval":
-            # For now we only mark invoice as approved for exceptions.
-            from modules.invoices.service import InvoiceService
+            from modules.invoices.models import Invoice
+            from modules.invoices import audit as invoice_audit
 
             approver_user_id: int | None = None
             try:
@@ -1009,10 +1022,18 @@ class ApprovalEngineService:
                 approver_user_id = None
 
             # Minimal finalize: mark approved; payment lifecycle comes later.
-            invoice = InvoiceService(self._db).get(int(req.entity_id))
-            invoice.status = "approved"
-            invoice.validation_status = "pass"
-            invoice.approved_by = approver_user_id
-            invoice.approved_at = _now_utc()
+            invoice = self._db.get(Invoice, int(req.entity_id))
+            if invoice is not None:
+                invoice.status = "approved"
+                invoice.validation_status = "pass"
+                invoice.approved_by = approver_user_id
+                invoice.approved_at = _now_utc()
+                invoice_audit.write_audit(
+                    self._db,
+                    invoice_id=int(invoice.id),
+                    action=invoice_audit.ACTION_APPROVED,
+                    actor_user_id=approver_user_id,
+                    new_value={"status": "approved", "validation_status": "pass"},
+                    metadata={"approval_request_id": int(req.id)},
+                )
             return
-

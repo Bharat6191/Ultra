@@ -258,7 +258,8 @@ def _pending_approval_task_for_entity(db: Session, *, entity_type: str, entity_i
 def _ensure_invoice_exception_workflow(
     db: Session,
     *,
-    approver_role: Role,
+    approver_role_l1: Role,
+    approver_role_l2: Role | None,
     creator_user_id: int | None,
 ) -> ApprovalWorkflow:
     canonical = resolve_registered_action_code(db, ACTION_CODE_EXCEPTION_APPROVE) or ACTION_CODE_EXCEPTION_APPROVE
@@ -286,10 +287,20 @@ def _ensure_invoice_exception_workflow(
         ApprovalStep(
             workflow_id=int(wf.id),
             step_order=1,
-            approver_role_id=int(approver_role.id),
+            approver_role_id=int(approver_role_l1.id),
             required_approvals=1,
         )
     )
+    if approver_role_l2 is not None:
+        db.add(
+            ApprovalStep(
+                workflow_id=int(wf.id),
+                step_order=2,
+                approver_role_id=int(approver_role_l2.id),
+                required_approvals=1,
+            )
+        )
+    db.flush()
     db.flush()
 
     mappings = list(
@@ -311,6 +322,31 @@ def _ensure_invoice_exception_workflow(
     db.commit()
     db.refresh(wf)
     return wf
+
+
+def _approve_all_invoice_exception_steps(
+    db: Session,
+    *,
+    invoice_id: int,
+    role_actor_ids: dict[int, int],
+    fallback_actor_id: int,
+) -> Invoice:
+    engine = ApprovalEngineService(db)
+    inv_svc = InvoiceService(db)
+    while True:
+        task = _pending_approval_task_for_entity(
+            db, entity_type=APPROVAL_ENTITY_TYPE, entity_id=int(invoice_id)
+        )
+        if task is None:
+            break
+        actor_id = role_actor_ids.get(int(task.assigned_role_id or 0), int(fallback_actor_id))
+        engine.act_on_task(
+            task_id=int(task.id),
+            actor_user_id=int(actor_id),
+            action="approve",
+            comment=f"[{PREFIX}] seeded finance approval",
+        )
+    return inv_svc.get(int(invoice_id))
 
 
 def _create_minimal_work_order(
@@ -723,7 +759,9 @@ def _create_blocked_invoice(
     )
     if existing is not None:
         current = inv_svc.get(int(existing.id))
-        if str(current.validation_status) == "blocked":
+        if current.approval_request_id is not None:
+            _delete_invoice_scenario(db, int(current.id))
+        elif str(current.validation_status) == "blocked":
             if str(current.status) != "blocked":
                 current.status = "blocked"
                 db.commit()
@@ -864,12 +902,17 @@ def _ensure_invoice_matrix(
     wo_role_l1: Role,
     wo_role_l2: Role | None,
     invoice_actor: User,
-    finance_approver: User,
-    finance_role: Role,
+    finance_approver_l1: User,
+    finance_approver_l2: User | None,
+    finance_role_l1: Role,
+    finance_role_l2: Role | None,
 ) -> dict[str, Invoice]:
     inv_svc = InvoiceService(db)
     engine = ApprovalEngineService(db)
     scenarios: dict[str, Invoice] = {}
+    finance_role_actor_ids = {int(finance_role_l1.id): int(finance_approver_l1.id)}
+    if finance_role_l2 is not None and finance_approver_l2 is not None:
+        finance_role_actor_ids[int(finance_role_l2.id)] = int(finance_approver_l2.id)
 
     wo_by_key = {
         "draft": _ensure_invoice_ready_work_order(
@@ -1068,22 +1111,12 @@ def _ensure_invoice_matrix(
             int(approved_ex.id), actor_user_id=int(invoice_actor.id)
         )
     if approved_ex.approval_request_id is not None and str(approved_ex.status) != "approved":
-        if str(approved_ex.status) != "pending_exception_approval":
-            approved_ex.status = "pending_exception_approval"
-            db.commit()
-            approved_ex = inv_svc.get(int(approved_ex.id))
-        task = _pending_approval_task_for_entity(
+        approved_ex = _approve_all_invoice_exception_steps(
             db,
-            entity_type=APPROVAL_ENTITY_TYPE,
-            entity_id=int(approved_ex.id),
+            invoice_id=int(approved_ex.id),
+            role_actor_ids=finance_role_actor_ids,
+            fallback_actor_id=int(finance_approver_l1.id),
         )
-        if task is not None:
-            engine.act_on_task(
-                task_id=int(task.id),
-                actor_user_id=int(finance_approver.id),
-                action="approve",
-                comment=f"[{PREFIX}] seeded exception approval",
-            )
     scenarios["approved_exception"] = inv_svc.get(int(approved_ex.id))
 
     rejected_ex = _create_blocked_invoice(
@@ -1102,21 +1135,33 @@ def _ensure_invoice_matrix(
             int(rejected_ex.id), actor_user_id=int(invoice_actor.id)
         )
     if rejected_ex.approval_request_id is not None and str(rejected_ex.status) != "rejected":
-        if str(rejected_ex.status) != "pending_exception_approval":
-            rejected_ex.status = "pending_exception_approval"
-            db.commit()
-            rejected_ex = inv_svc.get(int(rejected_ex.id))
-        task = _pending_approval_task_for_entity(
-            db,
-            entity_type=APPROVAL_ENTITY_TYPE,
-            entity_id=int(rejected_ex.id),
+        first_task = _pending_approval_task_for_entity(
+            db, entity_type=APPROVAL_ENTITY_TYPE, entity_id=int(rejected_ex.id)
         )
-        if task is not None:
+        if first_task is not None:
+            first_actor = finance_role_actor_ids.get(
+                int(first_task.assigned_role_id or 0),
+                int(finance_approver_l1.id),
+            )
             engine.act_on_task(
-                task_id=int(task.id),
-                actor_user_id=int(finance_approver.id),
+                task_id=int(first_task.id),
+                actor_user_id=int(first_actor),
+                action="approve",
+                comment=f"[{PREFIX}] seeded L1 exception approval",
+            )
+        second_task = _pending_approval_task_for_entity(
+            db, entity_type=APPROVAL_ENTITY_TYPE, entity_id=int(rejected_ex.id)
+        )
+        if second_task is not None:
+            second_actor = finance_role_actor_ids.get(
+                int(second_task.assigned_role_id or 0),
+                int(finance_approver_l2.id if finance_approver_l2 is not None else finance_approver_l1.id),
+            )
+            engine.act_on_task(
+                task_id=int(second_task.id),
+                actor_user_id=int(second_actor),
                 action="reject",
-                comment=f"[{PREFIX}] seeded exception rejection",
+                comment=f"[{PREFIX}] seeded L2 exception rejection",
             )
     scenarios["rejected_exception"] = inv_svc.get(int(rejected_ex.id))
 
@@ -1134,28 +1179,18 @@ def _ensure_invoice_matrix(
             int(paid.id), actor_user_id=int(invoice_actor.id)
         )
     if paid.approval_request_id is not None and str(paid.status) not in {"approved", "paid"}:
-        if str(paid.status) != "pending_exception_approval":
-            paid.status = "pending_exception_approval"
-            db.commit()
-            paid = inv_svc.get(int(paid.id))
-        task = _pending_approval_task_for_entity(
+        paid = _approve_all_invoice_exception_steps(
             db,
-            entity_type=APPROVAL_ENTITY_TYPE,
-            entity_id=int(paid.id),
+            invoice_id=int(paid.id),
+            role_actor_ids=finance_role_actor_ids,
+            fallback_actor_id=int(finance_approver_l1.id),
         )
-        if task is not None:
-            engine.act_on_task(
-                task_id=int(task.id),
-                actor_user_id=int(finance_approver.id),
-                action="approve",
-                comment=f"[{PREFIX}] seeded payment-ready approval",
-            )
     paid = _mark_invoice_status(
         db,
         inv_svc,
         invoice=inv_svc.get(int(paid.id)),
         status="paid",
-        actor_user_id=int(finance_approver.id),
+        actor_user_id=int(finance_approver_l2.id if finance_approver_l2 is not None else finance_approver_l1.id),
         action="PAID",
     )
     scenarios["paid"] = paid
@@ -1217,11 +1252,13 @@ def main() -> int:
         wo_approver_l1 = _pick_user(db, "wo_approver1", "ops_approver", "rate_approver")
         wo_approver_l2 = _user_by_username(db, "wo_approver2")
         invoice_actor = _pick_user(db, "fin_user", "super_demo", "negotiator")
-        finance_approver = _pick_user(db, "fin_approver", "rate_approver", "wo_approver1")
+        finance_approver_l1 = _pick_user(db, "fin_approver1", "fin_approver", "super_demo")
+        finance_approver_l2 = _user_by_username(db, "fin_approver2")
 
         wo_role_l1 = _pick_role(db, "Work Order Approver (L1)", "Ops Approver")
         wo_role_l2 = _role_by_name(db, "Work Order Approver (L2)")
-        finance_role = _pick_role(db, "Finance Approver", "Procurement Approver")
+        finance_role_l1 = _pick_role(db, "Finance Approver (L1)", "Finance Approver", "Procurement Approver")
+        finance_role_l2 = _role_by_name(db, "Finance Approver (L2)")
 
         ensure_work_orders_create_workflow(
             db,
@@ -1230,7 +1267,8 @@ def main() -> int:
         )
         _ensure_invoice_exception_workflow(
             db,
-            approver_role=finance_role,
+            approver_role_l1=finance_role_l1,
+            approver_role_l2=finance_role_l2,
             creator_user_id=int(creator.id),
         )
 
@@ -1256,8 +1294,10 @@ def main() -> int:
             wo_role_l1=wo_role_l1,
             wo_role_l2=wo_role_l2,
             invoice_actor=invoice_actor,
-            finance_approver=finance_approver,
-            finance_role=finance_role,
+            finance_approver_l1=finance_approver_l1,
+            finance_approver_l2=finance_approver_l2,
+            finance_role_l1=finance_role_l1,
+            finance_role_l2=finance_role_l2,
         )
 
         print()
@@ -1295,7 +1335,8 @@ def main() -> int:
         print(f"  WO approver L1   : {wo_approver_l1.username}")
         print(f"  WO approver L2   : {wo_approver_l2.username if wo_approver_l2 else '-'}")
         print(f"  invoice actor    : {invoice_actor.username}")
-        print(f"  finance approver : {finance_approver.username}")
+        print(f"  finance approver L1 : {finance_approver_l1.username}")
+        print(f"  finance approver L2 : {finance_approver_l2.username if finance_approver_l2 else '-'}")
         return 0
     finally:
         db.close()

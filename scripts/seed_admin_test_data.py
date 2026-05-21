@@ -293,8 +293,28 @@ def main() -> int:
                     "approval.act",
                 ],
             },
+            "Finance Approver (L1)": {
+                "description": "Level-1 approver for blocked invoice exceptions.",
+                "perms": [
+                    "invoices.view",
+                    "invoices.validate",
+                    "invoices.approve_exceptions",
+                    "approval.view",
+                    "approval.act",
+                ],
+            },
+            "Finance Approver (L2)": {
+                "description": "Level-2 approver for blocked invoice exceptions.",
+                "perms": [
+                    "invoices.view",
+                    "invoices.validate",
+                    "invoices.approve_exceptions",
+                    "approval.view",
+                    "approval.act",
+                ],
+            },
             "Finance Approver": {
-                "description": "Approves invoice exceptions.",
+                "description": "Legacy single-step invoice exception approver.",
                 "perms": [
                     "invoices.view",
                     "invoices.validate",
@@ -334,7 +354,8 @@ def main() -> int:
             ("ops_user", "ops.user@example.test", "Operations Work Orders", "+15550101006", "Operations Work Orders"),
             ("ops_approver", "ops.approver@example.test", "Ops Approver", "+15550101007", "Ops Approver"),
             ("fin_user", "fin.user@example.test", "Finance Invoice Validator", "+15550101008", "Finance Invoice Validator"),
-            ("fin_approver", "fin.approver@example.test", "Finance Approver", "+15550101009", "Finance Approver"),
+            ("fin_approver", "fin.approver@example.test", "Finance Approver L1", "+15550101009", "Finance Approver (L1)"),
+            ("fin_approver2", "fin.approver2@example.test", "Finance Approver L2", "+15550101010", "Finance Approver (L2)"),
         ]
 
         seeded_users: dict[str, User] = {}
@@ -402,4 +423,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

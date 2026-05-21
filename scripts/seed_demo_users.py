@@ -137,6 +137,26 @@ ROLES: dict[str, dict] = {
             "approval.act",
         ],
     },
+    "Finance Approver (L1)": {
+        "description": "Level-1 approver for blocked invoice exceptions.",
+        "perms": [
+            "invoices.view",
+            "invoices.validate",
+            "invoices.approve_exceptions",
+            "approval.view",
+            "approval.act",
+        ],
+    },
+    "Finance Approver (L2)": {
+        "description": "Level-2 approver for blocked invoice exceptions.",
+        "perms": [
+            "invoices.view",
+            "invoices.validate",
+            "invoices.approve_exceptions",
+            "approval.view",
+            "approval.act",
+        ],
+    },
     "Approval Workflow Manager": {
         "description": "Owns approval workflow definitions + can act on any task.",
         "perms": [
@@ -187,6 +207,8 @@ USERS: list[tuple[str, str, str, str, list[str]]] = [
      ["Procurement Approver", "Work Order Approver (L1)"]),
     ("wo_approver1", "wo.approver1@demo.test", "Owen WO Approver", "+15550200011", ["Work Order Approver (L1)"]),
     ("wo_approver2", "wo.approver2@demo.test", "Olivia WO L2", "+15550200012", ["Work Order Approver (L2)"]),
+    ("fin_approver1", "fin.approver1@demo.test", "Farah Finance L1", "+15550200013", ["Finance Approver (L1)"]),
+    ("fin_approver2", "fin.approver2@demo.test", "Faiz Finance L2", "+15550200014", ["Finance Approver (L2)"]),
     ("wf_manager",    "wf.manager@demo.test",    "Wendy Workflow",    "+15550200007", ["Approval Workflow Manager"]),
     ("task_operator", "task.operator@demo.test", "Tara Tasks",        "+15550200008", ["Task Operator"]),
     ("notif_admin",   "notif.admin@demo.test",   "Nikhil Notify",     "+15550200009", ["Notifications Admin"]),
@@ -194,7 +216,7 @@ USERS: list[tuple[str, str, str, str, list[str]]] = [
     # Stacked persona: a single user holding multiple roles. Lets QA verify
     # OR-style permission guards (e.g. plant pickers gated on any-of).
     ("super_demo",    "super.demo@demo.test",    "Sam Super",         "+15550200099",
-     ["Contractor Manager", "Procurement Negotiator", "Procurement Approver", "Work Order Approver (L1)"]),
+     ["Contractor Manager", "Procurement Negotiator", "Procurement Approver", "Work Order Approver (L1)", "Finance Approver (L1)"]),
 ]
 
 

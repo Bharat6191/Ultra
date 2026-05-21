@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.auth import CurrentUser, get_current_user
-from core.permissions import require_permission
+from core.permissions import _get_cached_permission_snapshot, _has_any_permission, require_permission
 from db.session import get_db
 from modules.approvals.inbox_service import ApprovalInboxService
 from modules.approvals.schema import (
@@ -29,6 +29,33 @@ def get_engine(db: Session = Depends(get_db)) -> ApprovalEngineService:
 
 def get_inbox(db: Session = Depends(get_db)) -> ApprovalInboxService:
     return ApprovalInboxService(db)
+
+
+def require_task_action_permission(
+    task_id: int,
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+) -> CurrentUser:
+    task = db.get(ApprovalTask, task_id)
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    try:
+        user_id = int(current.subject)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token subject",
+        ) from exc
+
+    snapshot = _get_cached_permission_snapshot(db, user_id)
+    allowed_codes = ["approval.act"]
+    if task.request is not None and str(task.request.entity_type) == "invoice_exception_approval":
+        allowed_codes.append("invoices.approve_exceptions")
+
+    if not _has_any_permission(snapshot, allowed_codes):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
+    return current
 
 
 @router.get("/my-tasks", response_model=list[MyApprovalTaskItem])
@@ -106,9 +133,8 @@ def get_request_status(
 def act_on_task(
     task_id: int,
     payload: ApprovalTaskActionRequest,
-    current: Annotated[CurrentUser, Depends(get_current_user)],
+    current: Annotated[CurrentUser, Depends(require_task_action_permission)],
     svc: Annotated[ApprovalEngineService, Depends(get_engine)],
-    _: Annotated[object, Depends(require_permission("approval.act"))],
 ) -> ApprovalRequestPublic:
     try:
         return svc.act_on_task(

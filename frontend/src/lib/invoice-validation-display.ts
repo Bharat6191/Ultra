@@ -14,16 +14,16 @@ export function invoiceValidationDisplay(row: {
   return null
 }
 
-export type InvoiceDisplayStatus = "draft" | "pass" | "blocked" | "pending_approval"
+export type InvoiceDisplayStatus = "draft" | "pass" | "blocked" | "rejected"
 
-/** Single status for list/detail: Draft, Pass, Blocked, Pending for approval. */
+/** Single status for list/detail: Draft, Pass, Blocked, Rejected. */
 export function invoiceDisplayStatus(row: {
   status?: string | null
   validation_status?: string | null
 }): InvoiceDisplayStatus {
   const st = String(row.status ?? "").toLowerCase()
-  if (st === "draft" || st === "rejected") return "draft"
-  if (st === "pending_exception_approval") return "pending_approval"
+  if (st === "rejected") return "rejected"
+  if (st === "draft") return "draft"
   if (st === "approved" || st === "paid") return "pass"
   const v = invoiceValidationDisplay(row)
   if (v === "pass") return "pass"
@@ -40,14 +40,14 @@ export function invoiceDisplayStatusLabel(status: InvoiceDisplayStatus): string 
       return "Pass"
     case "blocked":
       return "Blocked"
-    case "pending_approval":
-      return "Pending for approval"
+    case "rejected":
+      return "Rejected"
   }
 }
 
 export function invoiceDisplayStatusBadgeVariant(
   status: InvoiceDisplayStatus,
-): "secondary" | "success" | "destructive" | "warning" {
+): "secondary" | "success" | "destructive" {
   switch (status) {
     case "draft":
       return "secondary"
@@ -55,8 +55,8 @@ export function invoiceDisplayStatusBadgeVariant(
       return "success"
     case "blocked":
       return "destructive"
-    case "pending_approval":
-      return "warning"
+    case "rejected":
+      return "destructive"
   }
 }
 

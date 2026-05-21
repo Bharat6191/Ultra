@@ -135,8 +135,10 @@ export function InvoiceDetailPage() {
       )
       if (inv.validation_status === "pass" || inv.validation_status === "warn") {
         toast.success(`Submitted — validation ${inv.validation_status}`)
+      } else if (inv.status === "pending_exception_approval") {
+        toast.warning("Submitted and blocked — finance approval tasks created")
       } else if (inv.status === "blocked" || inv.validation_status === "blocked") {
-        toast.warning("Submitted but blocked — request approval or adjust amounts")
+        toast.warning("Submitted but blocked — adjust amounts or complete approval setup")
       } else {
         toast.success("Submitted")
       }
@@ -478,4 +480,3 @@ export function InvoiceDetailPage() {
 }
 
 export default InvoiceDetailPage
-

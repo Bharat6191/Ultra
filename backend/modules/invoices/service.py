@@ -34,7 +34,6 @@ from modules.invoices.validation import (
     prior_invoiced_ex_vat_for_work_order_item,
     prior_passed_invoiced_ex_vat_for_work_order,
     prior_passed_invoiced_ex_vat_for_work_order_item,
-    raise_if_new_invoice_breaches_work_order_caps,
     work_order_ex_vat_cap,
 )
 from modules.invoices.wo_invoice_policy import (
@@ -321,11 +320,63 @@ class InvoiceService:
         auto_approve_when_clean: bool,
     ) -> None:
         del actor_user_id, auto_approve_when_clean
-        if result.status == "blocked":
+        if result.status in {"blocked", "fail"}:
             inv.status = "blocked"
         else:
             # No invoice approval workflow — validation pass keeps status submitted.
             inv.status = "submitted"
+
+    def _create_exception_approval_request(
+        self,
+        inv: Invoice,
+        *,
+        actor_user_id: int,
+        require_package_ready: bool,
+        auto_created: bool,
+    ) -> bool:
+        if inv.validation_status not in ("blocked", "fail"):
+            return False
+        if inv.approval_request_id is not None:
+            return False
+        if require_package_ready:
+            ready, errs = self._exception_package_ready(inv)
+            if not ready:
+                raise ConflictError("; ".join(errs))
+
+        wf = get_workflow_for_action(self._db, ACTION_CODE_EXCEPTION_APPROVE)
+        if wf is None:
+            if require_package_ready:
+                raise ConflictError(
+                    "No workflow is configured for invoices.approve_exceptions. Add a workflow before requesting variance approval."
+                )
+            return False
+
+        req = ApprovalEngineService(self._db).create_request_for_entity(
+            workflow=wf,
+            entity_type=APPROVAL_ENTITY_TYPE,
+            entity_id=int(inv.id),
+            payload={
+                "action_code": ACTION_CODE_EXCEPTION_APPROVE,
+                "invoice_id": int(inv.id),
+                "invoice_number": inv.invoice_number,
+                "contractor_id": int(inv.contractor_id),
+                "org_unit_id": int(inv.org_unit_id),
+                "validation_status": inv.validation_status,
+                "validation_score": str(inv.validation_score or ""),
+            },
+            created_by=actor_user_id,
+        )
+        inv.status = "pending_exception_approval"
+        inv.approval_request_id = int(req.id)
+        audit_helpers.write_audit(
+            self._db,
+            invoice_id=int(inv.id),
+            action=audit_helpers.ACTION_EXCEPTION_APPROVAL_REQUESTED,
+            actor_user_id=actor_user_id,
+            new_value={"status": "pending_exception_approval"},
+            metadata={"approval_request_id": int(req.id), "auto": auto_created},
+        )
+        return True
 
     def _auto_submit_and_validate(self, inv: Invoice, *, actor_user_id: int) -> None:
         """Submit + validate on create when amounts fit within pending WO / line budgets."""
@@ -345,6 +396,20 @@ class InvoiceService:
         self._apply_validation_outcome(
             inv, result, actor_user_id=actor_user_id, auto_approve_when_clean=True
         )
+        if inv.status == "blocked":
+            audit_helpers.write_audit(
+                self._db,
+                invoice_id=int(inv.id),
+                action=audit_helpers.ACTION_BLOCKED,
+                actor_user_id=actor_user_id,
+                new_value={"status": "blocked", "validation_engine_status": result.status, "auto": True},
+            )
+            self._create_exception_approval_request(
+                inv,
+                actor_user_id=actor_user_id,
+                require_package_ready=False,
+                auto_created=True,
+            )
 
         audit_helpers.write_audit(
             self._db,
@@ -370,22 +435,12 @@ class InvoiceService:
         if not (inv.lines or []):
             raise ConflictError("Add at least one line before submitting.")
 
-        cap_checks: list[tuple[int, Decimal]] = []
         work_order_ids: set[int] = set()
         for ln in inv.lines or []:
-            cap_checks.append((int(ln.work_order_item_id), _q2(_dec(ln.amount))))
             item = self._db.get(WorkOrderItem, int(ln.work_order_item_id))
             if item is not None:
                 work_order_ids.add(int(item.work_order_id))
         assert_single_work_order_for_invoice(work_order_ids=work_order_ids)
-        wo_id = next(iter(work_order_ids))
-        wo_extra: dict[int, Decimal] = {int(wo_id): _q2(_dec(inv.extra_amount_ex_vat or 0))}
-        raise_if_new_invoice_breaches_work_order_caps(
-            self._db,
-            exclude_invoice_id=int(inv.id),
-            item_amounts=cap_checks,
-            wo_extra_ex_vat=dict(wo_extra),
-        )
 
         inv.status = "submitted"
         inv.submitted_by = actor_user_id
@@ -403,6 +458,20 @@ class InvoiceService:
         self._apply_validation_outcome(
             inv, result, actor_user_id=actor_user_id, auto_approve_when_clean=False
         )
+        if inv.status == "blocked":
+            audit_helpers.write_audit(
+                self._db,
+                invoice_id=int(inv.id),
+                action=audit_helpers.ACTION_BLOCKED,
+                actor_user_id=actor_user_id,
+                new_value={"status": "blocked", "validation_engine_status": result.status},
+            )
+            self._create_exception_approval_request(
+                inv,
+                actor_user_id=actor_user_id,
+                require_package_ready=False,
+                auto_created=True,
+            )
         audit_helpers.write_audit(
             self._db,
             invoice_id=int(inv.id),
@@ -437,6 +506,20 @@ class InvoiceService:
             actor_user_id=actor_user_id,
             auto_approve_when_clean=within_pending,
         )
+        if inv.status == "blocked":
+            audit_helpers.write_audit(
+                self._db,
+                invoice_id=int(inv.id),
+                action=audit_helpers.ACTION_BLOCKED,
+                actor_user_id=actor_user_id,
+                new_value={"status": "blocked", "validation_engine_status": result.status},
+            )
+            self._create_exception_approval_request(
+                inv,
+                actor_user_id=actor_user_id,
+                require_package_ready=False,
+                auto_created=True,
+            )
 
         audit_helpers.write_audit(
             self._db,
@@ -466,39 +549,11 @@ class InvoiceService:
         if inv.approval_request_id is not None:
             raise ConflictError("This invoice already has an approval request attached.")
 
-        ready, errs = self._exception_package_ready(inv)
-        if not ready:
-            raise ConflictError("; ".join(errs))
-
-        wf = get_workflow_for_action(self._db, ACTION_CODE_EXCEPTION_APPROVE)
-        if wf is None:
-            raise ConflictError(
-                "No workflow is configured for invoices.approve_exceptions. Add a workflow before requesting variance approval."
-            )
-        req = ApprovalEngineService(self._db).create_request_for_entity(
-            workflow=wf,
-            entity_type=APPROVAL_ENTITY_TYPE,
-            entity_id=int(inv.id),
-            payload={
-                "action_code": ACTION_CODE_EXCEPTION_APPROVE,
-                "invoice_id": int(inv.id),
-                "invoice_number": inv.invoice_number,
-                "contractor_id": int(inv.contractor_id),
-                "org_unit_id": int(inv.org_unit_id),
-                "validation_status": inv.validation_status,
-                "validation_score": str(inv.validation_score or ""),
-            },
-            created_by=actor_user_id,
-        )
-        inv.status = "pending_exception_approval"
-        inv.approval_request_id = int(req.id)
-        audit_helpers.write_audit(
-            self._db,
-            invoice_id=int(inv.id),
-            action=audit_helpers.ACTION_EXCEPTION_APPROVAL_REQUESTED,
+        self._create_exception_approval_request(
+            inv,
             actor_user_id=actor_user_id,
-            new_value={"status": "pending_exception_approval"},
-            metadata={"approval_request_id": int(req.id)},
+            require_package_ready=True,
+            auto_created=False,
         )
         self._recompute_contractor_compliance(contractor_id=int(inv.contractor_id))
         self._db.commit()
