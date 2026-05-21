@@ -150,7 +150,6 @@ function FallbackSummary({ payload }: { payload: Record<string, unknown> }) {
     { label: "Plant", value: payloadString(payload, "org_unit_name") ?? payloadNumber(payload, "org_unit_id") },
     { label: "Work order", value: payloadString(payload, "work_order_number") },
     { label: "Validation status", value: payloadString(payload, "validation_status") },
-    { label: "Validation score", value: payloadNumber(payload, "validation_score") },
   ].filter((row) => row.value)
 
   if (fallbackRows.length === 0) {
@@ -307,10 +306,9 @@ export function InvoiceExceptionApprovalReview({
               <div className="mt-1 text-sm font-semibold">{formatMoney(row.total_amount)}</div>
             </div>
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Validation score</div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Attachments</div>
               <div className="mt-1 text-sm font-medium">
-                {row.validation_score != null ? String(row.validation_score) : "—"}
-                {row.attachments?.length ? ` · ${row.attachments.length} attachment(s)` : ""}
+                {row.attachments?.length ? `${row.attachments.length} attachment(s)` : "—"}
               </div>
             </div>
           </CardContent>
