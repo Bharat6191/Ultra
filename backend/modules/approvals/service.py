@@ -346,7 +346,14 @@ class ApprovalEngineService:
             raise NotFoundError("ApprovalTask", task_id)
         return task
 
-    def resubmit_rejected_request(self, *, request_id: int, actor_user_id: int) -> tuple[ApprovalRequest, int]:
+    def resubmit_rejected_request(
+        self,
+        *,
+        request_id: int,
+        actor_user_id: int,
+        payload: dict | None = None,
+        allow_pending: bool = False,
+    ) -> tuple[ApprovalRequest, int]:
         """
         After a reject, the submitter may edit the underlying entity and send the same approval
         request back through the workflow. Old tasks for this request are removed; step 1 restarts
@@ -359,7 +366,10 @@ class ApprovalEngineService:
         )
         if req is None:
             raise NotFoundError("ApprovalRequest", request_id)
-        if str(req.status) not in ("rejected", "in_rework"):
+        allowed_statuses = {"rejected", "in_rework"}
+        if allow_pending:
+            allowed_statuses.add("pending")
+        if str(req.status) not in allowed_statuses:
             raise ApprovalError("Only a rejected request can be resubmitted for approval.")
 
         actor = self._db.get(User, actor_user_id)
@@ -368,28 +378,28 @@ class ApprovalEngineService:
         if req.created_by != actor_user_id and not bool(actor.is_superuser):
             raise ApprovalError("Only the person who submitted this request can resubmit it.")
 
-        if str(req.entity_type) != "user_creation":
-            raise ApprovalError("Resubmit is only implemented for user-creation approvals.")
+        if payload is not None:
+            req.payload = payload
+        elif str(req.entity_type) == "user_creation":
+            user = self._db.scalar(
+                select(User)
+                .where(User.id == int(req.entity_id))
+                .options(selectinload(User.roles), selectinload(User.org_units))
+            )
+            if user is None:
+                raise NotFoundError("User", int(req.entity_id))
 
-        user = self._db.scalar(
-            select(User)
-            .where(User.id == int(req.entity_id))
-            .options(selectinload(User.roles), selectinload(User.org_units))
-        )
-        if user is None:
-            raise NotFoundError("User", int(req.entity_id))
+            # Preserve original temporary password across resubmits so the final "USER_CREATED"
+            # email can still include the initial credential if the template requires it.
+            prev_temp_password: str | None = None
+            if isinstance(req.payload, dict):
+                raw_prev = req.payload.get("temp_password")
+                if isinstance(raw_prev, str) and raw_prev.strip():
+                    prev_temp_password = raw_prev
 
-        # Preserve original temporary password across resubmits so the final "USER_CREATED"
-        # email can still include the initial credential if the template requires it.
-        prev_temp_password: str | None = None
-        if isinstance(req.payload, dict):
-            raw_prev = req.payload.get("temp_password")
-            if isinstance(raw_prev, str) and raw_prev.strip():
-                prev_temp_password = raw_prev
-
-        req.payload = self._build_user_creation_payload(user)
-        if prev_temp_password and isinstance(req.payload, dict) and not req.payload.get("temp_password"):
-            req.payload["temp_password"] = prev_temp_password
+            req.payload = self._build_user_creation_payload(user)
+            if prev_temp_password and isinstance(req.payload, dict) and not req.payload.get("temp_password"):
+                req.payload["temp_password"] = prev_temp_password
 
         now = _now_utc()
         # Close any existing open rework tasks (and log resubmitted on them).

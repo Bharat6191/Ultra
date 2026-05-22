@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -13,12 +13,14 @@ from modules.approvals.assignment_service import WorkflowMappingService, resolve
 from modules.approvals.model import ApprovalRequest, ApprovalTask
 from modules.approvals.service import ApprovalEngineService, ApprovalWorkflowService
 from modules.contractor.models import Contractor
+from modules.contractor_rates.models import ContractorRate
 from modules.features.model import Feature
 from modules.part_master.models import PartMaster
 from modules.org_units.model import OrgUnit
 from modules.permissions.model import Permission
 from modules.roles.model import Role
 from modules.users.model import User
+from modules.work_orders.models import WorkOrder
 from modules.work_orders.schema import (
     WorkOrderCreate,
     WorkOrderDraftUpdate,
@@ -268,6 +270,206 @@ def test_work_order_draft_update_replaces_lines(db):
     assert updated.description == "ref2"
     assert len(updated.items) == 2
     assert updated.items[0].notes == "note a"
+
+
+def test_rejected_work_order_reprices_from_current_date_on_resubmit(db):
+    actor = _first_user(db)
+    org = _first_plant(db)
+    pm = _first_part_master_for_org(db, int(org.id))
+
+    contractor = Contractor(
+        contractor_code=f"WO-REPRICE-{uuid.uuid4().hex[:8]}",
+        name="WO Reprice Contractor",
+        status="active",
+        is_active=True,
+        created_by=actor,
+    )
+    db.add(contractor)
+    db.commit()
+    db.refresh(contractor)
+
+    yesterday = date.today() - timedelta(days=1)
+    old_rate = ContractorRate(
+        contractor_id=int(contractor.id),
+        part_master_id=int(pm.id),
+        negotiated_rate=Decimal("100.00"),
+        initial_rate=Decimal("100.00"),
+        previous_rate=None,
+        savings_amount=Decimal("0.00"),
+        savings_percentage=Decimal("0.00"),
+        effective_from=yesterday,
+        effective_to=None,
+        status="approved",
+        current_round=1,
+        approved_by=actor,
+        approved_at=datetime.combine(yesterday, datetime.min.time(), tzinfo=timezone.utc),
+        created_by=actor,
+    )
+    db.add(old_rate)
+    db.commit()
+    db.refresh(old_rate)
+
+    svc = WorkOrderService(db)
+    wo = svc.create(
+        WorkOrderCreate(
+            org_unit_id=int(org.id),
+            contractor_id=int(contractor.id),
+            title="Rejected WO repricing",
+            description="should pick latest approved rate on resubmit",
+            items=[
+                WorkOrderItemCreate(
+                    part_master_id=int(pm.id),
+                    progress_type="quantity",
+                    planned_quantity=Decimal("10"),
+                    planned_percentage=None,
+                    weight_per_piece=Decimal("1"),
+                    notes=None,
+                )
+            ],
+        ),
+        actor_user_id=actor,
+    )
+    assert Decimal(str(wo.items[0].resolved_rate)) == Decimal("100.00")
+
+    wo_model = db.get(WorkOrder, int(wo.id))
+    assert wo_model is not None
+    wo_model.created_at = datetime.combine(yesterday, datetime.min.time(), tzinfo=timezone.utc)
+    db.commit()
+
+    wo = svc.submit_for_approval(int(wo.id), actor_user_id=actor)
+    if str(wo.status) == "pending_approval":
+        wo = svc.finalize_rejection(
+            int(wo.id),
+            rejector_user_id=actor,
+            approval_request_id=wo.approval_request_id,
+            comment="adjust quantity",
+        )
+    else:
+        wo_model = db.get(WorkOrder, int(wo.id))
+        assert wo_model is not None
+        wo_model.status = "rejected"
+        db.commit()
+        wo = svc.get(int(wo.id))
+    assert str(wo.status) == "rejected"
+
+    new_rate = ContractorRate(
+        contractor_id=int(contractor.id),
+        part_master_id=int(pm.id),
+        negotiated_rate=Decimal("145.00"),
+        initial_rate=Decimal("145.00"),
+        previous_rate=Decimal("100.00"),
+        savings_amount=Decimal("0.00"),
+        savings_percentage=Decimal("0.00"),
+        effective_from=date.today(),
+        effective_to=None,
+        status="approved",
+        current_round=2,
+        approved_by=actor,
+        approved_at=datetime.combine(date.today(), datetime.min.time(), tzinfo=timezone.utc),
+        created_by=actor,
+    )
+    db.add(new_rate)
+    db.commit()
+    db.refresh(new_rate)
+
+    updated = svc.update_draft(
+        int(wo.id),
+        WorkOrderDraftUpdate(
+            items=[
+                WorkOrderItemCreate(
+                    part_master_id=int(pm.id),
+                    progress_type="quantity",
+                    planned_quantity=Decimal("12"),
+                    planned_percentage=None,
+                    weight_per_piece=Decimal("1"),
+                    notes="resubmitted quantity",
+                )
+            ],
+        ),
+        actor_user_id=actor,
+    )
+    assert Decimal(str(updated.items[0].resolved_rate)) == Decimal("145.00")
+    assert updated.items[0].contractor_rate_id == int(new_rate.id)
+
+    resubmitted = svc.submit_for_approval(int(updated.id), actor_user_id=actor)
+    assert Decimal(str(resubmitted.items[0].resolved_rate)) == Decimal("145.00")
+
+
+def test_rejected_work_order_resubmit_reuses_existing_pending_request(db):
+    actor = _first_user(db)
+    org = _first_plant(db)
+    contractor = _first_contractor(db)
+    pm = _first_part_master_for_org(db, int(org.id))
+
+    svc = WorkOrderService(db)
+    wo = svc.create(
+        WorkOrderCreate(
+            org_unit_id=int(org.id),
+            contractor_id=int(contractor.id),
+            title="Rejected WO resubmit",
+            description="stale request should be restarted, not duplicated",
+            items=[
+                WorkOrderItemCreate(
+                    part_master_id=int(pm.id),
+                    progress_type="quantity",
+                    planned_quantity=Decimal("10"),
+                    planned_percentage=None,
+                    weight_per_piece=Decimal("1"),
+                    notes=None,
+                )
+            ],
+        ),
+        actor_user_id=actor,
+    )
+    first_submit = svc.submit_for_approval(int(wo.id), actor_user_id=actor)
+    if str(first_submit.status) != "pending_approval":
+        pytest.skip("No work-order approval workflow configured in DB")
+    first_request_id = int(first_submit.approval_request_id or 0)
+    assert first_request_id > 0
+
+    wo_model = db.get(WorkOrder, int(wo.id))
+    assert wo_model is not None
+    wo_model.status = "rejected"
+    wo_model.rejected_by = actor
+    db.commit()
+
+    updated = svc.update_draft(
+        int(wo.id),
+        WorkOrderDraftUpdate(
+            items=[
+                WorkOrderItemCreate(
+                    part_master_id=int(pm.id),
+                    progress_type="quantity",
+                    planned_quantity=Decimal("12"),
+                    planned_percentage=None,
+                    weight_per_piece=Decimal("1"),
+                    notes="retry after rejection",
+                )
+            ],
+        ),
+        actor_user_id=actor,
+    )
+    resubmitted = svc.submit_for_approval(int(updated.id), actor_user_id=actor)
+    assert str(resubmitted.status) == "pending_approval"
+    assert int(resubmitted.approval_request_id or 0) == first_request_id
+
+    pending_requests = db.scalars(
+        select(ApprovalRequest).where(
+            ApprovalRequest.entity_type == "work_order_approval",
+            ApprovalRequest.entity_id == int(wo.id),
+            ApprovalRequest.status == "pending",
+        )
+    ).all()
+    assert len(pending_requests) == 1
+
+    pending_tasks = db.scalars(
+        select(ApprovalTask).where(
+            ApprovalTask.request_id == first_request_id,
+            ApprovalTask.task_type == "approval",
+            ApprovalTask.status == "pending",
+        )
+    ).all()
+    assert len(pending_tasks) == 1
 
 
 def test_second_invoice_blocked_when_exceeding_work_order_total(db):

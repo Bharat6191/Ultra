@@ -48,11 +48,21 @@ def _now_utc() -> datetime:
 
 
 def _pricing_date_for(wo: WorkOrder) -> date:
-    """Negotiated-rate lookup date: anchored to work order creation (not a separate work date)."""
-    ts = wo.created_at
-    if ts is None:
+    """Pricing anchor for negotiated-rate lookup.
+
+    Draft / rejected work orders should resolve against today's commercial rate so edits and
+    resubmissions pick up the latest approved negotiation. Once a work order is approved and
+    operational, freeze the anchor to its approval date (or creation date as a legacy fallback).
+    """
+    status = str(getattr(wo, "status", "") or "").strip().lower()
+    if status in ("draft", "rejected", "pending_approval"):
         return date.today()
-    return ts.date()
+    if wo.approved_at is not None:
+        return wo.approved_at.date()
+    ts = wo.created_at
+    if ts is not None:
+        return ts.date()
+    return date.today()
 
 
 def _q2(x: Decimal) -> Decimal:
@@ -121,7 +131,7 @@ class WorkOrderService:
     ) -> tuple[Decimal, str, int | None]:
         """Return (rate, source, contractor_rate_id).
 
-        Uses the work order **creation date**: the latest **approved** negotiated rate whose
+        Uses the supplied pricing date: the latest **approved** negotiated rate whose
         ``[effective_from, effective_to]`` window contains that date wins; otherwise the
         active Part Master baseline applies.
         """
@@ -580,8 +590,9 @@ class WorkOrderService:
     def sync_resolved_rates_for_contractor_part(self, *, contractor_id: int, part_master_id: int) -> int:
         """Re-resolve rates on draft/active work orders after a negotiated rate becomes active.
 
-        Uses the same :meth:`_resolve_rate_for` rules as new work order lines (creation date window,
-        then Part Master baseline). Skips lines that already use an **approved** manual override.
+        Uses the same :meth:`_resolve_rate_for` rules as new work order lines (editable drafts use
+        today's commercial date; approved/active rows stay anchored to approval date, then fall back
+        to creation date). Skips lines that already use an **approved** manual override.
 
         Invoice lines inherit ``resolved_rate`` from the work order item, so this keeps WO and
         invoicing aligned with the latest negotiated price for that contractor + part.
@@ -794,6 +805,7 @@ class WorkOrderService:
             raise ConflictError("Only draft/rejected work orders can be submitted for approval.")
         if not list(wo.items or []):
             raise ConflictError("Work order must have at least one line item before submission.")
+        prior_status = str(wo.status)
 
         wf = get_workflow_for_action(self._db, ACTION_CODE_CREATE)
         if wf is None:
@@ -820,14 +832,24 @@ class WorkOrderService:
             self._db.commit()
             return self.get(int(wo.id))
 
+        approval_engine = ApprovalEngineService(self._db)
+        payload = self._approval_payload_snapshot(wo)
         wo.status = "pending_approval"
-        req = ApprovalEngineService(self._db).create_request_for_entity(
-            workflow=wf,
-            entity_type=APPROVAL_ENTITY_TYPE,
-            entity_id=int(wo.id),
-            payload=self._approval_payload_snapshot(wo),
-            created_by=actor_user_id,
-        )
+        if prior_status == "rejected" and wo.approval_request_id is not None:
+            req, _new_task_id = approval_engine.resubmit_rejected_request(
+                request_id=int(wo.approval_request_id),
+                actor_user_id=actor_user_id,
+                payload=payload,
+                allow_pending=True,
+            )
+        else:
+            req = approval_engine.create_request_for_entity(
+                workflow=wf,
+                entity_type=APPROVAL_ENTITY_TYPE,
+                entity_id=int(wo.id),
+                payload=payload,
+                created_by=actor_user_id,
+            )
         wo.approval_request_id = int(req.id)
         audit_helpers.write_audit(
             self._db,
@@ -1250,4 +1272,3 @@ class WorkOrderService:
         self._db.commit()
         self._db.refresh(item)
         return item
-

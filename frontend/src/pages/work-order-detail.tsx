@@ -17,7 +17,7 @@ import {
   formatExecutionQtyDisplay,
   formatExecutionWeightAmount,
   formatWorkOrderDateTime,
-  pricingDateFromCreatedAt,
+  pricingDateForNewWorkOrder,
   newDraftLine,
   WorkOrderExecutionFooter,
   WorkOrderExecutionHeader,
@@ -256,6 +256,29 @@ export function WorkOrderDetailPage() {
 
   async function submit() {
     if (!row) return
+    if (editableDraft) {
+      if (!editTitle.trim()) return toast.error("Title is required.")
+      const built = buildWorkOrderLinesForApi(editContractorId, draftLines, partMasters)
+      if (!built.ok) return toast.error(built.error)
+      setSubmitBusy(true)
+      try {
+        await patchJson(`/work-orders/${row.id}`, {
+          title: editTitle.trim(),
+          description: editReference.trim() || null,
+          org_unit_id: Number(editOrgUnit),
+          contractor_id: built.contractor_id,
+          items: built.items,
+        })
+        await postJson(`/work-orders/${row.id}/submit`, {})
+        toast.success("Submitted for approval")
+        await load()
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.message : "Submit failed")
+      } finally {
+        setSubmitBusy(false)
+      }
+      return
+    }
     setSubmitBusy(true)
     try {
       await postJson(`/work-orders/${row.id}/submit`, {})
@@ -531,7 +554,7 @@ export function WorkOrderDetailPage() {
         onLinesChange={editableDraft ? setDraftLines : () => {}}
         detailRows={editableDraft ? undefined : detailRows}
         contractorSummaryLabel={!editableDraft ? workOrderContractorLabel : undefined}
-        pricingWorkDate={editableDraft ? pricingDateFromCreatedAt(row.created_at) : undefined}
+        pricingWorkDate={editableDraft ? pricingDateForNewWorkOrder() : undefined}
       />
 
       {showCompletionEngine && allLinesFullyComplete ? (
