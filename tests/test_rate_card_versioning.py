@@ -97,7 +97,11 @@ def plant(db: Session) -> OrgUnit:
 @pytest.fixture()
 def contractor(db: Session, actor: User) -> Contractor:
     return ContractorService(db).create_contractor(
-        ContractorCreate(name="Acme Vendor", contractor_type="vendor"),
+        ContractorCreate(
+            contractor_code="CTR-TEST-ACME",
+            name="Acme Vendor",
+            contractor_type="vendor",
+        ),
         actor_user_id=actor.id,
     )
 
@@ -432,7 +436,11 @@ def test_rate_card_without_contractor_filter_lists_negotiations_per_vendor(
         db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
     )
     beta = ContractorService(db).create_contractor(
-        ContractorCreate(name="Beta Vendor", contractor_type="vendor"),
+        ContractorCreate(
+            contractor_code="CTR-TEST-BETA-1",
+            name="Beta Vendor",
+            contractor_type="vendor",
+        ),
         actor_user_id=int(actor.id),
     )
     svc = ContractorRateService(db)
@@ -473,7 +481,11 @@ def test_benchmark_without_contractor_counts_all_negotiations(
         db, plant_id=int(plant.id), actor_id=int(actor.id), base_rate="100.00"
     )
     beta = ContractorService(db).create_contractor(
-        ContractorCreate(name="Beta Vendor", contractor_type="vendor"),
+        ContractorCreate(
+            contractor_code="CTR-TEST-BETA-2",
+            name="Beta Vendor",
+            contractor_type="vendor",
+        ),
         actor_user_id=int(actor.id),
     )
     svc = ContractorRateService(db)

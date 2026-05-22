@@ -986,7 +986,7 @@ export function RateDetailPanel({
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium">Negotiation rounds</h4>
               {canUpdate &&
-              (rate.status === "draft" || rate.status === "rejected") ? (
+              (rate.status === "draft" || rate.status === "approved" || rate.status === "rejected") ? (
                 <Button size="sm" variant="outline" asChild>
                   <Link to={`/dashboard/negotiated-rates/${rate.id}/negotiate`}>
                     <Plus className="size-3.5" /> Negotiate

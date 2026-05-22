@@ -266,9 +266,13 @@ Add another round:
 Round workflow rule:
 - Round 1 is editable only while status is `draft`
 - After `Submit for approval`, negotiation editing stops
-- If approver rejects, status becomes `rejected`
-- Only then can user add `Round 2`
-- If rejected again, user can add `Round 3`, and so on
+- If approver rejects, status becomes `rejected` and that same negotiation can be revised/resubmitted
+- After `approved`, user can start the next round again from the approved rate
+- That action creates a new draft successor negotiation and opens it
+- Example:
+  Round 1 draft -> submit -> approved
+  Start round 2 from the approved rate -> successor draft -> submit -> approved or rejected
+  If that successor is rejected, revise it and resubmit
 
 Approval:
 1. Log out from ctr_manager

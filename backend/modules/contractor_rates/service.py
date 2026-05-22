@@ -153,6 +153,7 @@ class ContractorRateService:
         effective_from: date,
         effective_to: date | None,
         exclude_id: int | None = None,
+        allow_supersede_active: bool = False,
     ) -> None:
         """Reject when a candidate window collides with an already-approved range
         for the same (contractor, part_master).
@@ -171,6 +172,8 @@ class ContractorRateService:
             stmt = stmt.where(ContractorRate.id != int(exclude_id))
 
         for other in self._db.scalars(stmt).all():
+            if allow_supersede_active:
+                continue
             other_to = other.effective_to or _date(9999, 12, 31)
             cand_to = effective_to or _date(9999, 12, 31)
             if effective_from <= other_to and other.effective_from <= cand_to:
@@ -546,6 +549,109 @@ class ContractorRateService:
                 self._db.delete(log)
         row.current_round = 1
 
+    def _ensure_no_inflight_successor(self, row: ContractorRate) -> None:
+        clash = self._active_negotiation_thread_for_part(int(row.contractor_id), int(row.part_master_id))
+        if clash is None or int(clash.id) == int(row.id):
+            return
+        raise ConflictError(
+            "A follow-up negotiation already exists for this contractor and part "
+            f"(rate #{int(clash.id)}, status {clash.status}). "
+            "Open that negotiation instead of starting another round from the approved rate."
+        )
+
+    def _spawn_successor_from_approved(
+        self,
+        row: ContractorRate,
+        payload: NegotiationRoundCreate,
+        *,
+        actor_user_id: int | None,
+    ) -> NegotiationLog:
+        self._ensure_no_inflight_successor(row)
+        next_round = max(int(row.current_round or 0) + 1, 2)
+        rm = self._ensure_part_master(int(row.part_master_id))
+        seeded_rate = payload.counter_rate or payload.proposed_rate or Decimal(row.negotiated_rate)
+        successor = ContractorRate(
+            contractor_id=int(row.contractor_id),
+            part_master_id=int(row.part_master_id),
+            negotiated_rate=Decimal(seeded_rate),
+            initial_rate=Decimal(row.initial_rate) if row.initial_rate is not None else Decimal(row.negotiated_rate),
+            previous_rate=Decimal(row.negotiated_rate),
+            savings_amount=None,
+            savings_percentage=None,
+            effective_from=row.effective_from,
+            effective_to=row.effective_to,
+            status="draft",
+            current_round=next_round,
+            remarks=payload.remarks or row.remarks,
+            created_by=actor_user_id,
+        )
+        successor.savings_amount, successor.savings_percentage = self._calc_savings(
+            successor.initial_rate, Decimal(successor.negotiated_rate)
+        )
+        self._db.add(successor)
+        self._db.flush()
+
+        audit_helpers.write_audit(
+            self._db,
+            contractor_rate_id=int(successor.id),
+            action=audit_helpers.ACTION_CREATED,
+            actor_user_id=actor_user_id,
+            new_value=audit_helpers.snapshot_rate(successor),
+            metadata={
+                "contractor_id": int(successor.contractor_id),
+                "part_master_id": int(successor.part_master_id),
+                "base_rate": str(rm.base_rate),
+                "source_rate_id": int(row.id),
+                "previous_rate": str(row.negotiated_rate),
+                "spawned_from_status": "approved",
+            },
+        )
+        ver = audit_helpers.write_contractor_rate_version(
+            self._db,
+            rate=successor,
+            actor_user_id=actor_user_id,
+            change_reason=audit_helpers.ACTION_CREATED,
+        )
+        audit_helpers.write_audit(
+            self._db,
+            contractor_rate_id=int(successor.id),
+            action=audit_helpers.ACTION_VERSION_CREATED,
+            actor_user_id=actor_user_id,
+            new_value={"version_number": int(ver.version_number)},
+            metadata={"reason": audit_helpers.ACTION_CREATED, "source_rate_id": int(row.id)},
+        )
+
+        log = NegotiationLog(
+            contractor_rate_id=int(successor.id),
+            round_number=next_round,
+            proposed_rate=payload.proposed_rate,
+            counter_rate=payload.counter_rate,
+            remarks=payload.remarks or None,
+            round_summary=(payload.round_summary.strip() if payload.round_summary else None),
+            created_by=actor_user_id,
+        )
+        self._db.add(log)
+        audit_helpers.write_audit(
+            self._db,
+            contractor_rate_id=int(successor.id),
+            action=audit_helpers.ACTION_NEGOTIATION_ADDED,
+            actor_user_id=actor_user_id,
+            new_value={
+                "round_number": next_round,
+                "proposed_rate": str(payload.proposed_rate) if payload.proposed_rate else None,
+                "counter_rate": str(payload.counter_rate) if payload.counter_rate else None,
+                "remarks": payload.remarks,
+            },
+            metadata={
+                "applied_to_negotiated_rate": bool(payload.apply_to_negotiated_rate),
+                "source_rate_id": int(row.id),
+                "spawned_successor": True,
+            },
+        )
+        self._db.commit()
+        self._db.refresh(log)
+        return log
+
     def _revise_draft_round_one(
         self,
         row: ContractorRate,
@@ -620,13 +726,18 @@ class ContractorRateService:
         actor_user_id: int | None = None,
     ) -> NegotiationLog:
         row = self.get_rate(rate_id)
-        if row.status not in ("draft", "rejected"):
+        if row.status not in ("draft", "rejected", "approved"):
             raise ConflictError(
-                "Negotiation rounds can only be added while the rate is draft or rejected."
+                "Negotiation rounds can only be added while the rate is draft, approved, or rejected."
             )
         if payload.proposed_rate is None and payload.counter_rate is None:
             raise ConflictError(
                 "At least one of proposed_rate or counter_rate is required for a round."
+            )
+
+        if row.status == "approved":
+            return self._spawn_successor_from_approved(
+                row, payload, actor_user_id=actor_user_id
             )
 
         if self._in_place_negotiation_status(row):
@@ -854,6 +965,7 @@ class ContractorRateService:
             effective_from=row.effective_from,
             effective_to=row.effective_to,
             exclude_id=int(row.id),
+            allow_supersede_active=True,
         )
 
         wf = get_workflow_for_action(self._db, ACTION_CODE_CREATE)
@@ -1003,6 +1115,7 @@ class ContractorRateService:
             effective_from=row.effective_from,
             effective_to=row.effective_to,
             exclude_id=int(row.id),
+            allow_supersede_active=True,
         )
 
         before_status = row.status

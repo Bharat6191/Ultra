@@ -84,7 +84,7 @@ export function NegotiatedRateNegotiatePage() {
 
   const canRound =
     rate &&
-    (rate.status === "draft" || rate.status === "rejected")
+    (rate.status === "draft" || rate.status === "approved" || rate.status === "rejected")
 
   async function submit() {
     if (!rate || !canRound) return
@@ -110,22 +110,28 @@ export function NegotiatedRateNegotiatePage() {
         remarks: remarks.trim(),
         apply_to_negotiated_rate: true,
       })
+      const targetRateId = round.contractor_rate_id
       for (const f of attachments) {
         const fd = new FormData()
         fd.append("file", f, f.name)
-        await postForm(`/contractor-rates/${rate.id}/negotiation-logs/${round.id}/attachments`, fd)
+        await postForm(`/contractor-rates/${targetRateId}/negotiation-logs/${round.id}/attachments`, fd)
       }
       const draftUpdate = rate.status === "draft"
+      const successorDraft = rate.status === "approved" && targetRateId !== rate.id
       toast.success(
         attachments.length
           ? draftUpdate
             ? `Round 1 updated (${attachments.length} attachment${attachments.length === 1 ? "" : "s"})`
+            : successorDraft
+              ? `Round ${round.round_number} started (${attachments.length} attachment${attachments.length === 1 ? "" : "s"})`
             : `Round saved (${attachments.length} file${attachments.length === 1 ? "" : "s"})`
+          : successorDraft
+            ? `Round ${round.round_number} started`
           : draftUpdate
             ? "Round 1 updated"
             : "Negotiation round saved",
       )
-      navigate(`/dashboard/negotiated-rates/${rate.id}`)
+      navigate(`/dashboard/negotiated-rates/${targetRateId}`)
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Save failed"
       setSaveError(msg)
@@ -199,7 +205,7 @@ export function NegotiatedRateNegotiatePage() {
         <Alert>
           <AlertTitle>No further rounds</AlertTitle>
           <AlertDescription>
-            Rounds can only be added while this rate is draft or rejected. Current
+            Rounds can only be added while this rate is draft, approved, or rejected. Current
             status: <span className="font-mono">{rate.status}</span>.
           </AlertDescription>
         </Alert>
@@ -229,7 +235,7 @@ export function NegotiatedRateNegotiatePage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">Record a negotiation round</h1>
-          <SectionHint text="The agreed rate can be updated while this negotiation is still a draft. After submission, wait for approval or rejection; a new round starts only after rejection." />
+          <SectionHint text="Draft rates can still update round 1. Approved rates start the next round in a new draft, while pending approval stays locked." />
         </div>
         <p className="text-sm text-muted-foreground">
           {rate.contractor_name ?? `Contractor #${rate.contractor_id}`} · {rate.part_name ?? "—"} ·{" "}

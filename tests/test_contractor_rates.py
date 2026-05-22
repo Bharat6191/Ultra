@@ -115,7 +115,11 @@ def plant(db: Session) -> OrgUnit:
 @pytest.fixture()
 def contractor(db: Session, actor: User) -> Contractor:
     return ContractorService(db).create_contractor(
-        ContractorCreate(name="Acme Vendor", contractor_type="vendor"),
+        ContractorCreate(
+            contractor_code="CTR-TEST-ACME",
+            name="Acme Vendor",
+            contractor_type="vendor",
+        ),
         actor_user_id=actor.id,
     )
 
@@ -824,6 +828,55 @@ def test_rejection_marks_rate_rejected_and_audits(
         ).all()
     ]
     assert ACTION_REJECTED in actions
+
+
+def test_approved_rate_can_start_successor_round_in_new_draft(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    svc = ContractorRateService(db)
+    first = svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            part_master_id=int(rm.id),
+            negotiated_rate=Decimal("90"),
+            initial_rate=Decimal("100"),
+            effective_from=date.today(),
+            remarks="round 1",
+        ),
+        actor_user_id=int(actor.id),
+    )
+    svc.submit_for_approval(int(first.id), actor_user_id=int(actor.id))
+    approved = svc.get_rate(int(first.id))
+    assert approved.status == "approved"
+
+    round2 = svc.add_negotiation_round(
+        int(approved.id),
+        NegotiationRoundCreate(
+            proposed_rate=None,
+            counter_rate=Decimal("85"),
+            remarks="second cycle",
+            apply_to_negotiated_rate=True,
+        ),
+        actor_user_id=int(actor.id),
+    )
+
+    assert int(round2.contractor_rate_id) != int(approved.id)
+    assert int(round2.round_number) == 2
+
+    successor = svc.get_rate(int(round2.contractor_rate_id))
+    db.refresh(first)
+    assert first.status == "approved"
+    assert successor.status == "draft"
+    assert successor.current_round == 2
+    assert successor.previous_rate == Decimal("90")
+    assert successor.negotiated_rate == Decimal("85")
+
+    svc.submit_for_approval(int(successor.id), actor_user_id=int(actor.id))
+    db.refresh(first)
+    finalized = svc.get_rate(int(successor.id))
+    assert first.status == "expired"
+    assert finalized.status == "approved"
 
 
 # ---------- One negotiation thread per contractor + part ----------
