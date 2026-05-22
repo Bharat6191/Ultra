@@ -6,8 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Building2 } from "lucide-react"
 
 import {
-  complianceLabel,
-  complianceVariant,
+  // complianceLabel,
+  // complianceVariant,
   contractorTypeLabel,
   statusLabel,
   statusVariant,
@@ -66,7 +66,7 @@ export function ContractorTable({
           <TableHead>Contractor</TableHead>
           <TableHead>Type</TableHead>
           <TableHead>Status</TableHead>
-          <TableHead>Compliance</TableHead>
+          {/* <TableHead>Compliance</TableHead> */}
           <TableHead>Plants</TableHead>
           <TableHead>Statutory IDs</TableHead>
           {/* <TableHead className="w-[72px] text-right">Actions</TableHead> */}
@@ -75,13 +75,13 @@ export function ContractorTable({
       <TableBody>
         {loading || rows === null ? (
           <TableRow>
-            <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+            <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
               Loading…
             </TableCell>
           </TableRow>
         ) : rows.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+            <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
               No contractors match this filter.
             </TableCell>
           </TableRow>
@@ -89,7 +89,6 @@ export function ContractorTable({
           rows.map((c) => {
             const display = c.legal_name || c.name
             const subtitle = c.contractor_code || c.contact_person || c.email || `ID #${c.id}`
-            const compliance = c.compliance?.state ?? "no_data"
             return (
               <TableRow
                 key={c.id}
@@ -124,7 +123,7 @@ export function ContractorTable({
                   <Badge variant={statusVariant(c.status)}>{statusLabel(c.status)}</Badge>
                 </TableCell>
 
-                <TableCell>
+                {/* <TableCell>
                   <div className="flex items-center gap-2">
                     <span
                       aria-hidden
@@ -143,7 +142,7 @@ export function ContractorTable({
                       {complianceLabel(compliance)}
                     </Badge>
                   </div>
-                </TableCell>
+                </TableCell> */}
 
                 <TableCell>
                   <div className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-zinc-700">

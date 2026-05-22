@@ -152,7 +152,7 @@ const HIGHLIGHT_LABELS: Record<string, string> = {
   negotiated_rate: "Negotiated rate",
   proposed_rate: "Proposed rate",
   counter_rate: "Counter offer",
-  base_rate: "Part base rate",
+  base_rate: "Part should cost",
   previous_rate: "Previous rate",
   savings_amount: "Savings vs opening ask",
   savings_percentage: "Savings %",

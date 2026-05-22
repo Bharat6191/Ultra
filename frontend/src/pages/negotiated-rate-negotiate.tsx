@@ -84,7 +84,7 @@ export function NegotiatedRateNegotiatePage() {
 
   const canRound =
     rate &&
-    (rate.status === "draft" || rate.status === "pending_approval" || rate.status === "rejected")
+    (rate.status === "draft" || rate.status === "rejected")
 
   async function submit() {
     if (!rate || !canRound) return
@@ -179,7 +179,7 @@ export function NegotiatedRateNegotiatePage() {
   const previewVsBase = rate
     ? computeVsBaseTolerance(agreedN, rate.base_rate)
     : null
-  const inPlaceRound = rate.status === "draft" || rate.status === "pending_approval"
+  const inPlaceRound = rate.status === "draft"
   const contextRoundLabel = inPlaceRound ? "1 (in place)" : `${rate.current_round + 1} (next)`
   const canSave =
     Number.isFinite(agreedN) &&
@@ -199,7 +199,7 @@ export function NegotiatedRateNegotiatePage() {
         <Alert>
           <AlertTitle>No further rounds</AlertTitle>
           <AlertDescription>
-            Rounds can only be added while this rate is draft, pending approval, or rejected. Current
+            Rounds can only be added while this rate is draft or rejected. Current
             status: <span className="font-mono">{rate.status}</span>.
           </AlertDescription>
         </Alert>
@@ -229,7 +229,7 @@ export function NegotiatedRateNegotiatePage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">Record a negotiation round</h1>
-          <SectionHint text="The agreed rate updates this draft (or in-flight approval) until the workflow is approved; once approved, that rate is the binding commercial price for this contractor and part." />
+          <SectionHint text="The agreed rate can be updated while this negotiation is still a draft. After submission, wait for approval or rejection; a new round starts only after rejection." />
         </div>
         <p className="text-sm text-muted-foreground">
           {rate.contractor_name ?? `Contractor #${rate.contractor_id}`} · {rate.part_name ?? "—"} ·{" "}
@@ -244,7 +244,7 @@ export function NegotiatedRateNegotiatePage() {
           </CardHeader>
           <CardContent className="grid gap-2 text-sm">
             <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Base rate</span>
+              <span className="text-muted-foreground">Should cost</span>
               <span className="font-medium">{formatMoney(rate.base_rate)}</span>
             </div>
             <div className="flex justify-between gap-2">

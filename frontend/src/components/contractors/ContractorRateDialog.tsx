@@ -220,7 +220,7 @@ export function NewNegotiationDialog({
                 <div className="max-h-56 divide-y overflow-y-auto rounded-lg border bg-white">
                   {filtered.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-muted-foreground">
-                      No matching base rates.
+                      No matching should-cost records.
                     </div>
                   ) : (
                     filtered.map((pm) => (
@@ -429,7 +429,7 @@ export function NegotiationRoundDialog({
         <div className="grid gap-3">
           <div className="rounded-lg border bg-gray-50 p-3 text-xs text-muted-foreground">
             <div className="flex items-center justify-between">
-              <span>Base rate</span>
+              <span>Should cost</span>
               <span className="font-medium text-foreground">{formatMoney(baseRate)}</span>
             </div>
             <div className="flex items-center justify-between">

@@ -534,8 +534,8 @@ class ContractorRateService:
         return None
 
     def _in_place_negotiation_status(self, row: ContractorRate) -> bool:
-        """Negotiate updates round 1 until the first approval cycle completes (rejection → round 2)."""
-        return row.status in ("draft", "pending_approval")
+        """Negotiate updates round 1 only while the rate is still a draft."""
+        return row.status == "draft"
 
     def _prune_extra_draft_rounds(self, row: ContractorRate) -> None:
         """Remove spurious round 2+ rows created before in-place draft edits were enforced."""
@@ -620,10 +620,9 @@ class ContractorRateService:
         actor_user_id: int | None = None,
     ) -> NegotiationLog:
         row = self.get_rate(rate_id)
-        if row.status not in ("draft", "pending_approval", "rejected"):
+        if row.status not in ("draft", "rejected"):
             raise ConflictError(
-                "Negotiation rounds can only be added while the rate is draft / "
-                "pending_approval / rejected."
+                "Negotiation rounds can only be added while the rate is draft or rejected."
             )
         if payload.proposed_rate is None and payload.counter_rate is None:
             raise ConflictError(
@@ -641,7 +640,7 @@ class ContractorRateService:
             next_round = max(int(row.current_round or 0) + 1, 2)
         else:
             raise ConflictError(
-                "Negotiation rounds can only be added while draft, pending approval, or rejected."
+                "Negotiation rounds can only be added while the rate is draft or rejected."
             )
 
         log = NegotiationLog(

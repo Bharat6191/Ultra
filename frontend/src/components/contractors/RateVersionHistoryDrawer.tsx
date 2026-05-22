@@ -62,7 +62,7 @@ function formatDateTime(iso: string): string {
 }
 
 const FIELD_LABELS: Record<string, string> = {
-  base_rate: "Base rate",
+  base_rate: "Should cost",
   negotiated_rate: "Negotiated rate",
   initial_rate: "Initial rate",
   previous_rate: "Previous rate",

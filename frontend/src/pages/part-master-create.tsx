@@ -117,7 +117,7 @@ export function PartMasterCreatePage() {
     } else {
       const n = Number(sanitizeDecimalString(form.base_rate.trim()))
       if (!Number.isFinite(n) || n <= 0) {
-        toast.error("Enter a valid base rate greater than zero")
+        toast.error("Enter a valid should cost greater than zero")
         return
       }
       br = n
@@ -228,7 +228,7 @@ export function PartMasterCreatePage() {
         <Card className="min-w-0 rounded-2xl border-border/50 shadow-sm xl:col-span-7">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">Commercial</CardTitle>
-            <SectionHint text="Weight-based parts derive rate per kg from labour inputs. Piece-based parts use billing UOM + rate unit + base rate." />
+            <SectionHint text="Weight-based parts derive rate per kg from labour inputs. Piece-based parts use billing UOM + rate unit + should cost." />
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1">
@@ -346,7 +346,7 @@ export function PartMasterCreatePage() {
                   </select>
                 </div>
                 <div className="grid gap-1 sm:col-span-2">
-                  <Label showRequired>Base rate</Label>
+                  <Label showRequired>Should cost</Label>
                   <Input
                     inputMode="decimal"
                     value={form.base_rate}

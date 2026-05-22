@@ -198,7 +198,7 @@ export function PartMasterPage() {
                   <TableHead>Unit</TableHead>
                   <TableHead>Pricing</TableHead>
                   <TableHead>Rate unit</TableHead>
-                  <TableHead className="text-right">Base</TableHead>
+                  <TableHead className="text-right">Should cost</TableHead>
                   <TableHead className="text-right">Cost / days</TableHead>
                   <TableHead>Effective</TableHead>
                   <TableHead>Status</TableHead>

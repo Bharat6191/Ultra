@@ -1,5 +1,5 @@
 import * as React from "react"
-import { AlertTriangle, BriefcaseBusiness, CalendarClock, CheckCircle2 } from "lucide-react"
+import { BriefcaseBusiness, CalendarClock, CheckCircle2 } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -62,7 +62,7 @@ export function ContractorListStats({
   loading?: boolean
 }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <StatCard
         title="Total"
         value={data.total}
@@ -79,14 +79,14 @@ export function ContractorListStats({
         loading={loading}
         icon={<CheckCircle2 className="size-4" aria-hidden />}
       />
-      <StatCard
+      {/* <StatCard
         title="Non-compliant"
         value={data.nonCompliant}
         hint="Critical docs missing or expired"
         tone="danger"
         loading={loading}
         icon={<AlertTriangle className="size-4" aria-hidden />}
-      />
+      /> */}
       <StatCard
         title="Expiring soon"
         value={data.expiringSoon}

@@ -862,7 +862,7 @@ export function ContractorAnalyticsDashboard({
                     <TableRow>
                       <TableHead>Part</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Base</TableHead>
+                      <TableHead className="text-right">Should cost</TableHead>
                       <TableHead className="text-right">Negotiated</TableHead>
                       <TableHead className="text-right">Tolerance</TableHead>
                     </TableRow>
@@ -1081,7 +1081,7 @@ export function ContractorAnalyticsDashboard({
               <div className="tabular-nums text-emerald-800">{formatMoney(commercial.highest_savings_amount)}</div>
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">Above / below base rate</div>
+              <div className="text-xs text-muted-foreground">Above / below should cost</div>
               <div>
                 <span className="text-amber-900">{Number(commercial.pct_negotiations_above_base).toFixed(1)}%</span>
                 <span className="text-muted-foreground"> / </span>
@@ -1129,7 +1129,7 @@ export function ContractorAnalyticsDashboard({
 
                 <div className="rounded-2xl border bg-white p-4 sm:p-5">
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    <FactField label="Base rate" value={formatMoney(selectedNegotiation.base_rate)} />
+                    <FactField label="Should cost" value={formatMoney(selectedNegotiation.base_rate)} />
                     <FactField
                       label="Initial ask"
                       value={selectedNegotiation.initial_rate != null ? formatMoney(selectedNegotiation.initial_rate) : "—"}
@@ -1163,7 +1163,7 @@ export function ContractorAnalyticsDashboard({
                 </div>
 
                 {/* <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <FactField label="Base rate" value={formatMoney(selectedNegotiation.base_rate)} />
+                  <FactField label="Should cost" value={formatMoney(selectedNegotiation.base_rate)} />
                   <FactField label="Negotiated rate" value={formatMoney(selectedNegotiation.negotiated_rate)} />
                   <FactField
                     label="Initial ask"

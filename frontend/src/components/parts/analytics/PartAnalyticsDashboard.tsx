@@ -341,7 +341,7 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
             <div className="font-medium tabular-nums">{h.weight_per_unit != null ? String(h.weight_per_unit) : "—"}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Standard base rate</div>
+            <div className="text-xs text-muted-foreground">Should cost</div>
             <div className="text-lg font-semibold tabular-nums">{formatMoney(h.base_rate)}</div>
           </div>
           <div>
@@ -394,7 +394,7 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="h-8 text-xs">Contractor</TableHead>
-                  <TableHead className="h-8 text-right text-xs">Base rate</TableHead>
+                  <TableHead className="h-8 text-right text-xs">Should cost</TableHead>
                   <TableHead className="h-8 text-right text-xs">Initial quote</TableHead>
                   <TableHead className="h-8 text-right text-xs">Final negotiated</TableHead>
                   <TableHead className="h-8 text-right text-xs">Diff vs base</TableHead>

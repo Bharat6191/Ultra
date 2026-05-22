@@ -56,7 +56,7 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
   man_days: "Man days",
   labour_headcount: "Labour count",
   standard_man_hours: "Standard man-hours",
-  base_rate: "Base rate",
+  base_rate: "Should cost",
   rate_unit_type: "Rate unit",
   org_unit_id: "Plant / org unit",
   effective_from: "Effective from",
@@ -315,7 +315,7 @@ export function PartMasterDetailPage() {
     } else {
       const n = Number(sanitizeDecimalString(form.base_rate.trim()))
       if (!Number.isFinite(n) || n <= 0) {
-        toast.error("Enter a valid base rate greater than zero")
+        toast.error("Enter a valid should cost greater than zero")
         return
       }
       br = n
@@ -654,7 +654,7 @@ export function PartMasterDetailPage() {
                     </div>
                     <div className="grid min-w-0 gap-1.5 sm:max-w-sm">
                       <Label htmlFor="pm-base" showRequired>
-                        Base rate
+                        Should cost
                       </Label>
                       <Input
                         id="pm-base"

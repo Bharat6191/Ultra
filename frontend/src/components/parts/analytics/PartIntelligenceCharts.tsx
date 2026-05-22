@@ -60,8 +60,8 @@ export function PartIntelligenceCharts({ contractors, workOrders }: Props) {
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader className="pb-1 pt-4">
-          <CardTitle className="text-sm font-semibold">Negotiated rate vs base</CardTitle>
-          <CardDescription className="text-xs">By contractor — compare quotes to standard base rate.</CardDescription>
+          <CardTitle className="text-sm font-semibold">Negotiated rate vs should cost</CardTitle>
+          <CardDescription className="text-xs">By contractor — compare quotes to standard should cost.</CardDescription>
         </CardHeader>
         <CardContent className="h-60 min-h-[240px] w-full min-w-0 pb-4 pt-1">
           {rateBars.length === 0 ? (
@@ -80,7 +80,7 @@ export function PartIntelligenceCharts({ contractors, workOrders }: Props) {
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
-                <Bar dataKey="base" name="Base" fill="#94a3b8" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="base" name="Should cost" fill="#94a3b8" radius={[3, 3, 0, 0]} />
                 <Bar dataKey="negotiated" name="Negotiated" fill="#059669" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

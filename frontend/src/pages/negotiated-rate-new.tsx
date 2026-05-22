@@ -478,7 +478,7 @@ export function NegotiatedRateNewPage() {
                     {selected.rate_unit_type.replace(/_/g, " ")} · unit {selected.unit_type}
                   </div>
                   <div className="mt-2 text-xs">
-                    Base rate: <span className="font-medium text-foreground">{formatMoney(selected.base_rate)}</span>
+                    Should cost: <span className="font-medium text-foreground">{formatMoney(selected.base_rate)}</span>
                   </div>
                   <Button
                     type="button"

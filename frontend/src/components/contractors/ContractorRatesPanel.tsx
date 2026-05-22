@@ -488,7 +488,7 @@ export function ContractorRatesPanel({
               <TableRow>
                 <TableHead>Part</TableHead>
                 <TableHead>Plant</TableHead>
-                <TableHead className="text-right">Base</TableHead>
+                <TableHead className="text-right">Should cost</TableHead>
                 <TableHead className="text-right">Negotiated</TableHead>
                 <TableHead className="text-right">Savings</TableHead>
                 <TableHead>Effective</TableHead>
@@ -669,7 +669,7 @@ function ActiveRateCard({
           </div>
         </div>
         <div className="text-right">
-          <div className="text-xs text-muted-foreground">Base</div>
+          <div className="text-xs text-muted-foreground">Should cost</div>
           <div className="text-sm">{formatMoney(rate.base_rate)}</div>
         </div>
       </div>
@@ -936,7 +936,7 @@ export function RateDetailPanel({
 
           {/* Rate facts */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Fact label="Base rate" value={formatMoney(rate.base_rate)} />
+            <Fact label="Should cost" value={formatMoney(rate.base_rate)} />
             <Fact label="Initial ask" value={formatMoney(rate.initial_rate)} />
             <Fact label="Agreed rate" value={formatMoney(rate.negotiated_rate)} strong />
             <Fact
@@ -986,9 +986,7 @@ export function RateDetailPanel({
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium">Negotiation rounds</h4>
               {canUpdate &&
-              (rate.status === "draft" ||
-                rate.status === "pending_approval" ||
-                rate.status === "rejected") ? (
+              (rate.status === "draft" || rate.status === "rejected") ? (
                 <Button size="sm" variant="outline" asChild>
                   <Link to={`/dashboard/negotiated-rates/${rate.id}/negotiate`}>
                     <Plus className="size-3.5" /> Negotiate

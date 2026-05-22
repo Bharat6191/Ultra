@@ -1,3 +1,4 @@
+<<<<<<< ours
 Ultra local demo flow
 
 Verified against the local DB on 2026-05-14.
@@ -67,10 +68,61 @@ These users currently use `DemoPass123!`:
 - ctr_manager / ctr.manager@example.test
 - ctr_auditor / ctr.auditor@demo.test
 - rate_admin / rate.admin@demo.test
+=======
+Ultra manual test guide
+
+Updated for the current quick-fix checkout and status-matrix seed.
+Verified against the current code on 2026-05-21.
+
+1. Preferred setup
+
+Use Docker. This is the easiest way to test the current code and seed data.
+
+From:
+/Users/shubhambharambe/Desktop/quick_fix/Ultra
+
+Fresh start:
+docker compose down -v
+docker compose up --build
+
+App URLs:
+- User UI: http://127.0.0.1:8082/login
+- Admin UI: http://127.0.0.1:8082/admin/login
+
+Notes:
+- Docker bootstrap runs migrations automatically.
+- On an empty Docker DB, it auto-runs `scripts/seed_demo_status_matrix.py`.
+- That seed now creates current contractor, negotiation, work-order, invoice, and approval scenarios.
+
+2. Optional reseed commands
+
+If the app is already running in Docker and you only want to reseed demo lifecycle data:
+
+docker compose exec backend python /app/scripts/seed_demo_status_matrix.py
+
+If you want to reseed only the scenario layer on an already prepared DB:
+
+docker compose exec backend python /app/scripts/seed_demo_status_matrix.py --skip-base-seeds
+
+3. Current demo users
+
+Superadmin:
+- username: admin
+- email: admin@example.com
+- password: Admin123!
+
+Shared persona password:
+- DemoPass123!
+
+Useful business users:
+- all_access / all.access@demo.test
+- ctr_manager / ctr.manager@example.test
+>>>>>>> theirs
 - negotiator / negotiator@demo.test
 - rate_approver / rate.approver@example.test
 - wo_approver1 / wo.approver1@demo.test
 - wo_approver2 / wo.approver2@demo.test
+<<<<<<< ours
 - wf_manager / wf.manager@demo.test
 - task_operator / task.operator@example.test
 - notif_admin / notif.admin@demo.test
@@ -211,6 +263,13 @@ Add another round:
 5. Save
 6. Return to detail page and verify round history
 
+Round workflow rule:
+- Round 1 is editable only while status is `draft`
+- After `Submit for approval`, negotiation editing stops
+- If approver rejects, status becomes `rejected`
+- Only then can user add `Round 2`
+- If rejected again, user can add `Round 3`, and so on
+
 Approval:
 1. Log out from ctr_manager
 2. Log in as rate_approver
@@ -325,3 +384,292 @@ Rebuild only work order + invoice demo after cleanup:
 11. Rate approver sees pending tasks
 12. Manual task inbox loads for task_operator
 13. Work orders and invoices pages load with seeded data
+=======
+- fin_approver1 / fin.approver1@demo.test
+- fin_approver2 / fin.approver2@demo.test
+- super_demo / super.demo@demo.test
+
+Important invoice approval roles:
+- `fin_approver1` is Finance Approver L1
+- `fin_approver2` is Finance Approver L2
+
+4. Seeded lifecycle scenarios
+
+4.1 Work orders
+
+The status-matrix seed creates these work-order scenarios:
+- `draft`
+- `pending_approval`
+- `rejected`
+- `active`
+- `closed`
+- `cancelled`
+
+4.2 Invoices
+
+The status-matrix seed creates these invoice scenarios:
+- `INV-MATRIX-DRAFT`
+- `INV-MATRIX-SUBMITTED`
+- `INV-MATRIX-BLOCKED`
+- `INV-MATRIX-PENDING`
+- `INV-MATRIX-APPROVED`
+- `INV-MATRIX-REJECTED`
+- `INV-MATRIX-PAID`
+- `INV-MATRIX-CANCELLED`
+
+Meaning:
+- `INV-MATRIX-BLOCKED` is blocked but not yet approved
+- `INV-MATRIX-PENDING` is in exception approval
+- `INV-MATRIX-APPROVED` passed both finance approval levels
+- `INV-MATRIX-REJECTED` was rejected in the exception workflow
+
+5. Basic smoke checks
+
+5.1 Login page
+
+1. Open `/login`
+2. Enter a username and password
+3. Press and hold the eye icon on the password field
+4. Verify password shows while pressed
+5. Release the icon
+6. Verify password hides automatically
+
+Repeat the same on `/admin/login`.
+
+5.2 Main list behavior
+
+These pages now open detail on row click and no longer show the old `Open` column:
+- `/dashboard/negotiated-rates`
+- `/dashboard/work-orders`
+- `/dashboard/invoices`
+
+Verify:
+1. Open each page
+2. Confirm there is no `Open` column
+3. Click a row
+4. Confirm the detail page opens
+
+5.3 Part master and contractor list actions
+
+Verify:
+1. Open `/dashboard/part-master`
+2. Open `/dashboard/contractors`
+3. Confirm the `Actions` column is not visible
+
+6. Contractor module tests
+
+Use:
+- ctr_manager / DemoPass123!
+
+6.1 Contractor list and detail
+
+1. Log in as `ctr_manager`
+2. Open `/dashboard/contractors`
+3. Verify seeded contractors load
+4. Open a contractor detail page
+5. Verify overview, plants, documents, timeline, and rates load
+
+6.2 Contractor analytics changes
+
+Open:
+- `/dashboard/contractors/<id>`
+
+Verify:
+1. The old `Negotiation analytics` chart is not shown
+2. In the `Work orders` card, a new chart appears above the work-order table
+3. The chart label is `Active vs inactive work orders`
+4. `Active` means status `active`
+5. `Inactive` includes all non-active work-order rows in the current filtered result
+
+7. Work-order tests
+
+Use:
+- negotiator / DemoPass123!
+
+7.1 Work-order list
+
+1. Open `/dashboard/work-orders`
+2. Verify the page loads
+3. Verify there is no `Open` column
+4. Click a row and verify detail opens
+
+7.2 Work-order detail
+
+1. Open a work-order detail page
+2. In the execution sheet, verify the contractor name is shown
+3. Verify it does not show `Contractor #<id>` when the API has the real name
+
+8. Negotiated-rate tests
+
+Use:
+- ctr_manager / DemoPass123!
+- rate_approver / DemoPass123!
+
+8.1 Negotiated-rate list
+
+1. Open `/dashboard/negotiated-rates`
+2. Verify the list loads
+3. Verify there is no `Open` column
+4. Click a row to open detail
+
+8.2 Negotiation detail and linked work orders
+
+1. Open a negotiated-rate detail page
+2. Verify the timeline loads
+3. Verify linked work orders show when present
+
+9. Invoice list and detail tests
+
+Use:
+- all_access / DemoPass123!
+
+9.1 Invoice list
+
+1. Open `/dashboard/invoices`
+2. Verify there is no `Open` column
+3. Verify a `Work order` column is shown
+4. Click a row to open detail
+
+9.2 Invoice detail
+
+1. Open an invoice detail page
+2. Verify the header shows real contractor and plant names
+3. Verify the invoice preview also shows real contractor and plant names
+4. Verify blocked invoices show validation issues below the preview
+
+10. Blocked invoice create flow
+
+Use:
+- all_access / DemoPass123!
+
+Goal:
+Create an invoice that exceeds approved value, including through extra charges, and verify it enters the exception approval flow automatically.
+
+Steps:
+1. Open `/dashboard/invoices/new`
+2. Select a contractor and plant
+3. Select a work order with available billable lines
+4. Add a line up to the approved value
+5. Add extra charges or increase the billed value so the invoice exceeds the approved amount
+6. Click `Submit`
+
+Expected result:
+- the invoice should not stay plain draft
+- validation should block it
+- an exception approval request should be created automatically
+- invoice status should move into the blocked approval path
+- it should appear in `My tasks` for Finance Approver L1
+
+11. Invoice exception approval flow
+
+11.1 L1 approver
+
+Use:
+- fin_approver1 / DemoPass123!
+
+1. Open `/dashboard/tasks`
+2. Open the pending invoice exception task
+3. Verify the task page shows:
+   invoice number
+   contractor name
+   plant name
+   work order number
+   invoice date
+   submitted time
+   lines subtotal
+   extra charges
+   invoice total
+   blocker reasons with allowed vs actual values
+   whether justification or attachments are required
+4. Verify the invoice preview is shown
+5. Verify the `Comments` panel is not shown for invoice tasks
+6. Verify `Validation score` is not shown
+7. Click `Approve`
+
+Expected result:
+- step 1 is approved
+- the request moves to Finance Approver L2
+
+11.2 L2 approver
+
+Use:
+- fin_approver2 / DemoPass123!
+
+1. Open `/dashboard/tasks`
+2. Open the same invoice exception task
+3. Click `Approve`
+
+Expected result:
+- invoice status becomes `approved`
+- invoice validation status becomes `pass`
+
+11.3 Reject path
+
+Use:
+- fin_approver1 or fin_approver2 depending on the active step
+
+1. Open a pending invoice exception task
+2. Click `Reject`
+
+Expected result:
+- invoice status becomes `rejected`
+
+12. Seeded invoice exception scenarios to check directly
+
+Open `/dashboard/invoices` and verify these records exist:
+- `INV-MATRIX-BLOCKED`
+- `INV-MATRIX-PENDING`
+- `INV-MATRIX-APPROVED`
+- `INV-MATRIX-REJECTED`
+- `INV-MATRIX-PAID`
+
+Expected meaning:
+- `INV-MATRIX-BLOCKED`: blocked state
+- `INV-MATRIX-PENDING`: pending finance approval
+- `INV-MATRIX-APPROVED`: approved after L1 + L2
+- `INV-MATRIX-REJECTED`: rejected in workflow
+- `INV-MATRIX-PAID`: approved and then marked paid
+
+13. Admin / permission checks
+
+Use:
+- admin / Admin123!
+
+Verify:
+1. `/admin/login` works
+2. User management loads
+3. Roles and permissions load
+4. Invoice approver roles include `invoices.approve_exceptions`
+
+14. Expected current UI behavior summary
+
+These are intentional in the current code:
+- password eye icon is press-and-hold, not toggle
+- negotiated-rate, work-order, and invoice lists open by row click
+- invoice exception tasks hide the comments side panel
+- invoice exception task review hides `Validation score`
+- contractor analytics hides the old negotiation graph
+- contractor analytics shows `Active vs inactive work orders`
+
+15. Minimum sign-off checklist
+
+Confirm all of these before closing testing:
+
+1. Docker app starts and auto-seeds cleanly
+2. Persona users can log in with expected passwords
+3. Login eye icon behaves as press-and-hold
+4. Contractor analytics shows the new work-order chart
+5. Negotiation chart is hidden on contractor analytics
+6. Part master and contractor list do not show old action columns
+7. Negotiated-rate, work-order, and invoice lists open on row click
+8. Invoice list shows a work-order column
+9. Work-order detail shows contractor name, not just contractor ID
+10. Blocked invoice submit auto-creates exception approval
+11. Finance L1 can approve
+12. Finance L2 can approve
+13. Approved exception invoice ends in `approved` and `pass`
+14. Rejected exception invoice ends in `rejected`
+15. Invoice task review shows real invoice identity and blocker reasons
+16. Invoice task review does not show comments panel
+17. Invoice task review does not show validation score
+>>>>>>> theirs

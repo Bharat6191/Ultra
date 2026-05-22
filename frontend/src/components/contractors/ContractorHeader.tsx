@@ -14,8 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 import {
-  complianceLabel,
-  complianceVariant,
+  // complianceLabel,
+  // complianceVariant,
   contractorTypeLabel,
   statusLabel,
   statusVariant,
@@ -52,7 +52,6 @@ export function ContractorHeader(props: ContractorHeaderProps) {
     contractorCode,
     contractorType,
     status,
-    complianceState,
     isActive,
     canEdit,
     canActivate,
@@ -81,11 +80,11 @@ export function ContractorHeader(props: ContractorHeaderProps) {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">{display}</h1>
               <Badge variant={statusVariant(status)}>{statusLabel(status)}</Badge>
-              {complianceState ? (
+              {/* {complianceState ? (
                 <Badge variant={complianceVariant(complianceState)}>
                   {complianceLabel(complianceState)}
                 </Badge>
-              ) : null}
+              ) : null} */}
               {!isActive ? (
                 <Badge variant="secondary" className="bg-zinc-100 text-zinc-700">
                   Disabled
