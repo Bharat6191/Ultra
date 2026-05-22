@@ -5,9 +5,9 @@ import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -103,24 +103,6 @@ function orderedActionColumns(actions: string[]): string[] {
   const rest = Array.from(uniq).filter((a) => !out.includes(a)).sort((a, b) => a.localeCompare(b))
   out.push(...rest)
   return out
-}
-
-const MODULE_DESCRIPTIONS: Record<string, string> = {
-  settings: "Workspace defaults, policy controls, and operational guardrails.",
-  features: "Feature visibility and configuration controls.",
-  approvals: "Workflow visibility, acting rights, and routing control.",
-  tasks: "Operational task lifecycle, assignment, and closure.",
-  notification_settings: "Notification recipients and trigger settings.",
-  email_templates: "Template management for outbound communication.",
-  contractor_master: "Vendor onboarding, activation, plant mapping, and document control.",
-  part_master: "Part and baseline access used by commercial and operations teams.",
-  contractor_rates: "Negotiated rate visibility, editing, and approval.",
-  work_orders: "Work order creation, updates, and approval handling.",
-  invoices: "Invoice creation, validation, and finance controls.",
-  users: "User administration, profile changes, and access assignment.",
-  roles: "Role definitions, scope assignment, and permission control.",
-  permissions: "Action-level permission catalog visibility and maintenance.",
-  org_units: "Clusters, plants, and organizational structure maintenance.",
 }
 
 function countRolePermissionStats(
@@ -437,7 +419,7 @@ export function RolesPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle>Roles</CardTitle>
-                <CardDescription>Search, scan scope, and jump into a role without losing context.</CardDescription>
+                {/* <CardDescription>Search, scan scope, and jump into a role without losing context.</CardDescription> */}
               </div>
               {canCreateRole ? (
                 <Dialog
@@ -455,10 +437,10 @@ export function RolesPage() {
                   <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                       <DialogTitle>Create role</DialogTitle>
-                      <DialogDescription>
+                      {/* <DialogDescription>
                         Add a new role, optionally restrict it to specific plants, then assign
                         permissions on the right.
-                      </DialogDescription>
+                      </DialogDescription> */}
                     </DialogHeader>
                     <div className="space-y-3">
                       <div className="space-y-1.5">
@@ -485,10 +467,10 @@ export function RolesPage() {
                       {canLoadPlantList ? (
                         <div className="space-y-2">
                           <Label>Plants (optional)</Label>
-                          <p className="text-xs text-muted-foreground">
+                          {/* <p className="text-xs text-muted-foreground">
                             Leave none selected so this role applies at every plant. Otherwise pick
                             one or more plants.
-                          </p>
+                          </p> */}
                           <ScrollArea className="h-[160px] rounded-md border p-2">
                             {plants === null || plants.length === 0 ? (
                               <p className="text-xs text-muted-foreground">
@@ -617,11 +599,11 @@ export function RolesPage() {
                       <h3 className="text-3xl font-semibold tracking-tight text-zinc-950">
                         {selectedRole?.name ?? selectedRoleListItem?.name ?? "Permissions"}
                       </h3>
-                      <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-600">
+                      {/* <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-600">
                         {selectedRole?.description ??
                           selectedRoleListItem?.description ??
                           "Select a role to adjust plants and permissions."}
-                      </p>
+                      </p> */}
                     </div>
                   </div>
 
@@ -649,9 +631,9 @@ export function RolesPage() {
                         ? `${Math.round((permissionSummary.enabled / permissionSummary.total) * 100)}%`
                         : "0%"}
                     </div>
-                    <div className="mt-1 text-sm text-muted-foreground">
+                    {/* <div className="mt-1 text-sm text-muted-foreground">
                       Enabled actions across all modules
-                    </div>
+                    </div> */}
                   </div>
                   <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
                     <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
@@ -660,9 +642,9 @@ export function RolesPage() {
                     <div className="mt-2 text-2xl font-semibold text-zinc-950">
                       {permissionSummary.fullModules}/{catalog?.modules.length ?? 0}
                     </div>
-                    <div className="mt-1 text-sm text-muted-foreground">
+                    {/* <div className="mt-1 text-sm text-muted-foreground">
                       Modules currently at full access
-                    </div>
+                    </div> */}
                   </div>
                   <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
                     <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
@@ -671,13 +653,13 @@ export function RolesPage() {
                     <div className="mt-2 text-2xl font-semibold text-zinc-950">
                       {!canSaveRole ? "Locked" : hasDirty ? "Draft" : "Saved"}
                     </div>
-                    <div className="mt-1 text-sm text-muted-foreground">
+                    {/* <div className="mt-1 text-sm text-muted-foreground">
                       {!canSaveRole
                         ? "You need roles.update to change this role."
                         : hasDirty
                           ? "You have unsaved changes in this editor."
                           : "This editor matches the latest saved state."}
-                    </div>
+                    </div> */}
                   </div>
                 </div>
               </div>
@@ -724,9 +706,6 @@ export function RolesPage() {
                                   {stats.isFull ? "Full access" : `${stats.enabled}/${stats.total} actions`}
                                 </Badge>
                               </div>
-                              <p className="mt-1 text-sm text-muted-foreground">
-                                {MODULE_DESCRIPTIONS[mod.key] ?? "Permissions for this module."}
-                              </p>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2">
@@ -768,35 +747,23 @@ export function RolesPage() {
                                   >
                                     <div className="min-w-0">
                                       <div className="text-sm font-medium text-zinc-900">{tab.title}</div>
-                                      <div className="mt-1 text-xs text-muted-foreground">
-                                        Compact action pills make scanning easier than detached checkboxes.
-                                      </div>
                                     </div>
-                                    <div className="flex flex-wrap gap-2">
+                                    <div className="flex flex-wrap gap-3">
                                       {tabActions.map((act) => {
                                         const cell = tab.permissions.find((permission) => permission.action === act)
                                         if (!cell) return null
                                         const checked = cell.id != null && selectedPermissionIds.has(cell.id)
                                         const disabled = cell.id == null || !canSaveRole
                                         return (
-                                          <button
+                                          <label
                                             key={act}
-                                            type="button"
-                                            disabled={disabled}
                                             title={
                                               cell.id == null
                                                 ? "Run scripts/sync_modules.py to create this permission"
                                                 : cell.code
                                             }
-                                            onClick={() => {
-                                              if (cell.id == null || !canSaveRole) return
-                                              const next = new Set(selectedPermissionIds)
-                                              if (checked) next.delete(cell.id)
-                                              else next.add(cell.id)
-                                              setSelectedPermissionIds(next)
-                                            }}
                                             className={cn(
-                                              "rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                                              "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition",
                                               disabled
                                                 ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"
                                                 : checked
@@ -804,8 +771,19 @@ export function RolesPage() {
                                                   : "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50"
                                             )}
                                           >
-                                            {ACTION_LABEL[act] ?? act}
-                                          </button>
+                                            <Checkbox
+                                              checked={checked}
+                                              disabled={disabled}
+                                              onCheckedChange={(value) => {
+                                                if (cell.id == null || !canSaveRole) return
+                                                const next = new Set(selectedPermissionIds)
+                                                if (value) next.add(cell.id)
+                                                else next.delete(cell.id)
+                                                setSelectedPermissionIds(next)
+                                              }}
+                                            />
+                                            <span>{ACTION_LABEL[act] ?? act}</span>
+                                          </label>
                                         )
                                       })}
                                     </div>
@@ -826,10 +804,10 @@ export function RolesPage() {
               <Card className="border-zinc-200 bg-white">
                 <CardHeader>
                   <CardTitle>Plant scope</CardTitle>
-                  <CardDescription>
+                  {/* <CardDescription>
                     No plant selected means the role is global. Otherwise it can only be assigned at
                     selected plants.
-                  </CardDescription>
+                  </CardDescription> */}
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {canLoadPlantList ? (
@@ -838,11 +816,11 @@ export function RolesPage() {
                         <div className="text-sm font-semibold text-zinc-900">
                           {scopeLabel(linkedOrgUnitIds.size)}
                         </div>
-                        <div className="mt-1 text-sm text-zinc-700">
+                        {/* <div className="mt-1 text-sm text-zinc-700">
                           {linkedOrgUnitIds.size === 0
                             ? "This role can be assigned at any plant."
                             : "This role is restricted to the plants selected below."}
-                        </div>
+                        </div> */}
                       </div>
                       <div className="rounded-2xl border border-zinc-200 p-3">
                         {plants === null || plants.length === 0 ? (
@@ -884,24 +862,6 @@ export function RolesPage() {
                       <span className="font-medium">Roles Create/Edit</span>.
                     </p>
                   )}
-                </CardContent>
-              </Card>
-
-              <Card className="border-zinc-200 bg-white">
-                <CardHeader>
-                  <CardTitle>Notes</CardTitle>
-                  <CardDescription>Keep the editing model explicit and predictable.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm text-muted-foreground">
-                  <div className="rounded-2xl bg-zinc-50 px-4 py-3">
-                    Each module exposes only its real actions. Missing DB rows stay visibly disabled.
-                  </div>
-                  <div className="rounded-2xl bg-zinc-50 px-4 py-3">
-                    Compact action pills reduce horizontal scanning compared with the old matrix.
-                  </div>
-                  <div className="rounded-2xl bg-zinc-50 px-4 py-3">
-                    The save state and plant scope stay visible without dominating the page.
-                  </div>
                 </CardContent>
               </Card>
             </div>

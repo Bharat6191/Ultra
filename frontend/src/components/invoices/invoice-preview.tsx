@@ -26,11 +26,23 @@ function hasText(v: string | undefined | null): v is string {
   return s.length > 0 && s !== "—"
 }
 
+function formatMetaDate(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return value
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [yyyy, mm, dd] = trimmed.split("-")
+    return `${dd}/${mm}/${yyyy}`
+  }
+  return value
+}
+
 function MetaRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-[7.5rem_1fr] items-baseline gap-3 border-b border-zinc-200/80 py-2 last:border-0">
+    <div className="grid grid-cols-[6.75rem_minmax(0,1fr)] items-baseline gap-3 border-b border-zinc-200/80 py-2 last:border-0">
       <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</span>
-      <span className="text-right text-sm font-medium tabular-nums text-zinc-900">{value}</span>
+      <span className="min-w-0 break-words text-right text-[15px] font-semibold leading-snug tabular-nums text-zinc-900">
+        {value}
+      </span>
     </div>
   )
 }
@@ -63,7 +75,7 @@ export function InvoicePreview({
           <div className="h-px flex-1 bg-zinc-300" aria-hidden />
         </div>
 
-        <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_min(220px,280px)] lg:gap-12">
+        <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:gap-12">
           <div className="min-w-0 space-y-8">
             <section>
               <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Issued to</h2>
@@ -88,8 +100,8 @@ export function InvoicePreview({
 
           <div className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50/80 px-4 py-2">
             <MetaRow label="Invoice no." value={data.invoiceNo} />
-            <MetaRow label="Date" value={data.invoiceDate} />
-            {data.dueDate ? <MetaRow label="Due date" value={data.dueDate} /> : null}
+            <MetaRow label="Date" value={formatMetaDate(data.invoiceDate)} />
+            {data.dueDate ? <MetaRow label="Due date" value={formatMetaDate(data.dueDate)} /> : null}
           </div>
         </div>
       </div>
