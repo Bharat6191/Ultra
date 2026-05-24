@@ -121,11 +121,29 @@ def seed_demo_data_if_empty() -> None:
     _run([sys.executable, str(REPO_ROOT / "scripts/seed_demo_status_matrix.py")])
 
 
+def seed_demo_access_matrix() -> None:
+    if not _bool_env("AUTO_SEED_DEMO_ACCESS_MATRIX", True):
+        print("AUTO_SEED_DEMO_ACCESS_MATRIX is disabled. Skipping demo access-matrix seed.", flush=True)
+        return
+
+    password = os.environ.get("DEMO_USER_PASSWORD", "DemoPass123!").strip()
+    print("Applying demo access-matrix roles/users/workflows.", flush=True)
+    _run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "scripts/seed_demo_access_matrix.py"),
+            "--password",
+            password,
+        ]
+    )
+
+
 def main() -> None:
     wait_for_db()
     run_migrations()
     ensure_superuser_if_needed()
     seed_demo_data_if_empty()
+    seed_demo_access_matrix()
 
 
 if __name__ == "__main__":
