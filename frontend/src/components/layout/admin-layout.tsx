@@ -1,7 +1,9 @@
 import * as React from "react"
 import type { LucideIcon } from "lucide-react"
 import { Bell, Factory, KeyRound, LayoutDashboard, Link2, Mail, Settings, Shield, Users } from "lucide-react"
+import { useLocation } from "react-router-dom"
 
+import { AppLogo } from "@/components/layout/AppLogo"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -102,6 +104,8 @@ export function AdminLayout({
   userEmail,
   onSignOut,
 }: AdminLayoutProps) {
+  const location = useLocation()
+  const mainRef = React.useRef<HTMLElement | null>(null)
   const activeLabel = navItems.find((i) => i.id === activeId)?.label ?? "Overview"
   const title = pageTitle ?? activeLabel
   const email = userEmail ?? "—"
@@ -115,11 +119,16 @@ export function AdminLayout({
     return `${a}${b}`.slice(0, 2)
   }, [userEmail])
 
+  React.useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" })
+  }, [location.pathname])
+
   return (
     <div className="flex h-svh min-h-0 w-full bg-background text-foreground">
       <aside className="flex w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-        <div className="flex h-14 items-center px-4">
-          <span className="text-sm font-semibold tracking-tight">Admin</span>
+        <div className="space-y-3 px-4 py-5">
+          <AppLogo className="mx-auto w-[164px]" />
+          <span className="block text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Admin</span>
         </div>
         <Separator className="bg-sidebar-border" />
         <ScrollArea className="min-h-0 flex-1">
@@ -185,7 +194,7 @@ export function AdminLayout({
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
-        <main className="min-h-0 flex-1 overflow-auto p-6">{children}</main>
+        <main ref={mainRef} className="min-h-0 flex-1 overflow-auto p-6">{children}</main>
       </div>
     </div>
   )

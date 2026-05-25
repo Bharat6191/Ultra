@@ -295,7 +295,7 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
           <div className="space-y-1">
             <CardTitle className="text-base">Plant mapping</CardTitle>
             <div className="text-sm text-muted-foreground">
-              Where this contractor is operationally engaged, in what role, and for how long.
+              Where this contractor is operationally engaged, in what status, and for how long.
             </div>
             {rows && rows.length > 0 ? (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
@@ -363,9 +363,9 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
           <TableHeader>
             <TableRow className="hover:bg-gray-50">
               <TableHead>Plant</TableHead>
-              <TableHead>Role</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead>Period</TableHead>
-              <TableHead className="w-[160px]">Status</TableHead>
+              <TableHead className="w-[160px]">Lifecycle</TableHead>
               <TableHead className="w-[64px] text-right" />
             </TableRow>
           </TableHeader>
@@ -511,7 +511,7 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
           <DialogHeader>
             <DialogTitle>{isEditing ? "Edit plant mapping" : "Map contractor to plant"}</DialogTitle>
             <DialogDescription>
-              Define where the contractor is engaged, in what role, and the period of validity.
+              Define where the contractor is engaged, in what status, and the period of validity.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
@@ -551,7 +551,7 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
               </div>
             )}
             <div className="grid gap-2">
-              <div className="text-xs text-muted-foreground">Role</div>
+              <div className="text-xs text-muted-foreground">Status</div>
               <select
                 className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm"
                 value={form.role}
@@ -600,7 +600,7 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
               onClick={save}
               disabled={saving || (!isEditing && !form.org_unit_id)}
             >
-              {saving ? "Saving…" : isEditing ? "Save changes" : "Save mapping"}
+              {saving ? "Saving…" : isEditing ? "Save Changes" : "Save mapping"}
             </Button>
           </DialogFooter>
         </DialogContent>

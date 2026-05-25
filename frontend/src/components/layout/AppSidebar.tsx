@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import { LayoutDashboard, BriefcaseBusiness } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
+import { AppLogo } from "@/components/layout/AppLogo"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
@@ -24,28 +25,16 @@ function pathMatches(pathname: string, to: string) {
 }
 
 export type AppSidebarProps = {
-  logoTitle?: string
-  logoSubtitle?: string
   items?: SidebarNavItem[]
 }
 
-export function AppSidebar({
-  logoTitle = "Ultra Workspace",
-  logoSubtitle = "Operations",
-  items = defaultItems,
-}: AppSidebarProps) {
+export function AppSidebar({ items = defaultItems }: AppSidebarProps) {
   const location = useLocation()
 
   return (
     <aside className="hidden h-svh min-h-0 w-64 shrink-0 flex-col border-r border-gray-200 bg-gray-50 lg:flex">
-      <div className="flex h-14 shrink-0 items-center gap-3 px-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-xs font-semibold text-white">
-          UL
-        </div>
-        <div className="min-w-0 leading-tight">
-          <div className="truncate text-sm font-semibold tracking-tight text-zinc-950">{logoTitle}</div>
-          <div className="truncate text-xs text-muted-foreground">{logoSubtitle}</div>
-        </div>
+      <div className="shrink-0 px-4 py-5">
+        <AppLogo className="mx-auto w-[176px]" />
       </div>
 
       <Separator className="bg-gray-200" />
@@ -79,4 +68,3 @@ export function AppSidebar({
     </aside>
   )
 }
-

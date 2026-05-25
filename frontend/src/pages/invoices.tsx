@@ -176,7 +176,7 @@ export function InvoicesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Invoice #</TableHead>
-                <TableHead>Work order</TableHead>
+                <TableHead>Work Order</TableHead>
                 <TableHead>Contractor</TableHead>
                 <TableHead>Plant</TableHead>
                 <TableHead>Date</TableHead>

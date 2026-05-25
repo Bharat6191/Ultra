@@ -69,7 +69,7 @@ export function ContractorOverview({ contractor }: { contractor: ContractorOverv
 
       <Card className="rounded-2xl">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Contact</CardTitle>
+          <CardTitle className="text-base">Contractor Information</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4">
           <FieldRow label="Person" value={contractor.contact_person} />

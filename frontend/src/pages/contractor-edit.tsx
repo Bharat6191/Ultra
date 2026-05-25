@@ -162,7 +162,7 @@ export function ContractorEditPage() {
             disabled={saving || !isContractorFormValid(form)}
             onClick={() => void submit()}
           >
-            {saving ? "Saving…" : "Save changes"}
+            {saving ? "Saving…" : "Save Changes"}
           </Button>
         </div>
       </div>

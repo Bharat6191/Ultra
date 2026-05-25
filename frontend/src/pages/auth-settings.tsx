@@ -100,7 +100,7 @@ export function AuthSettingsPage() {
   return (
     <div className="w-full min-w-0 space-y-6">
       <div>
-        <h2 className="text-lg font-semibold tracking-tight">Authentication policy</h2>
+        <h2 className="text-lg font-semibold tracking-tight">Authentication Policy</h2>
         <p className="text-sm text-muted-foreground">Per-company sign-in, MFA, and captcha. Superusers are not affected.</p>
       </div>
 

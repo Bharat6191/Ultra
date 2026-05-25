@@ -431,7 +431,7 @@ export function RolesPage() {
                 >
                   <DialogTrigger asChild>
                     <Button type="button" variant="outline" size="sm">
-                      Create role
+                      Create Role
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-md">
@@ -524,7 +524,7 @@ export function RolesPage() {
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search roles"
+                placeholder="Search Roles"
                 className="pl-9"
               />
             </div>
@@ -616,7 +616,7 @@ export function RolesPage() {
                       disabled={!selectedRoleId || !hasDirty || !canSaveRole}
                       className="border border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800"
                     >
-                      Save changes
+                      Save Changes
                     </Button>
                   </div>
                 </div>

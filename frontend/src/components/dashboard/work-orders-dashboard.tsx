@@ -13,9 +13,9 @@ export type WorkOrdersDashboardModule = {
 export function WorkOrdersDashboard({ module }: { module: WorkOrdersDashboardModule }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <Kpi title="Work orders" value={module.total} icon={<BriefcaseBusiness className="size-4" />} />
+      <Kpi title="Work Orders" value={module.total} icon={<BriefcaseBusiness className="size-4" />} />
       <Kpi title="Active" value={module.active} icon={<Play className="size-4" />} tone="success" />
-      <Kpi title="Pending approval" value={module.pending_approval} icon={<Hourglass className="size-4" />} tone="warning" />
+      <Kpi title="Pending Approval" value={module.pending_approval} icon={<Hourglass className="size-4" />} tone="warning" />
       <Kpi title="Drafts" value={module.draft} icon={<BriefcaseBusiness className="size-4" />} tone="neutral" />
     </div>
   )

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from core.permissions import require_any_permission, require_permission
 from db.session import get_db
+from modules.errors import ConflictError, NotFoundError
 from modules.org_units.model import OrgUnit
 from modules.org_units.schema import OrgUnitCreate, OrgUnitPatch, OrgUnitPublic
 from modules.org_units.service import OrgUnitService
@@ -64,7 +65,12 @@ def create_org_unit(
     svc: Annotated[OrgUnitService, Depends(get_org_unit_service)],
     _: Annotated[object, Depends(require_permission("org_units.create"))],
 ) -> OrgUnit:
-    return svc.create_org_unit(payload)
+    try:
+        return svc.create_org_unit(payload)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.patch("/{org_unit_id}", response_model=OrgUnitPublic)
@@ -74,4 +80,9 @@ def patch_org_unit(
     svc: Annotated[OrgUnitService, Depends(get_org_unit_service)],
     _: Annotated[object, Depends(require_permission("org_units.update"))],
 ) -> OrgUnit:
-    return svc.update_org_unit(int(org_unit_id), payload)
+    try:
+        return svc.update_org_unit(int(org_unit_id), payload)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

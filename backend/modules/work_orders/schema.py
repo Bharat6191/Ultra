@@ -110,6 +110,7 @@ class WorkOrderPublic(BaseModel):
     title: str
     description: str | None
     status: str
+    is_active: bool
     approval_request_id: int | None
     approved_value_total: Decimal | None = None
     approved_by: int | None = None

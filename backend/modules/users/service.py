@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import re
 import secrets
 import string
 
@@ -53,7 +54,10 @@ class UserService:
 
     @staticmethod
     def _normalize_phone(phone: str) -> str:
-        return phone.strip()
+        normalized = phone.strip()
+        if not re.fullmatch(r"\d{10}", normalized):
+            raise ValueError("Phone must be exactly 10 digits")
+        return normalized
 
     @staticmethod
     def _generate_password() -> str:

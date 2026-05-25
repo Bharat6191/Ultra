@@ -211,7 +211,7 @@ export function UserViewPage() {
     <div className="w-full space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">User details</h2>
+          <h2 className="text-lg font-semibold tracking-tight">User Details</h2>
           <p className="text-sm text-muted-foreground">Read-only summary. Audit Trail appears below.</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">

@@ -22,6 +22,7 @@ from modules.work_orders.models import (
     WORK_ORDER_ITEM_PROGRESS_TYPES,
     WORK_ORDER_STATUSES,
     WorkOrder,
+    WorkOrderAuditLog,
     WorkOrderItem,
     WorkOrderItemProgress,
 )
@@ -314,23 +315,82 @@ class WorkOrderService:
         stmt = filtered.offset(int(offset)).limit(int(limit))
         return list(self._db.scalars(stmt).unique().all())
 
+    def _latest_archive_status_hint(self, wo: WorkOrder) -> str | None:
+        for log in reversed(list(wo.audit_logs or [])):
+            action = str(log.action or "").upper()
+            old_value = dict(log.old_value or {})
+            new_value = dict(log.new_value or {})
+            metadata = dict(log.metadata_json or {})
+            if action == audit_helpers.ACTION_ARCHIVED or (
+                action == audit_helpers.ACTION_CANCELLED and new_value.get("is_active") is False
+            ):
+                raw = metadata.get("previous_status") or old_value.get("status")
+                if isinstance(raw, str) and raw.strip():
+                    return raw.strip().lower()
+        return None
+
+    def _restore_status_for_unarchive(self, wo: WorkOrder) -> str:
+        hinted = self._latest_archive_status_hint(wo)
+        if hinted in WORK_ORDER_STATUSES:
+            return hinted
+
+        current = str(wo.status or "").strip().lower()
+        if current != "cancelled":
+            return current or "draft"
+
+        was_operational = int(
+            self._db.scalar(
+                select(func.count())
+                .select_from(WorkOrderAuditLog)
+                .where(
+                    WorkOrderAuditLog.work_order_id == int(wo.id),
+                    WorkOrderAuditLog.action.in_(
+                        (audit_helpers.ACTION_ACTIVATED, audit_helpers.ACTION_APPROVED)
+                    ),
+                )
+            )
+            or 0
+        )
+        return "active" if was_operational > 0 else "cancelled"
+
     def archive(self, work_order_id: int, *, actor_user_id: int) -> WorkOrder:
         wo = self.get(work_order_id)
         if not bool(wo.is_active):
             return wo
         # Block archiving if it has downstream invoices in the future (we can enforce later).
+        old_status = str(wo.status or "").strip().lower() or "draft"
         wo.is_active = False
-        if wo.status not in ("cancelled", "closed"):
-            wo.status = "cancelled"
         audit_helpers.write_audit(
             self._db,
             work_order_id=int(wo.id),
-            action=audit_helpers.ACTION_CANCELLED,
+            action=audit_helpers.ACTION_ARCHIVED,
             actor_user_id=actor_user_id,
-            new_value={"is_active": False, "status": wo.status},
+            old_value={"is_active": True, "status": old_status},
+            new_value={"is_active": False, "status": old_status},
+            metadata={"previous_status": old_status},
         )
         self._db.commit()
-        return wo
+        return self.get(work_order_id)
+
+    def unarchive(self, work_order_id: int, *, actor_user_id: int) -> WorkOrder:
+        wo = self.get(work_order_id)
+        if bool(wo.is_active):
+            return wo
+
+        old_status = str(wo.status or "").strip().lower() or "draft"
+        wo.is_active = True
+        wo.status = self._restore_status_for_unarchive(wo)
+        audit_helpers.write_audit(
+            self._db,
+            work_order_id=int(wo.id),
+            action=audit_helpers.ACTION_UNARCHIVED,
+            actor_user_id=actor_user_id,
+            old_value={"is_active": False, "status": old_status},
+            new_value={"is_active": True, "status": wo.status},
+            metadata={"restored_status": wo.status},
+        )
+        self._db.commit()
+        return self.get(work_order_id)
 
     def close_active_work_order(self, work_order_id: int, *, actor_user_id: int) -> WorkOrder:
         """Mark an active work order as closed after every line reports 100% completion."""

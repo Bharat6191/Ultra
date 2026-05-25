@@ -225,7 +225,7 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-base font-semibold tracking-tight">Part intelligence</h3>
+          <h3 className="text-base font-semibold tracking-tight">Part Intelligence</h3>
           <p className="text-xs text-muted-foreground">Commercial rates, negotiations, and work orders for procurement decisions.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -471,7 +471,7 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
 
       <Card>
         <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-sm font-semibold">Work orders</CardTitle>
+          <CardTitle className="text-sm font-semibold">Work Orders</CardTitle>
           <CardDescription className="text-xs">
             Orders including this part — {formatMoney(wo.total_wo_value)} total value, {formatMoney(wo.total_invoiced_for_part)}{" "}
             invoiced, {formatMoney(wo.pending_invoice_amount_for_part)} pending.

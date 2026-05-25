@@ -304,7 +304,7 @@ export function InvoiceDetailPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[88px]">Status</TableHead>
-                <TableHead className="w-[110px]">Work order</TableHead>
+                <TableHead className="w-[110px]">Work Order</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right w-[72px]">Qty</TableHead>
                 <TableHead className="text-right w-[80px]">WT (kg)</TableHead>

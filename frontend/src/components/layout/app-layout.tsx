@@ -1,6 +1,7 @@
 import * as React from "react"
 import { LayoutGrid, LogOut, Settings2, User2 } from "lucide-react"
 
+import { AppLogo } from "@/components/layout/AppLogo"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -35,14 +36,8 @@ export function AppLayout({ children, pageTitle, userEmail, onSignOut }: AppLayo
     <div className="min-h-svh bg-gray-50 text-foreground">
       <header className="sticky top-0 z-20 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-xs font-semibold text-white">
-              UL
-            </div>
-            <div className="leading-tight">
-              <div className="text-sm font-semibold tracking-tight">Ultra Workspace</div>
-              <div className="text-xs text-muted-foreground">Operations dashboard</div>
-            </div>
+          <div className="flex items-center">
+            <AppLogo className="w-[118px]" />
           </div>
 
           <div className="flex items-center gap-2">
@@ -105,4 +100,3 @@ export function AppLayout({ children, pageTitle, userEmail, onSignOut }: AppLayo
     </div>
   )
 }
-

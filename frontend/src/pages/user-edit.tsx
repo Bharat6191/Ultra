@@ -7,7 +7,7 @@ import { toast } from "sonner"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -59,7 +59,7 @@ type UserPublic = {
 const editUserSchema = z.object({
   full_name: z.string().min(1, "Full name is required").max(255),
   username: z.string().min(3, "Username is required").max(64),
-  phone: z.string().min(3, "Phone is required").max(32),
+  phone: z.string().trim().regex(/^\d{10}$/, "Phone must be exactly 10 digits"),
   email: z.string().email("Enter a valid email"),
   employee_code: z.string().max(64).optional(),
   department: z.string().max(128).optional(),
@@ -103,6 +103,7 @@ export function UserEditPage() {
   })
 
   const plantId = form.watch("org_unit_id")
+  const phoneField = form.register("phone")
 
   React.useEffect(() => {
     if (!roles) return
@@ -225,13 +226,10 @@ export function UserEditPage() {
   }
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">Edit user</h2>
-          <p className="text-sm text-muted-foreground">Update profile, plant, roles, and status.</p>
-        </div>
-        <Button asChild variant="outline" size="sm">
+    <div className="w-full space-y-3">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-base font-semibold tracking-tight">Edit user</h2>
+        <Button asChild variant="outline" size="xs">
           <Link to="..">Back</Link>
         </Button>
       </div>
@@ -249,15 +247,14 @@ export function UserEditPage() {
           <AlertDescription>This user may have been deleted or is outside the loaded range.</AlertDescription>
         </Alert>
       ) : (
-        <Card>
-          <CardHeader className="pb-3">
+        <Card size="sm">
+          <CardHeader className="pb-1">
             <CardTitle className="text-base">{user.full_name}</CardTitle>
-            <CardDescription>Make changes and save.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2 sm:col-span-2">
+          <CardContent className="pb-4">
+            <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
                   <Label htmlFor="edit-full-name" showRequired>
                     Full name
                   </Label>
@@ -267,7 +264,7 @@ export function UserEditPage() {
                   ) : null}
                 </div>
 
-                <div className="space-y-2 sm:col-span-2">
+                <div className="space-y-2">
                   <Label htmlFor="edit-username" showRequired>
                     Username
                   </Label>
@@ -281,7 +278,20 @@ export function UserEditPage() {
                   <Label htmlFor="edit-phone" showRequired>
                     Phone
                   </Label>
-                  <Input id="edit-phone" {...form.register("phone")} disabled={user.is_superuser} />
+                  <Input
+                    id="edit-phone"
+                    type="tel"
+                    autoComplete="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="10-digit phone number"
+                    {...phoneField}
+                    onChange={(e) => {
+                      e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10)
+                      phoneField.onChange(e)
+                    }}
+                    disabled={user.is_superuser}
+                  />
                   {form.formState.errors.phone?.message ? (
                     <p className="text-xs text-destructive">{form.formState.errors.phone.message}</p>
                   ) : null}
@@ -312,17 +322,17 @@ export function UserEditPage() {
                   <Input id="edit-designation" {...form.register("designation")} disabled={user.is_superuser} />
                 </div>
 
-                <div className="space-y-2 sm:col-span-2">
+                <div className="space-y-2">
                   <Label htmlFor="edit-address">Address</Label>
                   <textarea
                     id="edit-address"
-                    className="min-h-[90px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+                    className="min-h-[60px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
                     {...form.register("address")}
                     disabled={user.is_superuser}
                   />
                 </div>
 
-                <div className="space-y-2 sm:col-span-2">
+                <div className="space-y-2">
                   <Label showRequired>Plant</Label>
                   <select
                     className="h-9 w-full rounded-md border bg-background px-2 text-sm"
@@ -344,28 +354,30 @@ export function UserEditPage() {
                 <div className="space-y-2 sm:col-span-2">
                   <Label showRequired>Roles</Label>
                   <p className="text-xs text-muted-foreground">Select every role this user should have.</p>
-                  <div className="mt-2 max-h-52 space-y-2 overflow-y-auto rounded-md border border-input bg-muted/20 p-3">
+                  <div className="mt-2 max-h-28 overflow-y-auto rounded-md border border-input bg-muted/20 p-2.5">
                     {rolesForPlant(roles, plantId).length === 0 ? (
                       <p className="text-xs text-muted-foreground">Pick a plant to see roles.</p>
                     ) : (
-                      rolesForPlant(roles, plantId).map((r) => {
-                        const checked = form.watch("role_ids").includes(r.id)
-                        return (
-                          <label key={r.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                            <Checkbox
-                              checked={checked}
-                              disabled={user.is_superuser}
-                              onCheckedChange={(v) => {
-                                const on = v === true
-                                const cur = form.getValues("role_ids")
-                                const next = on ? [...new Set([...cur, r.id])] : cur.filter((id) => id !== r.id)
-                                form.setValue("role_ids", next, { shouldDirty: true, shouldValidate: true })
-                              }}
-                            />
-                            <span>{r.name}</span>
-                          </label>
-                        )
-                      })
+                      <div className="grid gap-x-6 gap-y-2 md:grid-cols-2">
+                        {rolesForPlant(roles, plantId).map((r) => {
+                          const checked = form.watch("role_ids").includes(r.id)
+                          return (
+                            <label key={r.id} className="flex cursor-pointer items-center gap-2 text-sm leading-5">
+                              <Checkbox
+                                checked={checked}
+                                disabled={user.is_superuser}
+                                onCheckedChange={(v) => {
+                                  const on = v === true
+                                  const cur = form.getValues("role_ids")
+                                  const next = on ? [...new Set([...cur, r.id])] : cur.filter((id) => id !== r.id)
+                                  form.setValue("role_ids", next, { shouldDirty: true, shouldValidate: true })
+                                }}
+                              />
+                              <span>{r.name}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
                     )}
                   </div>
                   {form.formState.errors.role_ids?.message ? (
@@ -373,26 +385,30 @@ export function UserEditPage() {
                   ) : null}
                 </div>
 
-                <div className="flex items-center justify-between gap-3 sm:col-span-2">
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium">Active</div>
-                    <div className="text-xs text-muted-foreground">Inactive users cannot sign in.</div>
-                  </div>
-                  <Switch
-                    checked={form.watch("is_active")}
-                    onCheckedChange={(v) => form.setValue("is_active", v, { shouldDirty: true })}
-                    disabled={user.is_superuser}
-                  />
-                </div>
-              </div>
+                <div className="sm:col-span-2 rounded-md border border-input bg-muted/10 px-4 py-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center justify-between gap-3 sm:flex-1">
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium">Active</div>
+                        <div className="text-xs text-muted-foreground">Inactive users cannot sign in.</div>
+                      </div>
+                      <Switch
+                        checked={form.watch("is_active")}
+                        onCheckedChange={(v) => form.setValue("is_active", v, { shouldDirty: true })}
+                        disabled={user.is_superuser}
+                      />
+                    </div>
 
-              <div className="flex justify-end gap-2 pt-1">
-                <Button type="button" variant="outline" onClick={() => navigate("..")} disabled={form.formState.isSubmitting}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={form.formState.isSubmitting || user.is_superuser}>
-                  {form.formState.isSubmitting ? "Saving…" : "Save"}
-                </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => navigate("..")} disabled={form.formState.isSubmitting}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" size="sm" disabled={form.formState.isSubmitting || user.is_superuser}>
+                        {form.formState.isSubmitting ? "Saving…" : "Save"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </form>
           </CardContent>
@@ -401,4 +417,3 @@ export function UserEditPage() {
     </div>
   )
 }
-

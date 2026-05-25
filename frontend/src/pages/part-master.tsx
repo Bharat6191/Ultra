@@ -63,7 +63,7 @@ export function PartMasterPage() {
     try {
       const qs = new URLSearchParams()
       if (plantFilter) qs.set("org_unit_id", plantFilter)
-      if (search.trim()) qs.set("part_code", search.trim())
+      if (search.trim()) qs.set("search", search.trim())
       qs.set("active", "false")
       const list = await getJson<PartMasterPublic[]>(`/part-master?${qs.toString()}`)
       setRows(Array.isArray(list) ? list : [])
@@ -173,7 +173,7 @@ export function PartMasterPage() {
             </select>
           </div>
           <div className="grid min-w-[200px] flex-1 gap-1">
-            <Label>Search part</Label>
+            <Label>Search Part</Label>
             <div className="relative">
               <Search className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
               <Input className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Code or name" />

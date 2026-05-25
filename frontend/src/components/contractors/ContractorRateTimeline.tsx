@@ -322,7 +322,7 @@ export function ContractorRateTimeline({
                         {highlights ? <TimelineHighlights highlights={highlights} /> : null}
                         {vsBaseTolerance ? (
                           <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <span className="text-[11px] text-muted-foreground">Tolerance</span>
+                            <span className="text-[11px] text-muted-foreground">Variance</span>
                             <VsBaseToleranceBadge
                               negotiated={null}
                               baseRate={null}

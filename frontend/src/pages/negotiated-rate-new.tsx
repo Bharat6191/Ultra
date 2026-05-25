@@ -397,7 +397,7 @@ export function NegotiatedRateNewPage() {
       <header className="space-y-1 border-b border-border/70 pb-4">
         <div className="text-xs text-muted-foreground">
           <Link to="/dashboard/negotiated-rates" className="underline-offset-2 hover:underline">
-            Negotiated Rates
+            Negotiation
           </Link>
           <span className="mx-1">/</span>
           <span>New</span>
@@ -461,7 +461,7 @@ export function NegotiatedRateNewPage() {
             ) : null}
 
             <div className="grid gap-1">
-              <Label>Search parts</Label>
+              <Label>Search Parts</Label>
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Code, name, plant…" />
             </div>
 

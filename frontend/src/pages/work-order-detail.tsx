@@ -35,7 +35,7 @@ import {
   invoiceDisplayStatusBadgeVariant,
   invoiceDisplayStatusLabel,
 } from "@/lib/invoice-validation-display"
-import { workOrderStatusBadgeVariant } from "@/lib/work-order-status-badge"
+import { workOrderStatusBadgeVariant, workOrderStatusLabel } from "@/lib/work-order-status-badge"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
 type LineCompletionPayload = {
@@ -60,6 +60,7 @@ type WorkOrder = {
   title: string
   description: string | null
   status: string
+  is_active?: boolean
   created_at?: string | null
   approved_at?: string | null
   updated_at?: string | null
@@ -137,6 +138,32 @@ function fallbackLineCompletion(it: NonNullable<WorkOrder["items"]>[number]): Li
   }
 }
 
+function workOrderListTabForStatus(status: string): "draft" | "approval" | "operating" | "completed" | null {
+  switch (String(status || "").toLowerCase()) {
+    case "draft":
+    case "rejected":
+      return "draft"
+    case "pending_approval":
+      return "approval"
+    case "approved":
+    case "active":
+      return "operating"
+    case "closed":
+      return "completed"
+    default:
+      return null
+  }
+}
+
+function workOrderAuditActionLabel(entry: AuditEntry): string {
+  const action = String(entry.action || "").toUpperCase()
+  if (action === "ARCHIVED" || action === "UNARCHIVED") return action
+  const next =
+    entry.new_value && typeof entry.new_value === "object" ? (entry.new_value as Record<string, unknown>) : null
+  if (action === "CANCELLED" && next?.is_active === false) return "ARCHIVED"
+  return action
+}
+
 export function WorkOrderDetailPage() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -203,7 +230,7 @@ export function WorkOrderDetailPage() {
   }, [])
 
   const editableDraft = Boolean(
-    row && canSubmit && (row.status === "draft" || row.status === "rejected"),
+    row && row.is_active !== false && canSubmit && (row.status === "draft" || row.status === "rejected"),
   )
 
   React.useEffect(() => {
@@ -300,6 +327,19 @@ export function WorkOrderDetailPage() {
       navigate("/dashboard/work-orders?tab=archive", { replace: true })
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Archive failed")
+    }
+  }
+
+  async function unarchive() {
+    if (!row) return
+    if (!confirm("Unarchive this work order?")) return
+    try {
+      const res = await postJson<{ status?: string }>(`/work-orders/${row.id}/unarchive`, {})
+      toast.success("Work order unarchived")
+      const nextTab = workOrderListTabForStatus(String(res?.status ?? row.status))
+      navigate(nextTab ? `/dashboard/work-orders?tab=${nextTab}` : "/dashboard/work-orders", { replace: true })
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Unarchive failed")
     }
   }
 
@@ -485,24 +525,26 @@ export function WorkOrderDetailPage() {
   if (!row) {
     return (
       <Alert variant={error ? "destructive" : "default"}>
-        <AlertTitle>Work order</AlertTitle>
+        <AlertTitle>Work Order</AlertTitle>
         <AlertDescription>{error ?? "Not found"}</AlertDescription>
       </Alert>
     )
   }
 
-  const showSubmitButton = canSubmit && (row.status === "draft" || row.status === "rejected")
+  const showSubmitButton = row.is_active !== false && canSubmit && (row.status === "draft" || row.status === "rejected")
 
-  const showCompletionEngine = row.status === "active" && canManageCompletion && !editableDraft
+  const showCompletionEngine = row.is_active !== false && row.status === "active" && canManageCompletion && !editableDraft
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{row.work_order_number}</p>
-          <h2 className="text-base font-medium">Work order</h2>
+          <h2 className="text-base font-medium">Work Order</h2>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <Badge variant={workOrderStatusBadgeVariant(row.status)}>{row.status}</Badge>
+            <Badge variant={workOrderStatusBadgeVariant(row.status, row.is_active)}>
+              {workOrderStatusLabel(row.status, row.is_active)}
+            </Badge>
             {!editableDraft ? (
               <>
                 <span className="text-sm text-muted-foreground tabular-nums">
@@ -519,11 +561,17 @@ export function WorkOrderDetailPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild size="sm" variant="outline">
-            <Link to="/dashboard/work-orders">Back</Link>
+            <Link to={row.is_active === false ? "/dashboard/work-orders?tab=archive" : "/dashboard/work-orders"}>
+              Back
+            </Link>
           </Button>
           {canDelete ? (
-            <Button size="sm" variant="outline" onClick={() => void archive()}>
-              Archive
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void (row.is_active === false ? unarchive() : archive())}
+            >
+              {row.is_active === false ? "Unarchive" : "Archive"}
             </Button>
           ) : null}
         </div>
@@ -685,7 +733,9 @@ export function WorkOrderDetailPage() {
                 .map((a) => (
                   <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2">
                     <div className="min-w-0">
-                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{a.action}</div>
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        {workOrderAuditActionLabel(a)}
+                      </div>
                       <div className="text-sm">
                         {a.actor_name ?? (a.changed_by != null ? `User #${a.changed_by}` : "—")}
                       </div>

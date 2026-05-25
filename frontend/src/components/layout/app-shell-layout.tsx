@@ -42,7 +42,7 @@ const shellNavItems: ShellNavItem[] = [
   },
   {
     id: "plants",
-    label: "Clusters & plants",
+    label: "Clusters & Plants",
     icon: Factory,
     to: "/dashboard/plants",
     permission: ["org_units.view", "org_units.create", "org_units.update", "org_units.delete"],
@@ -84,7 +84,7 @@ const shellNavItems: ShellNavItem[] = [
   },
   {
     id: "negotiated-rates",
-    label: "Negotiated Rates",
+    label: "Negotiation",
     icon: Handshake,
     to: "/dashboard/negotiated-rates",
     permission: [
@@ -96,7 +96,7 @@ const shellNavItems: ShellNavItem[] = [
   },
   {
     id: "work-orders",
-    label: "Work orders",
+    label: "Work Orders",
     icon: BriefcaseBusiness,
     to: "/dashboard/work-orders",
     permission: ["work_orders.view", "work_orders.create", "work_orders.update", "work_orders.approve"],
@@ -136,6 +136,7 @@ export function AppShellLayout({
   onRefreshProfile,
 }: AppShellLayoutProps) {
   const location = useLocation()
+  const mainRef = React.useRef<HTMLElement | null>(null)
   const visibleNav = shellNavItems.filter(navItemVisible)
 
   const activeItem = visibleNav.find((item) => pathMatchesNav(location.pathname, item.to))
@@ -147,6 +148,10 @@ export function AppShellLayout({
         .map((i) => ({ id: i.id, label: i.label, to: i.to, icon: i.icon })),
     [visibleNav]
   )
+
+  React.useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" })
+  }, [location.pathname])
 
   return (
     <div className="flex h-svh min-h-0 w-full bg-gray-50 text-foreground">
@@ -160,7 +165,7 @@ export function AppShellLayout({
           onRefreshProfile={onRefreshProfile}
         />
 
-        <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+        <main ref={mainRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
           <div className="w-full">{children}</div>
         </main>
       </div>

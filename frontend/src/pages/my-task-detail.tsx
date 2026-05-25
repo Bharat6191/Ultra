@@ -684,7 +684,7 @@ export function MyTaskDetailPage() {
             <div className="flex flex-wrap gap-2">
               {userCreationEditPath ? (
                 <Button asChild type="button" size="sm" variant="outline">
-                  <Link to={userCreationEditPath}>Edit user details</Link>
+                  <Link to={userCreationEditPath}>Edit User Details</Link>
                 </Button>
               ) : null}
               <Button type="button" size="sm" variant="default" onClick={() => void resubmitForApproval()} disabled={acting}>
@@ -706,7 +706,7 @@ export function MyTaskDetailPage() {
             <div className="flex flex-wrap gap-2">
               {userCreationEditPath ? (
                 <Button asChild type="button" size="sm" variant="outline">
-                  <Link to={userCreationEditPath}>Edit user details</Link>
+                  <Link to={userCreationEditPath}>Edit User Details</Link>
                 </Button>
               ) : null}
               <Button type="button" size="sm" variant="default" onClick={() => void resubmitForApproval()} disabled={acting}>
@@ -915,7 +915,7 @@ export function MyTaskDetailPage() {
             </div>
           )}
 
-          {task.task_type === "approval" && task.approval ? (
+          {/* {task.task_type === "approval" && task.approval ? (
             <Card>
               <CardHeader className="space-y-1 pb-2 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="space-y-0.5">
@@ -946,7 +946,7 @@ export function MyTaskDetailPage() {
                 </div>
               </CardContent>
             </Card>
-          ) : null}
+          ) : null} */}
 
           {task.task_type === "manual" ? (
             <TaskCommentsCard

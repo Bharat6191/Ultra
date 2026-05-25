@@ -197,9 +197,9 @@ export function ContractorDetailPage() {
         <TabsList variant="line" className="rounded-2xl bg-white p-2 shadow-sm">
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="documents">Compliance</TabsTrigger>
           <TabsTrigger value="plants">Plants</TabsTrigger>
-          <TabsTrigger value="timeline">Timeline & activity</TabsTrigger>
+          <TabsTrigger value="timeline">Audit Log</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard">

@@ -116,10 +116,15 @@ def _versions_to_public(db: Session, versions: list) -> list[RateVersionEntry]:
 def list_part_master(
     svc: Annotated[PartMasterService, Depends(_svc)],
     org_unit_id: int | None = Query(None),
+    search: str | None = Query(None),
     part_code: str | None = Query(None),
     active_only: bool = Query(False, alias="active"),
 ) -> list[PartMasterPublic]:
-    rows = svc.list_part_masters(org_unit_id=org_unit_id, part_code=part_code, active_only=active_only)
+    rows = svc.list_part_masters(
+        org_unit_id=org_unit_id,
+        search=(search if search is not None else part_code),
+        active_only=active_only,
+    )
     return [PartMasterPublic.model_validate(svc._public_dict(r)) for r in rows]
 
 

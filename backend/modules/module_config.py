@@ -32,7 +32,7 @@ DEFAULT_TAB_ACTIONS: tuple[str, ...] = ("view", "create", "update", "delete")
 MODULE_CONFIG: list[ModuleConfigDict] = [
     {
         "key": "users",
-        "title": "User management",
+        "title": "User Management",
         "tabs": [
             {
                 "key": "users",
@@ -43,7 +43,7 @@ MODULE_CONFIG: list[ModuleConfigDict] = [
     },
     {
         "key": "org_units",
-        "title": "Clusters & plants (org units)",
+        "title": "Clusters & Plants (org units)",
         "tabs": [
             {
                 "key": "org_units",
@@ -120,22 +120,22 @@ MODULE_CONFIG: list[ModuleConfigDict] = [
     },
     {
         "key": "notification_settings",
-        "title": "Notification settings",
+        "title": "Notification Settings",
         "tabs": [
             {
                 "key": "notification_settings",
-                "title": "Notification settings",
+                "title": "Notification Settings",
                 "actions": ["manage"],
             },
         ],
     },
     {
         "key": "email_templates",
-        "title": "Email templates",
+        "title": "Email Templates",
         "tabs": [
             {
                 "key": "email_templates",
-                "title": "Email templates",
+                "title": "Email Templates",
                 "actions": ["manage"],
             },
         ],

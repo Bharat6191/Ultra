@@ -259,7 +259,7 @@ export function PlantsPage() {
   return (
     <div className="space-y-4">
       <div className="min-w-0">
-        <h2 className="truncate text-sm font-medium">Clusters & plants</h2>
+        <h2 className="truncate text-sm font-medium">Clusters & Plants</h2>
         <p className="text-sm text-muted-foreground">
           Create clusters and plants, attach plants to clusters, or edit names and parent links in the catalog
           (edit requires <span className="font-mono text-xs">org_units.update</span>). Creating rows requires{" "}
@@ -277,9 +277,9 @@ export function PlantsPage() {
       <Tabs value={tab} onValueChange={setTab} className="gap-4">
         <TabsList className="h-auto w-full flex-wrap justify-start gap-1 p-1 sm:w-auto">
           <TabsTrigger value="catalog">Catalog</TabsTrigger>
-          {canCreate ? <TabsTrigger value="cluster">New cluster</TabsTrigger> : null}
-          {canCreate ? <TabsTrigger value="plant">New plant</TabsTrigger> : null}
-          {canUpdate ? <TabsTrigger value="attach">Attach plant</TabsTrigger> : null}
+          {canCreate ? <TabsTrigger value="cluster">New Cluster</TabsTrigger> : null}
+          {canCreate ? <TabsTrigger value="plant">New Plant</TabsTrigger> : null}
+          {canUpdate ? <TabsTrigger value="attach">Attach Plant</TabsTrigger> : null}
         </TabsList>
 
         <TabsContent value="catalog" className="mt-0 space-y-4">
@@ -346,7 +346,7 @@ export function PlantsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Parent cluster</TableHead>
+                  <TableHead>Parent Cluster</TableHead>
                   <TableHead className="w-[100px]">Type</TableHead>
                   {showActions ? <TableHead className="w-[88px] text-right">Actions</TableHead> : null}
                 </TableRow>
@@ -398,7 +398,7 @@ export function PlantsPage() {
           {canCreate ? (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Create cluster</CardTitle>
+                <CardTitle className="text-base">Create Cluster</CardTitle>
                 <CardDescription>
                   Permission: <span className="font-mono text-xs">org_units.create</span>. Optional parent nests this
                   cluster under another cluster.
@@ -407,7 +407,7 @@ export function PlantsPage() {
               <CardContent className="space-y-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="cluster-name-page" showRequired>
-                    Cluster name
+                    Cluster Name
                   </Label>
                   <Input
                     id="cluster-name-page"
@@ -418,7 +418,7 @@ export function PlantsPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="cluster-parent-page">Parent cluster (optional)</Label>
+                  <Label htmlFor="cluster-parent-page">Parent Cluster </Label>
                   <select
                     id="cluster-parent-page"
                     className={SELECT_CLASS}
@@ -439,7 +439,7 @@ export function PlantsPage() {
                   Cancel
                 </Button>
                 <Button type="button" size="sm" disabled={creatingCluster} onClick={() => void createCluster()}>
-                  {creatingCluster ? "Creating…" : "Create cluster"}
+                  {creatingCluster ? "Creating…" : "Create Cluster"}
                 </Button>
               </CardFooter>
             </Card>
@@ -461,7 +461,7 @@ export function PlantsPage() {
               <CardContent className="space-y-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="plant-name-page" showRequired>
-                    Plant name
+                    Plant Name
                   </Label>
                   <Input
                     id="plant-name-page"
@@ -472,7 +472,7 @@ export function PlantsPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="plant-cluster-page">Cluster (optional)</Label>
+                  <Label htmlFor="plant-cluster-page">Cluster </Label>
                   <select
                     id="plant-cluster-page"
                     className={SELECT_CLASS}

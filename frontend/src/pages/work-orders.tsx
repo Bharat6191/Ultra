@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson, getJsonList } from "@/lib/api"
-import { workOrderStatusBadgeVariant } from "@/lib/work-order-status-badge"
+import { workOrderStatusBadgeVariant, workOrderStatusLabel } from "@/lib/work-order-status-badge"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
 type WoTab = "all" | "draft" | "approval" | "operating" | "completed" | "archive"
@@ -47,22 +47,6 @@ function workOrdersListPath(tab: WoTab, page: number): string {
     q.set("active", "false")
   }
   return `/work-orders?${q.toString()}`
-}
-
-/** Friendly label in lists; raw `status` still drives badges and routing. */
-function workOrderStatusLabel(status: string): string {
-  switch (String(status || "").toLowerCase()) {
-    case "closed":
-      return "Completed"
-    case "pending_approval":
-      return "In approval"
-    case "draft":
-      return "Draft"
-    case "rejected":
-      return "Returned"
-    default:
-      return status
-  }
 }
 
 export function WorkOrdersPage() {
@@ -139,12 +123,12 @@ export function WorkOrdersPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-base font-medium">Work orders</h2>
+          <h2 className="text-base font-medium">Work Orders</h2>
         </div>
         {canCreate ? (
           <Button asChild type="button">
             <Link to="/dashboard/work-orders/new">
-              <Plus className="size-4" /> New work order
+              <Plus className="size-4" /> New Work Order
             </Link>
           </Button>
         ) : null}
@@ -217,7 +201,9 @@ export function WorkOrdersPage() {
                         : "—"}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={workOrderStatusBadgeVariant(r.status)}>{workOrderStatusLabel(r.status)}</Badge>
+                      <Badge variant={workOrderStatusBadgeVariant(r.status, r.is_active)}>
+                        {workOrderStatusLabel(r.status, r.is_active)}
+                      </Badge>
                     </TableCell>
                     {/* <TableCell className="text-right">
                       <Button asChild size="sm" variant="ghost">

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 CONTRACTOR_MODULE_CONFIG = {
     "key": "contractor",
-    "title": "Contractor master",
+    "title": "Contractor Master",
     "tabs": [
         {
             "key": "contractor",

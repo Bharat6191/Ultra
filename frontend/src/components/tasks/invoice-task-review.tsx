@@ -148,7 +148,7 @@ function FallbackSummary({ payload }: { payload: Record<string, unknown> }) {
     { label: "Invoice number", value: payloadString(payload, "invoice_number", "invoiceNo") },
     { label: "Contractor", value: payloadString(payload, "contractor_name") ?? payloadNumber(payload, "contractor_id") },
     { label: "Plant", value: payloadString(payload, "org_unit_name") ?? payloadNumber(payload, "org_unit_id") },
-    { label: "Work order", value: payloadString(payload, "work_order_number") },
+    { label: "Work Order", value: payloadString(payload, "work_order_number") },
     { label: "Validation status", value: payloadString(payload, "validation_status") },
   ].filter((row) => row.value)
 
@@ -363,7 +363,7 @@ export function InvoiceExceptionApprovalReview({
             <TableHeader>
               <TableRow>
                 <TableHead>Status</TableHead>
-                <TableHead>Work order</TableHead>
+                <TableHead>Work Order</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead className="text-right">Unit rate</TableHead>

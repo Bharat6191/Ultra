@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from modules.errors import ConflictError, NotFoundError
@@ -117,7 +117,7 @@ class PartMasterService:
         self,
         *,
         org_unit_id: int | None = None,
-        part_code: str | None = None,
+        search: str | None = None,
         active_only: bool = False,
     ) -> list[PartMaster]:
         stmt = select(PartMaster)
@@ -126,8 +126,16 @@ class PartMasterService:
             if not plant_ids:
                 return []
             stmt = stmt.where(PartMaster.org_unit_id.in_(plant_ids))
-        if part_code:
-            stmt = stmt.where(PartMaster.part_code == part_code.strip().upper())
+        if search:
+            needle = search.strip()
+            if needle:
+                like = f"%{needle}%"
+                stmt = stmt.where(
+                    or_(
+                        PartMaster.part_code.ilike(like),
+                        PartMaster.part_name.ilike(like),
+                    )
+                )
         if active_only:
             stmt = stmt.where(PartMaster.is_active.is_(True))
         stmt = stmt.order_by(PartMaster.created_at.desc())

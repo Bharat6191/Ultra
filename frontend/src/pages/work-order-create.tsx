@@ -123,7 +123,7 @@ export function WorkOrderCreatePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-base font-medium">Create work order</h2>
+          <h2 className="text-base font-medium">Create Work Order</h2>
           <p className="text-sm text-muted-foreground">
             Execution sheet. Line rates use negotiated prices effective on the creation date (set automatically when you save).
           </p>

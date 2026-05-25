@@ -161,7 +161,7 @@ export function NegotiatedRateNegotiatePage() {
           to="/dashboard/negotiated-rates"
           className="inline-flex text-xs text-muted-foreground underline-offset-2 hover:underline"
         >
-          ← Negotiated Rates
+          ← Negotiation
         </Link>
         <Alert variant="destructive">
           <AlertTitle>Could not load negotiation</AlertTitle>
@@ -221,7 +221,7 @@ export function NegotiatedRateNegotiatePage() {
       <header className="space-y-1 border-b border-border/70 pb-6">
         <div className="text-xs text-muted-foreground">
           <Link to="/dashboard/negotiated-rates" className="underline-offset-2 hover:underline">
-            Negotiated Rates
+            Negotiation
           </Link>
           <span className="mx-1">/</span>
           <Link

@@ -195,7 +195,7 @@ const MODULE_LIBRARY: ModuleDefinition[] = [
   },
   {
     id: "contractor-master",
-    name: "Contractor master",
+    name: "Contractor Master",
     summary: "Vendor onboarding, activation, plant mapping, and document control.",
     icon: BriefcaseBusiness,
     tabs: [
@@ -213,7 +213,7 @@ const MODULE_LIBRARY: ModuleDefinition[] = [
       },
       {
         id: "contractor-documents",
-        name: "Contractor documents",
+        name: "Contractor Documents",
         actions: [
           { id: "upload", label: "Upload" },
           { id: "verify", label: "Verify" },
@@ -498,7 +498,7 @@ export function RolesRedesignDemoPage() {
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search roles"
+                  placeholder="Search Roles"
                   className="pl-9"
                 />
               </div>
@@ -579,7 +579,7 @@ export function RolesRedesignDemoPage() {
                         disabled={!activeHasUnsaved}
                         className="border border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800"
                       >
-                        Save changes
+                        Save Changes
                       </Button>
                     </div>
                   </div>

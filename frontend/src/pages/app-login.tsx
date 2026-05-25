@@ -2,6 +2,7 @@ import * as React from "react"
 import { Eye, EyeOff } from "lucide-react"
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom"
 
+import { AppLogo } from "@/components/layout/AppLogo"
 import { AppAuthMarketingLayout } from "@/components/layout/app-auth-marketing-layout"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -185,13 +186,16 @@ export function AppLoginPage() {
   return (
     <AppAuthMarketingLayout>
       <Card className="w-full max-w-md rounded-2xl p-8 shadow-lg">
-        <CardHeader className="space-y-2 p-0 pb-6">
-          <CardTitle className="text-2xl">{step === "otp" ? "Authenticator code" : "Welcome back"}</CardTitle>
-          <CardDescription>
-            {step === "otp"
-              ? "Enter the code from your authenticator app to finish signing in."
-              : "Sign in to access your dashboard"}
-          </CardDescription>
+        <CardHeader className="space-y-2 p-0 pb-6 text-center">
+          <div className="flex justify-center pb-4">
+            <AppLogo className="w-[200px]" />
+          </div>
+          {step === "otp" ? (
+            <>
+              <CardTitle className="text-2xl">Authenticator code</CardTitle>
+              <CardDescription>Enter the code from your authenticator app to finish signing in.</CardDescription>
+            </>
+          ) : null}
         </CardHeader>
 
         <CardContent className="p-0">

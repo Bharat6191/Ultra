@@ -155,13 +155,13 @@ export function SettingsPage() {
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="w-full">
         <TabsList>
           <TabsTrigger value="auth">Authentication</TabsTrigger>
-          <TabsTrigger value="password">Password policy</TabsTrigger>
+          <TabsTrigger value="password">Password Policy</TabsTrigger>
         </TabsList>
 
         <TabsContent value="auth" className="mt-4 space-y-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Authentication policy</CardTitle>
+              <CardTitle className="text-base">Authentication Policy</CardTitle>
               <CardDescription>
                 Org-wide controls for password login, MFA, and captcha. Superusers are not affected.
               </CardDescription>
@@ -322,7 +322,7 @@ export function SettingsPage() {
 
               <div className="flex justify-end">
                 <Button size="sm" onClick={() => void save()} disabled={!canEditSettings || saving}>
-                  {saving ? "Saving…" : "Save password policy"}
+                  {saving ? "Saving…" : "Save Password Policy"}
                 </Button>
               </div>
             </CardContent>
@@ -330,7 +330,7 @@ export function SettingsPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Password policy (JSON)</CardTitle>
+              <CardTitle className="text-base">Password Policy (JSON)</CardTitle>
               <CardDescription>Advanced edit. Apply parses JSON into the form above.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">

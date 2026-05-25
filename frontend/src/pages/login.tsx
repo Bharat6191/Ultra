@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { Eye, EyeOff } from "lucide-react"
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom"
 
+import { AppLogo } from "@/components/layout/AppLogo"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -165,133 +166,139 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
 
   return (
     <div className="flex min-h-svh items-center justify-center bg-background px-4 py-10">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-base">{mfaChallenge ? "Authenticator code" : "Admin login"}</CardTitle>
-          <CardDescription>
-            {mfaChallenge ? "Enter the code from your app." : "Sign in with your email and password."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {serverError ? (
-            <Alert variant="destructive">
-              <AlertTitle>Couldn’t sign in</AlertTitle>
-              <AlertDescription>{serverError}</AlertDescription>
-            </Alert>
-          ) : null}
+      <div className="w-full max-w-sm space-y-5">
+        <div className="flex justify-center">
+          <AppLogo className="w-[200px]" />
+        </div>
 
-          {mfaChallenge ? (
-            <form className="space-y-3" onSubmit={submitOtp}>
-              <div className="space-y-1.5">
-                <Label htmlFor="otp" showRequired>
-                  6-digit code
-                </Label>
-                <Input
-                  id="otp"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                />
-              </div>
-              <Button type="submit" className="w-full">
-                Continue
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  setMfaChallenge(null)
-                  setOtp("")
-                  setServerError(null)
-                }}
-              >
-                Back
-              </Button>
-            </form>
-          ) : (
-            <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
-              <div className="space-y-1.5">
-                <Label htmlFor="email" showRequired>
-                  Email or username
-                </Label>
-                <Input
-                  id="email"
-                  type="text"
-                  autoComplete="username"
-                  placeholder="admin@example.com or admin"
-                  aria-invalid={!!form.formState.errors.email}
-                  {...form.register("email")}
-                />
-                {form.formState.errors.email?.message ? (
-                  <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
-                ) : null}
-              </div>
+        <Card className="w-full">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-base">{mfaChallenge ? "Authenticator code" : "Admin login"}</CardTitle>
+            <CardDescription>
+              {mfaChallenge ? "Enter the code from your app." : "Sign in with your email and password."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {serverError ? (
+              <Alert variant="destructive">
+                <AlertTitle>Couldn’t sign in</AlertTitle>
+                <AlertDescription>{serverError}</AlertDescription>
+              </Alert>
+            ) : null}
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="password" showRequired>
-                    Password
-                  </Label>
-                  <Link
-                    to="/forgot-password?returnTo=%2Fadmin%2Flogin"
-                    className="text-xs text-primary underline-offset-2 hover:underline"
-                    tabIndex={-1}
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    aria-invalid={!!form.formState.errors.password}
-                    className="pr-11"
-                    {...form.register("password")}
-                  />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                    onMouseDown={revealPassword}
-                    onMouseUp={hidePassword}
-                    onMouseLeave={hidePassword}
-                    onTouchStart={revealPassword}
-                    onTouchEnd={hidePassword}
-                    onBlur={hidePassword}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
-                  </button>
-                </div>
-                {form.formState.errors.password?.message ? (
-                  <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
-                ) : null}
-              </div>
-
-              {policy?.captcha_enabled ? (
+            {mfaChallenge ? (
+              <form className="space-y-3" onSubmit={submitOtp}>
                 <div className="space-y-1.5">
-                  <Label htmlFor="captcha_token" showRequired>
-                    Captcha token
+                  <Label htmlFor="otp" showRequired>
+                    6-digit code
                   </Label>
                   <Input
-                    id="captcha_token"
-                    autoComplete="off"
-                    value={captchaToken}
-                    onChange={(e) => setCaptchaToken(e.target.value)}
-                    placeholder="e.g. captcha-ok"
+                    id="otp"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
                   />
                 </div>
-              ) : null}
+                <Button type="submit" className="w-full">
+                  Continue
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setMfaChallenge(null)
+                    setOtp("")
+                    setServerError(null)
+                  }}
+                >
+                  Back
+                </Button>
+              </form>
+            ) : (
+              <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
+                <div className="space-y-1.5">
+                  <Label htmlFor="email" showRequired>
+                    Email or username
+                  </Label>
+                  <Input
+                    id="email"
+                    type="text"
+                    autoComplete="username"
+                    placeholder="admin@example.com or admin"
+                    aria-invalid={!!form.formState.errors.email}
+                    {...form.register("email")}
+                  />
+                  {form.formState.errors.email?.message ? (
+                    <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
+                  ) : null}
+                </div>
 
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? "Signing in…" : "Sign in"}
-              </Button>
-            </form>
-          )}
-        </CardContent>
-      </Card>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="password" showRequired>
+                      Password
+                    </Label>
+                    <Link
+                      to="/forgot-password?returnTo=%2Fadmin%2Flogin"
+                      className="text-xs text-primary underline-offset-2 hover:underline"
+                      tabIndex={-1}
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      aria-invalid={!!form.formState.errors.password}
+                      className="pr-11"
+                      {...form.register("password")}
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                      onMouseDown={revealPassword}
+                      onMouseUp={hidePassword}
+                      onMouseLeave={hidePassword}
+                      onTouchStart={revealPassword}
+                      onTouchEnd={hidePassword}
+                      onBlur={hidePassword}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
+                    </button>
+                  </div>
+                  {form.formState.errors.password?.message ? (
+                    <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
+                  ) : null}
+                </div>
+
+                {policy?.captcha_enabled ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="captcha_token" showRequired>
+                      Captcha token
+                    </Label>
+                    <Input
+                      id="captcha_token"
+                      autoComplete="off"
+                      value={captchaToken}
+                      onChange={(e) => setCaptchaToken(e.target.value)}
+                      placeholder="e.g. captcha-ok"
+                    />
+                  </div>
+                ) : null}
+
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? "Signing in…" : "Sign in"}
+                </Button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

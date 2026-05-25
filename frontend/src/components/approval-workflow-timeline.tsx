@@ -159,7 +159,7 @@ export function ApprovalWorkflowTimeline({ steps, viewerUserId, formatWhen }: Pr
   return (
     <div className="rounded-xl border border-border/80 bg-card text-card-foreground shadow-sm">
       <div className="border-b border-border/60 bg-muted/15 px-4 py-2.5">
-        <h3 className="text-sm font-semibold">Approval progress</h3>
+        <h3 className="text-sm font-semibold">Approval Progress</h3>
         <p className="text-xs text-muted-foreground">
           {steps[0].total_steps} {steps[0].total_steps === 1 ? "level" : "levels"} in this workflow
         </p>

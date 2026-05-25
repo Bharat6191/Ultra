@@ -13,11 +13,11 @@ from __future__ import annotations
 
 WORK_ORDERS_MODULE_CONFIG = {
     "key": "work_orders",
-    "title": "Work orders",
+    "title": "Work Orders",
     "tabs": [
         {
             "key": "work_orders",
-            "title": "Work orders",
+            "title": "Work Orders",
             "actions": [
                 "view",
                 "create",

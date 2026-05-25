@@ -67,6 +67,7 @@ def _to_public(db: Session, row: WorkOrder) -> dict:
         "title": row.title,
         "description": row.description,
         "status": row.status,
+        "is_active": bool(row.is_active),
         "approval_request_id": row.approval_request_id,
         "approved_value_total": row.approved_value_total,
         "approved_by": row.approved_by,
@@ -449,6 +450,25 @@ def archive_work_order(
 ) -> dict:
     try:
         row = svc.archive(work_order_id, actor_user_id=int(current.subject))
+        return {"ok": True, "id": int(row.id), "is_active": bool(row.is_active), "status": row.status}
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post(
+    "/work-orders/{work_order_id:int}/unarchive",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_permission("work_orders.delete"))],
+)
+def unarchive_work_order(
+    work_order_id: int,
+    svc: Annotated[WorkOrderService, Depends(_svc)],
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+) -> dict:
+    try:
+        row = svc.unarchive(work_order_id, actor_user_id=int(current.subject))
         return {"ok": True, "id": int(row.id), "is_active": bool(row.is_active), "status": row.status}
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

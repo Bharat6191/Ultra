@@ -908,7 +908,7 @@ class PartMasterAnalyticsService:
                     AnalyticsTimelineEvent(
                         category="compliance",
                         type="part_audit",
-                        title=f"Part master {a.action}",
+                        title=f"Part Master {a.action}",
                         description=None,
                         timestamp=a.created_at,
                         metadata={"audit_id": int(a.id)},

@@ -1,5 +1,7 @@
 import * as React from "react"
 
+import { AppLogo } from "@/components/layout/AppLogo"
+
 type AppAuthMarketingLayoutProps = {
   children: React.ReactNode
 }
@@ -19,11 +21,8 @@ export function AppAuthMarketingLayout({ children }: AppAuthMarketingLayoutProps
         <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-28 -right-28 h-80 w-80 rounded-full bg-black/20 blur-3xl" />
 
-        <div className="relative">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-sm font-semibold">UL</div>
-            <div className="text-xs font-medium tracking-wide text-white/90">ULTRA CORPOTECH PVT. LTD.</div>
-          </div>
+        <div className="relative flex justify-center lg:justify-start">
+          <AppLogo className="w-[220px]" />
         </div>
 
         <div className="relative max-w-md">

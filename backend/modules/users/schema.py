@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Annotated
+import re
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, computed_field, model_validator
 
@@ -20,8 +21,27 @@ def _before_optional_user_email(v: object) -> str | None:
     return normalize_optional_user_email(v)
 
 
+def _before_user_phone(v: object) -> str:
+    if not isinstance(v, str):
+        raise TypeError("phone must be a string")
+    phone = v.strip()
+    if not re.fullmatch(r"\d{10}", phone):
+        raise ValueError("Phone must be exactly 10 digits")
+    return phone
+
+
+def _before_optional_user_phone(v: object) -> str | None:
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise TypeError("phone must be a string or null")
+    return _before_user_phone(v)
+
+
 UserEmail = Annotated[str, BeforeValidator(_before_user_email)]
 OptionalUserEmail = Annotated[str | None, BeforeValidator(_before_optional_user_email)]
+UserPhone = Annotated[str, BeforeValidator(_before_user_phone)]
+OptionalUserPhone = Annotated[str | None, BeforeValidator(_before_optional_user_phone)]
 
 
 class RoleSummary(BaseModel):
@@ -42,7 +62,7 @@ class OrgUnitSummary(BaseModel):
 class UserCreate(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
     username: str = Field(min_length=3, max_length=64)
-    phone: str = Field(min_length=3, max_length=32)
+    phone: UserPhone
     email: UserEmail
     employee_code: str | None = Field(default=None, max_length=64)
     department: str | None = Field(default=None, max_length=128)
@@ -70,7 +90,7 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=255)
     username: str | None = Field(default=None, min_length=3, max_length=64)
-    phone: str | None = Field(default=None, min_length=3, max_length=32)
+    phone: OptionalUserPhone = None
     email: OptionalUserEmail = None
     employee_code: str | None = Field(default=None, max_length=64)
     department: str | None = Field(default=None, max_length=128)

@@ -1,6 +1,5 @@
 import * as React from "react"
 import {
-  AlertTriangle,
   BriefcaseBusiness,
   CheckCircle2,
   Clock3,
@@ -19,6 +18,7 @@ import type { InvoicesDashboardModule } from "@/components/dashboard/invoices-da
 import type { WorkOrdersDashboardModule } from "@/components/dashboard/work-orders-dashboard"
 import type { RatesDashboardModule } from "@/components/contractors/RatesDashboard"
 import type { ContractorsDashboardModule } from "@/components/contractors/ContractorDashboard"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
@@ -105,15 +105,26 @@ function HealthDonut({
 
 type MetricTone = "default" | "success" | "warning" | "danger" | "info"
 
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
 function MetricTile({
   label,
   value,
+  valueText,
   icon,
   tone = "default",
   sparkColor,
 }: {
   label: string
   value: number
+  valueText?: string
   icon: React.ReactNode
   tone?: MetricTone
   sparkColor: string
@@ -136,7 +147,7 @@ function MetricTile({
           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
           <span className={cn("grid size-7 shrink-0 place-items-center rounded-full", iconRing)}>{icon}</span>
         </div>
-        <div className="text-2xl font-semibold tabular-nums tracking-tight text-zinc-950">{value.toLocaleString()}</div>
+        <div className="text-2xl font-semibold tabular-nums tracking-tight text-zinc-950">{valueText ?? value.toLocaleString()}</div>
         <MiniSparkline value={value} color={sparkColor} />
       </CardContent>
     </Card>
@@ -157,10 +168,12 @@ function ModuleRow({
   theme,
   healthPercent,
   metrics,
+  sidebarFooter,
 }: {
   theme: ModuleTheme
   healthPercent: number
   metrics: React.ReactNode
+  sidebarFooter?: React.ReactNode
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm">
@@ -169,6 +182,7 @@ function ModuleRow({
           <div className="grid size-10 place-items-center rounded-xl bg-white/80 shadow-sm">{theme.icon}</div>
           <h3 className="text-sm font-semibold text-zinc-900">{theme.title}</h3>
           <p className="text-xs leading-relaxed text-zinc-600">{theme.subtitle}</p>
+          {sidebarFooter ? <div className="pt-1">{sidebarFooter}</div> : null}
         </div>
 
         <div className="grid flex-1 grid-cols-2 gap-2 p-3 sm:grid-cols-4 lg:p-4">{metrics}</div>
@@ -183,11 +197,13 @@ function ModuleRow({
 
 export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
   const { contractors: c, contractor_rates: r, work_orders: wo, invoices: inv } = data
+  const [invoiceMetricMode, setInvoiceMetricMode] = React.useState<"count" | "value">("count")
 
   const contractorHealth = pct(c.active, c.total)
   const negotiationHealth = pct(r.approved, r.total_negotiations)
   const woHealth = pct(wo.active, wo.total)
   const invoiceHealth = pct(inv.pass ?? 0, inv.total)
+  const showInvoiceValues = invoiceMetricMode === "value"
 
   return (
     <div className="grid gap-4">
@@ -280,7 +296,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
           accent: "#10b981",
           spark: "#10b981",
           icon: <BriefcaseBusiness className="size-5 text-emerald-700" />,
-          title: "Work orders",
+          title: "Work Orders",
           subtitle: "Execution and approval across plants.",
           healthLabel: "Active work orders",
         }}
@@ -329,28 +345,65 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
           healthLabel: "Invoice pass rate",
         }}
         healthPercent={invoiceHealth}
+        sidebarFooter={
+          <div className="inline-flex rounded-full border border-violet-200 bg-white p-1">
+            <Button
+              variant={showInvoiceValues ? "ghost" : "default"}
+              size="xs"
+              className={
+                showInvoiceValues
+                  ? "rounded-full text-zinc-600 hover:text-zinc-900"
+                  : "rounded-full bg-violet-600 hover:bg-violet-700"
+              }
+              onClick={() => setInvoiceMetricMode("count")}
+            >
+              Count
+            </Button>
+            <Button
+              variant={showInvoiceValues ? "default" : "ghost"}
+              size="xs"
+              className={
+                showInvoiceValues
+                  ? "rounded-full bg-violet-600 hover:bg-violet-700"
+                  : "rounded-full text-zinc-600 hover:text-zinc-900"
+              }
+              onClick={() => setInvoiceMetricMode("value")}
+            >
+              Value
+            </Button>
+          </div>
+        }
         metrics={
           <>
-            <MetricTile label="Total" value={inv.total} icon={<Receipt className="size-3.5" />} sparkColor="#8b5cf6" />
             <MetricTile
-              label="Pass"
-              value={inv.pass ?? 0}
+              label={showInvoiceValues ? "Total invoice value" : "Total invoices"}
+              value={showInvoiceValues ? (inv.total_value ?? 0) : inv.total}
+              valueText={showInvoiceValues ? formatCurrency(inv.total_value ?? 0) : undefined}
+              icon={<Receipt className="size-3.5" />}
+              sparkColor="#8b5cf6"
+            />
+            <MetricTile
+              label={showInvoiceValues ? "Pass value" : "Pass"}
+              value={showInvoiceValues ? (inv.pass_value ?? 0) : (inv.pass ?? 0)}
+              valueText={showInvoiceValues ? formatCurrency(inv.pass_value ?? 0) : undefined}
               icon={<CheckCircle2 className="size-3.5" />}
               tone="success"
               sparkColor="#8b5cf6"
             />
             <MetricTile
-              label="Blocked"
-              value={inv.blocked}
+              label={showInvoiceValues ? "Pending approval value" : "Pending approval"}
+              value={showInvoiceValues ? (inv.pending_exception_approval_value ?? 0) : inv.pending_exception_approval}
+              valueText={showInvoiceValues ? formatCurrency(inv.pending_exception_approval_value ?? 0) : undefined}
               icon={<Lock className="size-3.5" />}
-              tone="danger"
+              tone="warning"
               sparkColor="#8b5cf6"
             />
             <MetricTile
-              label="Pending approval"
-              value={inv.pending_exception_approval}
-              icon={<AlertTriangle className="size-3.5" />}
-              tone="warning"
+              label={showInvoiceValues ? "Blocked value" : "Blocked"}
+              value={showInvoiceValues ? (inv.blocked_value ?? 0) : (inv.blocked ?? 0)}
+              valueText={showInvoiceValues ? formatCurrency(inv.blocked_value ?? 0) : undefined}
+              icon={<XCircle className="size-3.5" />}
+              tone="danger"
               sparkColor="#8b5cf6"
             />
           </>

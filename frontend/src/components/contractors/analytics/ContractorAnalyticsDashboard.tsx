@@ -456,7 +456,7 @@ export function ContractorAnalyticsDashboard({
           <BarChart
             data={[
               {
-                bucket: "Work orders",
+                bucket: "Work Orders",
                 active: activeCount,
                 inactive: inactiveCount,
               },
@@ -864,7 +864,7 @@ export function ContractorAnalyticsDashboard({
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Should cost</TableHead>
                       <TableHead className="text-right">Negotiated</TableHead>
-                      <TableHead className="text-right">Tolerance</TableHead>
+                      <TableHead className="text-right">Variance</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -902,7 +902,7 @@ export function ContractorAnalyticsDashboard({
 
           <Card>
             <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-base">Work orders</CardTitle>
+              <CardTitle className="text-base">Work Orders</CardTitle>
               <CardDescription>
                 Work orders for this contractor — {formatMoney(wo.total_wo_value)} total value,{" "}
                 {formatMoney(wo.total_invoiced)} invoiced, {formatMoney(wo.pending_invoice_amount)} pending.
@@ -1140,7 +1140,7 @@ export function ContractorAnalyticsDashboard({
                       strong
                     />
                     <FactField
-                      label="Negotiated down by"
+                      label="VARIANCE"
                       value={
                         selectedNegotiation.savings_amount !== null && Number(selectedNegotiation.savings_amount) > 0
                           ? `${formatMoney(selectedNegotiation.savings_amount)} (${formatPercent(selectedNegotiation.savings_percentage)})`
@@ -1153,7 +1153,7 @@ export function ContractorAnalyticsDashboard({
                   </div>
 
                   <div className="mt-5 space-y-1">
-                    <p className="text-xs text-muted-foreground">Tolerance</p>
+                    <p className="text-xs text-muted-foreground">Variance</p>
                     <VsBaseToleranceBadge
                       negotiated={selectedNegotiation.negotiated_rate}
                       baseRate={selectedNegotiation.base_rate}

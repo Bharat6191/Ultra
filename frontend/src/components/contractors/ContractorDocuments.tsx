@@ -251,7 +251,7 @@ export function ContractorDocuments({
       <CardHeader className="pb-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
-            <CardTitle className="text-base">Documents</CardTitle>
+            <CardTitle className="text-base">Compliance</CardTitle>
             <div className="text-sm text-muted-foreground">
               Upload, edit, and track expiry of contractor documents.
             </div>
@@ -594,7 +594,7 @@ export function ContractorDocuments({
               Cancel
             </Button>
             <Button onClick={() => void saveEdit()} disabled={editSaving}>
-              {editSaving ? "Saving…" : "Save changes"}
+              {editSaving ? "Saving…" : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

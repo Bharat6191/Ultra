@@ -183,6 +183,7 @@ def _invoices_module(db: Session) -> dict[str, Any]:
     blocked = int(inv_by_status.get("blocked", 0))
     pending_ex = int(inv_by_status.get("pending_exception_approval", 0))
     draft = int(inv_by_status.get("draft", 0))
+    total_value = float(db.scalar(select(func.coalesce(func.sum(Invoice.total_amount), 0)).select_from(Invoice)) or 0)
     pass_count = int(
         db.scalar(
             select(func.count())
@@ -191,20 +192,40 @@ def _invoices_module(db: Session) -> dict[str, Any]:
         )
         or 0
     )
-    blocked_validation = int(
+    pass_value = float(
         db.scalar(
-            select(func.count())
+            select(func.coalesce(func.sum(Invoice.total_amount), 0))
             .select_from(Invoice)
-            .where(Invoice.validation_status.in_(("blocked", "fail")))
+            .where(Invoice.validation_status.in_(("pass", "warn")))
+        )
+        or 0
+    )
+    pending_ex_value = float(
+        db.scalar(
+            select(func.coalesce(func.sum(Invoice.total_amount), 0))
+            .select_from(Invoice)
+            .where(Invoice.status == "pending_exception_approval")
+        )
+        or 0
+    )
+    blocked_value = float(
+        db.scalar(
+            select(func.coalesce(func.sum(Invoice.total_amount), 0))
+            .select_from(Invoice)
+            .where(Invoice.status == "blocked")
         )
         or 0
     )
     return {
         "total": int(sum(inv_by_status.values())),
+        "total_value": round(total_value, 2),
         "draft": draft,
         "pass": pass_count,
-        "blocked": max(blocked, blocked_validation),
+        "pass_value": round(pass_value, 2),
+        "blocked": blocked,
+        "blocked_value": round(blocked_value, 2),
         "pending_exception_approval": pending_ex,
+        "pending_exception_approval_value": round(pending_ex_value, 2),
         "by_status": [{"status": k, "count": v} for k, v in sorted(inv_by_status.items())],
     }
 
@@ -297,4 +318,3 @@ def get_dashboard_intelligence_report(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
-

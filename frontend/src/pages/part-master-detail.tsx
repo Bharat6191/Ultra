@@ -802,7 +802,7 @@ export function PartMasterDetailPage() {
           {canUpdate ? (
             <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-2 border-t border-border/70 bg-gray-50/95 px-4 py-4 backdrop-blur-sm sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
               <Button className="rounded-xl" onClick={() => void save()}>
-                Save changes
+                Save Changes
               </Button>
             </div>
           ) : null}

@@ -73,7 +73,7 @@ export function ExecutiveIntelligenceDashboard() {
   }
   if (typeof ex.work_orders_total === "number") {
     kpis.push({
-      label: "Work orders",
+      label: "Work Orders",
       value: String(ex.work_orders_total),
       hint: `Active ${ex.work_orders_active ?? 0} · Pending ${ex.work_orders_pending ?? 0} · Completed ${ex.work_orders_completed ?? 0}`,
     })

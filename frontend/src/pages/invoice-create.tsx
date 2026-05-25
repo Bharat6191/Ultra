@@ -935,7 +935,7 @@ export function InvoiceCreatePage() {
                 ) : (
                   <>
                     <div className="grid gap-1.5">
-                      <Label showRequired>Work order</Label>
+                      <Label showRequired>Work Order</Label>
                       <select
                         className={selectClass}
                         value={selectedWoId === "" ? "" : String(selectedWoId)}

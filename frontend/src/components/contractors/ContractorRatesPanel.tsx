@@ -385,10 +385,10 @@ export function ContractorRatesPanel({
     return (
       <Card className="border-destructive/30">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Negotiated Rates</CardTitle>
+          <CardTitle className="text-base">Negotiation</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          You don't have permission to view negotiated rates.
+          You don't have permission to view Negotiation.
         </CardContent>
       </Card>
     )
@@ -412,7 +412,7 @@ export function ContractorRatesPanel({
       {/* Action header (no page chrome — composed by the parent). */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold">Negotiated rates</h2>
+          <h2 className="text-base font-semibold">Negotiation</h2>
           <p className="text-xs text-muted-foreground">
             Negotiate against Part Master baselines per plant, route to procurement approval, and track savings.
           </p>
@@ -940,7 +940,7 @@ export function RateDetailPanel({
             <Fact label="Initial ask" value={formatMoney(rate.initial_rate)} />
             <Fact label="Agreed rate" value={formatMoney(rate.negotiated_rate)} strong />
             <Fact
-              label="Negotiated down by"
+              label="VARIANCE"
               value={
                 rate.savings_amount !== null && Number(rate.savings_amount) > 0
                   ? `${formatMoney(rate.savings_amount)} (${formatPercent(rate.savings_percentage)})`
@@ -968,7 +968,7 @@ export function RateDetailPanel({
 
           {rate.vs_base_percentage != null && rate.vs_base_percentage !== "" ? (
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Tolerance</p>
+              <p className="text-xs text-muted-foreground">Variance</p>
               <VsBaseToleranceBadge
                 negotiated={rate.negotiated_rate}
                 baseRate={rate.base_rate}
