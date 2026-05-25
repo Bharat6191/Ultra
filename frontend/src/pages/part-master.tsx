@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
-import { Plus, Search } from "lucide-react"
+import { Plus, Search, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -125,12 +125,18 @@ export function PartMasterPage() {
           </p> */}
         </div>
         {canCreate ? (
-          <Button asChild>
-            <Link to="/dashboard/part-master/new" className="inline-flex items-center">
-              <Plus className="mr-2 size-4" />
-              New part
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline">
+              <Upload className="size-4" />
+              Import Excel
+            </Button>
+            <Button asChild>
+              <Link to="/dashboard/part-master/new" className="inline-flex items-center">
+                <Plus className="mr-2 size-4" />
+                New part
+              </Link>
+            </Button>
+          </div>
         ) : null}
       </div>
 
