@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -11,7 +11,7 @@ import { getJson, getJsonList } from "@/lib/api"
 import { workOrderStatusBadgeVariant } from "@/lib/work-order-status-badge"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
-type WoTab = "all" | "draft" | "approval" | "operating" | "completed"
+type WoTab = "all" | "draft" | "approval" | "operating" | "completed" | "archive"
 
 const WO_PAGE_SIZE = 20
 
@@ -21,7 +21,12 @@ const WO_TABS: { id: WoTab; label: string }[] = [
   { id: "approval", label: "In approval" },
   { id: "operating", label: "Active" },
   { id: "completed", label: "Completed" },
+  { id: "archive", label: "Archive" },
 ]
+
+function isWoTab(value: string | null): value is WoTab {
+  return WO_TABS.some((tab) => tab.id === value)
+}
 
 function workOrdersListPath(tab: WoTab, page: number): string {
   const q = new URLSearchParams({
@@ -38,6 +43,8 @@ function workOrdersListPath(tab: WoTab, page: number): string {
     q.append("statuses", "approved")
   } else if (tab === "completed") {
     q.set("status", "closed")
+  } else if (tab === "archive") {
+    q.set("active", "false")
   }
   return `/work-orders?${q.toString()}`
 }
@@ -60,15 +67,17 @@ function workOrderStatusLabel(status: string): string {
 
 export function WorkOrdersPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const canCreate = hasPermission("work_orders.create")
   const canView = hasPermission("work_orders.view")
 
-  const [tab, setTab] = React.useState<WoTab>("all")
   const [page, setPage] = React.useState(0)
   const [rows, setRows] = React.useState<any[] | null>(null)
   const [total, setTotal] = React.useState(0)
   const [error, setError] = React.useState<string | null>(null)
   const [plants, setPlants] = React.useState<{ id: number; name: string }[]>([])
+  const rawTab = searchParams.get("tab")
+  const tab: WoTab = isWoTab(rawTab) ? rawTab : "all"
 
   const pageCount = Math.max(1, Math.ceil(total / WO_PAGE_SIZE))
   const pageSafe = Math.min(page, pageCount - 1)
@@ -96,6 +105,16 @@ export function WorkOrdersPage() {
   React.useEffect(() => {
     setPage(0)
   }, [tab])
+
+  const onTabChange = React.useCallback(
+    (nextTab: WoTab) => {
+      const nextParams = new URLSearchParams(searchParams)
+      if (nextTab === "all") nextParams.delete("tab")
+      else nextParams.set("tab", nextTab)
+      setSearchParams(nextParams, { replace: true })
+    },
+    [searchParams, setSearchParams],
+  )
 
   React.useEffect(() => {
     if (!canView) return
@@ -148,7 +167,7 @@ export function WorkOrdersPage() {
                 size="sm"
                 variant={tab === t.id ? "default" : "outline"}
                 className="h-8"
-                onClick={() => setTab(t.id)}
+                onClick={() => onTabChange(t.id)}
               >
                 {t.label}
               </Button>

@@ -293,11 +293,11 @@ export function WorkOrderDetailPage() {
 
   async function archive() {
     if (!row) return
-    if (!confirm("Archive this work order? It will be removed from the work orders list.")) return
+    if (!confirm("Archive this work order? It will move to the Archive tab.")) return
     try {
       await deleteJson(`/work-orders/${row.id}`)
       toast.success("Work order archived")
-      navigate("/dashboard/work-orders", { replace: true })
+      navigate("/dashboard/work-orders?tab=archive", { replace: true })
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Archive failed")
     }

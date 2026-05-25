@@ -385,7 +385,7 @@ export function ContractorRatesPanel({
     return (
       <Card className="border-destructive/30">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Negotiated rates</CardTitle>
+          <CardTitle className="text-base">Negotiated Rates</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
           You don't have permission to view negotiated rates.
@@ -984,7 +984,7 @@ export function RateDetailPanel({
           {/* Negotiation rounds */}
           <div>
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium">Negotiation rounds</h4>
+              <h4 className="text-sm font-medium">Negotiation Rounds</h4>
               {canUpdate &&
               (rate.status === "draft" || rate.status === "approved" || rate.status === "rejected") ? (
                 <Button size="sm" variant="outline" asChild>

@@ -169,7 +169,7 @@ function entityLink(task: UnifiedTaskDetail): { href: string; label: string } | 
   if (et === "contractor_rate_approval") {
     return {
       href: `/dashboard/negotiated-rates/${eid}`,
-      label: "Open rate",
+      label: "Open Rate",
     }
   }
   if (
@@ -616,7 +616,7 @@ export function MyTaskDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
           <h2 className="text-lg font-semibold tracking-tight">
-            {task && !loading && isApprovalLike ? "Review request" : "Task details"}
+            {task && !loading && isApprovalLike ? "Review Request" : "Task details"}
           </h2>
           <p className="text-sm text-muted-foreground">
             {(() => {

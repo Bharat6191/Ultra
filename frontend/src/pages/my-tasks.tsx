@@ -124,7 +124,7 @@ export function MyTasksPage() {
   return (
     <div className="w-full space-y-6">
       <div>
-        <h2 className="text-lg font-semibold tracking-tight">My tasks</h2>
+        <h2 className="text-lg font-semibold tracking-tight">My Tasks</h2>
         <p className="text-sm text-muted-foreground">
           Open items that need you, and a <strong>Done</strong> list for things you or others already finished
           (approvals, rejections, completed manual work).

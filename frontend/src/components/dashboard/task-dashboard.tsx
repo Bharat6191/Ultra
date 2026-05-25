@@ -55,7 +55,7 @@ export function TaskDashboard({ data }: { data: TasksDashboardModule }) {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Status breakdown</CardTitle>
           <CardDescription className="text-xs">
-            Tasks assigned to you, created by you, or routed to your roles (same scope as My tasks).
+            Tasks assigned to you, created by you, or routed to your roles (same scope as My Tasks).
           </CardDescription>
         </CardHeader>
         <CardContent className="h-64">

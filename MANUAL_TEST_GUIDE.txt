@@ -677,3 +677,10 @@ Confirm all of these before closing testing:
 16. Invoice task review does not show comments panel
 17. Invoice task review does not show validation score
 >>>>>>> theirs
+1. Add Total Invoice Value, saving-related details, and required cost summary on the dashboard.
+2.Add the Ultra logo on all application screens and update the label from “Negotiated Rates” to “Negotiation”
+3.Add a Consolidated Work Order Report and remove the Invoice Preview option.
+4.Update the approval workflow as: Plant Person/PPM – Creator → Plant Controller – 1st Level Approval → COO – Final Approval.
+5.Ensure the final Invoice/Labour Cost, including part-wise cost wherever required, is pushed to SAP.
+6.All the values should be in 2 decimal points.
+7.Timad will schedule a call with SAP team to understand the Sub-Contractor master and dataflow.

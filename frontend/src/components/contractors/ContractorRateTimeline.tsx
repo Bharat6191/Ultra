@@ -149,7 +149,7 @@ const TONE_CLASSES: Record<string, { ring: string; bg: string; text: string }> =
 }
 
 const HIGHLIGHT_LABELS: Record<string, string> = {
-  negotiated_rate: "Negotiated rate",
+  negotiated_rate: "Negotiated Rate",
   proposed_rate: "Proposed rate",
   counter_rate: "Counter offer",
   base_rate: "Part should cost",

@@ -247,9 +247,11 @@ class WorkOrderService:
         contractor_id: int | None = None,
         status: str | None = None,
         statuses: list[str] | None = None,
+        active: bool | None = True,
     ) -> Select[Any] | None:
         """Apply list filters. Returns ``None`` when plant scope is empty (no rows)."""
-        stmt = stmt.where(WorkOrder.is_active.is_(True))
+        if active is not None:
+            stmt = stmt.where(WorkOrder.is_active.is_(bool(active)))
         if org_unit_id is not None:
             plant_ids = collect_plant_ids_under_scope(self._db, int(org_unit_id))
             if not plant_ids:
@@ -272,6 +274,7 @@ class WorkOrderService:
         contractor_id: int | None = None,
         status: str | None = None,
         statuses: list[str] | None = None,
+        active: bool | None = True,
     ) -> int:
         stmt = select(func.count()).select_from(WorkOrder)
         filtered = self._list_filters(
@@ -280,6 +283,7 @@ class WorkOrderService:
             contractor_id=contractor_id,
             status=status,
             statuses=statuses,
+            active=active,
         )
         if filtered is None:
             return 0
@@ -292,6 +296,7 @@ class WorkOrderService:
         contractor_id: int | None = None,
         status: str | None = None,
         statuses: list[str] | None = None,
+        active: bool | None = True,
         offset: int = 0,
         limit: int = 100,
     ) -> list[WorkOrder]:
@@ -302,6 +307,7 @@ class WorkOrderService:
             contractor_id=contractor_id,
             status=status,
             statuses=statuses,
+            active=active,
         )
         if filtered is None:
             return []

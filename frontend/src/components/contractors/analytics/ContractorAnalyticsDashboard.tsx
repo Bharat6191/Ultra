@@ -143,7 +143,7 @@ function workOrderStatusLabel(status: string): string {
     case "closed":
       return "Completed"
     case "pending_approval":
-      return "In approval"
+      return "In Approval"
     case "draft":
       return "Draft"
     case "rejected":

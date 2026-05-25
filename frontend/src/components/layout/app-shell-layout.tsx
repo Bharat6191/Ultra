@@ -35,7 +35,7 @@ const shellNavItems: ShellNavItem[] = [
   { id: "users", label: "Users", icon: Users, to: "/dashboard/users", permission: "users.view" },
   {
     id: "tasks",
-    label: "My tasks",
+    label: "My Tasks",
     icon: ClipboardList,
     to: "/dashboard/tasks",
     permission: ["approval.view", "task.view"],
@@ -84,7 +84,7 @@ const shellNavItems: ShellNavItem[] = [
   },
   {
     id: "negotiated-rates",
-    label: "Negotiated rates",
+    label: "Negotiated Rates",
     icon: Handshake,
     to: "/dashboard/negotiated-rates",
     permission: [

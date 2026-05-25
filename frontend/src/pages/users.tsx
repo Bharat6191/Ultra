@@ -62,7 +62,7 @@ export function UsersPage() {
           {canCreate ? (
             <CardAction>
               <Button asChild size="sm">
-                <Link to="new">Create user</Link>
+                <Link to="new">Create User</Link>
               </Button>
             </CardAction>
           ) : null}

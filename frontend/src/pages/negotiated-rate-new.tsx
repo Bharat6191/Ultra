@@ -383,7 +383,7 @@ export function NegotiatedRateNewPage() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>New negotiation</CardTitle>
+          <CardTitle>New Negotiation</CardTitle>
           <CardDescription>
             You need <span className="font-mono">contractor_rates.create</span>.
           </CardDescription>
@@ -397,7 +397,7 @@ export function NegotiatedRateNewPage() {
       <header className="space-y-1 border-b border-border/70 pb-4">
         <div className="text-xs text-muted-foreground">
           <Link to="/dashboard/negotiated-rates" className="underline-offset-2 hover:underline">
-            Negotiated rates
+            Negotiated Rates
           </Link>
           <span className="mx-1">/</span>
           <span>New</span>

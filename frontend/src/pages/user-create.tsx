@@ -174,7 +174,7 @@ export function UserCreatePage() {
     <div className="w-full space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">Create user</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Create User</h2>
           <p className="text-sm text-muted-foreground">
             Choose a plant first, then one or more roles allowed for that plant. A strong password will be auto-generated
             and emailed to the user.
@@ -194,7 +194,7 @@ export function UserCreatePage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">User details</CardTitle>
+          <CardTitle className="text-base">User Details</CardTitle>
           <CardDescription>Fields marked required must be provided.</CardDescription>
         </CardHeader>
         <CardContent>
