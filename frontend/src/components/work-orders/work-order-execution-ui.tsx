@@ -469,7 +469,7 @@ export function WorkOrderExecutionTable(props: {
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0 pb-4">
         <div className="min-w-0 flex-1">
-          <CardTitle className="text-base font-semibold tracking-tight">Execution sheet</CardTitle>
+          <CardTitle className="text-base font-semibold tracking-tight">Execution Sheet</CardTitle>
           {isEdit ? (
             <CardDescription className="mt-1">
               One contractor per work order. Lines are Part Master parts; unit rate and taxable value resolve from
@@ -492,7 +492,7 @@ export function WorkOrderExecutionTable(props: {
             disabled={loading}
             onClick={() => onLinesChange([...lines, newDraftLine()])}
           >
-            + Add line
+            + Add Line
           </Button>
         ) : null}
       </CardHeader>

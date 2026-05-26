@@ -214,7 +214,7 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
             value={remarks}
             onChange={(e) => setRemarks(e.target.value)}
             className="h-9"
-            placeholder="Notes for audit trail…"
+            placeholder="Notes for Audit Log…"
           />
         </div>
 

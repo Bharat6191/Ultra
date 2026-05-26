@@ -6,10 +6,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Textarea } from "@/components/ui/textarea"
-import { ApiError, getJson, patchJson, postJson } from "@/lib/api"
+import { ApiError, getJson, postJson } from "@/lib/api"
 import {
   invoiceDisplayStatus,
   invoiceDisplayStatusBadgeVariant,
@@ -54,41 +52,6 @@ type InvoiceAuditEntry = {
   old_value?: any
   new_value?: any
   metadata?: any
-}
-
-const HIDDEN_VALIDATION_ISSUE_CODES = new Set(["QTY_EXCEEDS_COMPLETION", "CUMULATIVE_QTY_EXCEEDS_ALLOWED"])
-
-function issueAllowedActual(i: { allowed_qty?: unknown; allowed_value?: unknown; actual_qty?: unknown; actual_value?: unknown }) {
-  const allowed = i.allowed_qty ?? i.allowed_value
-  const actual = i.actual_qty ?? i.actual_value
-  if (allowed == null && actual == null) return null
-  return (
-    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-      allowed {String(allowed ?? "—")} · actual {String(actual ?? "—")}
-    </span>
-  )
-}
-
-function mergedBlockerJustification(issues: { justification?: string | null }[]): string {
-  const texts = [
-    ...new Set(
-      issues.map((i) => String(i.justification ?? "").trim()).filter(Boolean),
-    ),
-  ]
-  return texts[0] ?? ""
-}
-
-function issueSeverityVariant(sev: string): React.ComponentProps<typeof Badge>["variant"] {
-  switch (String(sev || "").toLowerCase()) {
-    case "blocker":
-      return "destructive"
-    case "error":
-      return "destructive"
-    case "warning":
-      return "warning"
-    default:
-      return "outline"
-  }
 }
 
 export function InvoiceDetailPage() {
@@ -163,25 +126,6 @@ export function InvoiceDetailPage() {
     }
   }
 
-  async function saveJustificationForBlockers(justification: string, issueIds: number[]) {
-    const text = justification.trim()
-    if (!text || issueIds.length === 0) return
-    setActing(true)
-    try {
-      await Promise.all(
-        issueIds.map((issueId) =>
-          patchJson(`/invoices/issues/${issueId}/justification`, { justification: text }),
-        ),
-      )
-      toast.success("Justification saved")
-      await load()
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Save failed")
-    } finally {
-      setActing(false)
-    }
-  }
-
   if (loading) return <div className="text-sm text-muted-foreground">Loading…</div>
   if (!row) {
     return (
@@ -239,15 +183,6 @@ export function InvoiceDetailPage() {
   }
 
   const invoiceValidationDone = Boolean(row.last_validated_at ?? row.validation_status)
-
-  const visibleIssues = (row.issues ?? []).filter(
-    (i: { code?: string }) => !HIDDEN_VALIDATION_ISSUE_CODES.has(String(i.code ?? "")),
-  )
-  const issuesNeedingJustification = visibleIssues.filter((i: { requires_justification?: boolean }) =>
-    Boolean(i.requires_justification),
-  )
-  const otherVisibleIssues = visibleIssues.filter((i: { requires_justification?: boolean }) => !i.requires_justification)
-  const blockerJustificationKey = issuesNeedingJustification.map((i: { id: number }) => i.id).join(",")
 
   return (
     <div className="space-y-4">
@@ -373,7 +308,7 @@ export function InvoiceDetailPage() {
         </CardContent>
       </Card> */}
 
-      <Card>
+      {/* <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Validation issues</CardTitle>
           <CardDescription>
@@ -447,11 +382,11 @@ export function InvoiceDetailPage() {
             </div>
           ))}
         </CardContent>
-      </Card>
+      </Card> */}
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Audit trail</CardTitle>
+          <CardTitle className="text-sm font-medium">Audit Log</CardTitle>
           <CardDescription>Immutable timeline of actions on this invoice.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">

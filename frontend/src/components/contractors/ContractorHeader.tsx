@@ -156,7 +156,7 @@ export function ContractorHeader(props: ContractorHeaderProps) {
                       onViewAudit?.()
                     }}
                   >
-                    View audit trail
+                    View Audit Log
                   </DropdownMenuItem>
                 </>
               ) : null}

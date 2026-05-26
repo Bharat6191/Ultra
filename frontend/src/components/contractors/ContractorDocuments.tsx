@@ -610,7 +610,7 @@ export function ContractorDocuments({
             <DialogTitle>Delete document?</DialogTitle>
             <DialogDescription>
               The file and all its versions will be permanently removed from this contractor's
-              record. This action is logged in the audit trail.
+              record. This action is logged in the Audit Log.
             </DialogDescription>
           </DialogHeader>
           {confirmDelete ? (

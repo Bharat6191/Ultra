@@ -158,7 +158,7 @@ export function PartMasterCreatePage() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Create part</CardTitle>
+          <CardTitle>Create Part</CardTitle>
           <CardDescription>
             You need <span className="font-mono">part_master.create</span>.
           </CardDescription>
@@ -178,7 +178,7 @@ export function PartMasterCreatePage() {
           <span>New</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">Create part</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Create Part</h1>
           <SectionHint text="Weight-based: man days × labour cost ÷ weight (kg) sets rate per kg. New parts start active from today; adjust validity on the part detail screen if needed." />
         </div>
       </header>

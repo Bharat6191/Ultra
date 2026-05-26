@@ -294,7 +294,7 @@ export function PartWorkOrderPreviewDialog({ open, onOpenChange, partMasterId, s
 
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold">Execution sheet</CardTitle>
+                  <CardTitle className="text-base font-semibold">Execution Sheet</CardTitle>
                   <ExecutionSheetContractorBanner name={contractorLabel} />
                 </CardHeader>
                 <CardContent className="px-0 pb-4 sm:px-6">

@@ -748,7 +748,7 @@ export function PartMasterDetailPage() {
 
           <section className="min-w-0 border-t border-border/70 pt-8" aria-labelledby="part-audit-heading">
             <h2 id="part-audit-heading" className="mb-1 text-base font-semibold tracking-tight">
-              Audit trail
+              Audit Log
             </h2>
             <p className="mb-5 text-xs text-muted-foreground">
               Who changed what and when. Full snapshots: <span className="font-medium text-foreground/80">View history</span>.

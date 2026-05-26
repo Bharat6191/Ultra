@@ -263,7 +263,7 @@ export function ContractorRateTimeline({
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Negotiation Log</CardTitle>
         <p className="text-xs text-muted-foreground">
-          Compact audit trail with its own scroll area so the rate view stays easier to scan.
+          Compact Audit Log with its own scroll area so the rate view stays easier to scan.
         </p>
       </CardHeader>
       <CardContent>

@@ -719,7 +719,7 @@ export function WorkOrderDetailPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Audit trail</CardTitle>
+          <CardTitle className="text-sm font-medium">Audit Log</CardTitle>
         </CardHeader>
         <CardContent className="text-sm">
           {audit.length === 0 ? (

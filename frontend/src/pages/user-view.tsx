@@ -212,7 +212,7 @@ export function UserViewPage() {
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold tracking-tight">User Details</h2>
-          <p className="text-sm text-muted-foreground">Read-only summary. Audit Trail appears below.</p>
+          <p className="text-sm text-muted-foreground">Read-only summary. Audit Log appears below.</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button asChild variant="outline" size="sm">
@@ -370,7 +370,7 @@ export function UserViewPage() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Audit Trail</CardTitle>
+              <CardTitle className="text-base">Audit Log</CardTitle>
               <CardDescription>
                 Timeline for this user. {canViewAudit ? "Includes onboarding approvals and RBAC changes (roles, assignments)." : "You don’t have permission to view audit details."}
               </CardDescription>
@@ -450,4 +450,3 @@ export function UserViewPage() {
     </div>
   )
 }
-
