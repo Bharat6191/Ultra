@@ -40,6 +40,9 @@ type PublicAuthPolicy = {
   mfa_enforced: boolean
 }
 
+const AUTH_POWERED_BY = "Powered by TiMAD"
+const AUTH_APP_VERSION = "V 0.0.0.0"
+
 export type LoginPageProps = {
   onLoggedIn?: (tokens: { accessToken: string; refreshToken?: string }) => void
 }
@@ -296,6 +299,11 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
                 </Button>
               </form>
             )}
+
+            <div className="pt-4 text-center text-foreground">
+              <div className="text-sm font-medium">{AUTH_POWERED_BY}</div>
+              <div className="mt-2 text-sm">{AUTH_APP_VERSION}</div>
+            </div>
           </CardContent>
         </Card>
       </div>

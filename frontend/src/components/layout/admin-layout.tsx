@@ -123,8 +123,17 @@ export function AdminLayout({
     mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" })
   }, [location.pathname])
 
+  React.useEffect(() => {
+    document.documentElement.classList.add("app-shell-scroll-lock")
+    document.body.classList.add("app-shell-scroll-lock")
+    return () => {
+      document.documentElement.classList.remove("app-shell-scroll-lock")
+      document.body.classList.remove("app-shell-scroll-lock")
+    }
+  }, [])
+
   return (
-    <div className="flex h-svh min-h-0 w-full bg-background text-foreground">
+    <div className="flex h-svh min-h-0 w-full overflow-hidden bg-background text-foreground">
       <aside className="flex w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
         <div className="space-y-3 px-4 py-5">
           <AppLogo className="mx-auto w-[164px]" />
@@ -165,7 +174,7 @@ export function AdminLayout({
         </ScrollArea>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b px-6">
           <h1 className="truncate text-sm font-medium text-foreground">{title}</h1>
           <DropdownMenu>

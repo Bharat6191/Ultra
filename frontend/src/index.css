@@ -119,6 +119,18 @@
 }
 
 @layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  html.app-shell-scroll-lock,
+  body.app-shell-scroll-lock {
+    height: 100%;
+    overflow: hidden;
+  }
+
   * {
     @apply border-border outline-ring/50;
     }

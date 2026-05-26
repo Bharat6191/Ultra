@@ -37,6 +37,9 @@ type PublicAuthPolicy = {
   mfa_enforced: boolean
 }
 
+const AUTH_POWERED_BY = "Powered by TiMAD"
+const AUTH_APP_VERSION = "V 0.0.0.0"
+
 export function AppLoginPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -198,7 +201,7 @@ export function AppLoginPage() {
           ) : null}
         </CardHeader>
 
-        <CardContent className="p-0">
+        <CardContent className="flex flex-col p-0">
           {error ? (
             <Alert variant="destructive" className="mb-4">
               <AlertTitle>Sign-in failed</AlertTitle>
@@ -320,6 +323,11 @@ export function AppLoginPage() {
               </Button>
             </form>
           )}
+
+          <div className="pt-8 text-center text-foreground">
+            <div className="text-sm font-medium">{AUTH_POWERED_BY}</div>
+            <div className="mt-2 text-sm">{AUTH_APP_VERSION}</div>
+          </div>
         </CardContent>
       </Card>
     </AppAuthMarketingLayout>

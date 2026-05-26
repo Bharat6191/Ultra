@@ -153,11 +153,20 @@ export function AppShellLayout({
     mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" })
   }, [location.pathname])
 
+  React.useEffect(() => {
+    document.documentElement.classList.add("app-shell-scroll-lock")
+    document.body.classList.add("app-shell-scroll-lock")
+    return () => {
+      document.documentElement.classList.remove("app-shell-scroll-lock")
+      document.body.classList.remove("app-shell-scroll-lock")
+    }
+  }, [])
+
   return (
-    <div className="flex h-svh min-h-0 w-full bg-gray-50 text-foreground">
+    <div className="flex h-svh min-h-0 w-full overflow-hidden bg-gray-50 text-foreground">
       <AppSidebar items={sidebarItems} />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <AppNavbar
           title={title}
           userEmail={userEmail}
