@@ -18,7 +18,7 @@ const WO_PAGE_SIZE = 20
 const WO_TABS: { id: WoTab; label: string }[] = [
   { id: "all", label: "All" },
   { id: "draft", label: "Draft" },
-  { id: "approval", label: "In approval" },
+  { id: "approval", label: "In Approval" },
   { id: "operating", label: "Active" },
   { id: "completed", label: "Completed" },
   { id: "archive", label: "Archive" },

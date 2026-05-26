@@ -72,7 +72,7 @@ type RateStatusTab = "all" | ContractorRateStatus
 const RATE_STATUS_TABS: { id: RateStatusTab; label: string }[] = [
   { id: "all", label: "All" },
   { id: "draft", label: "Draft" },
-  { id: "pending_approval", label: "Pending approval" },
+  { id: "pending_approval", label: "Pending Approval" },
   { id: "approved", label: "Approved" },
   { id: "rejected", label: "Rejected" },
 ]
@@ -206,7 +206,7 @@ export function NegotiatedRatesPage() {
         {canCreate ? (
           <Button asChild type="button">
             <Link to="/dashboard/negotiated-rates/new">
-              <Plus className="size-4" /> New negotiation
+              <Plus className="size-4" /> New Negotiation
             </Link>
           </Button>
         ) : null}
@@ -226,7 +226,7 @@ export function NegotiatedRatesPage() {
             icon={<MessagesSquare className="size-4" />}
           />
           <KpiCard
-            title="Pending approvals"
+            title="Pending Approvals"
             value={summary.pending_approvals}
             icon={<Hourglass className="size-4" />}
             tone="warning"
@@ -256,7 +256,7 @@ export function NegotiatedRatesPage() {
       {/* Refine by plant / text (lifecycle uses tabs on the table card). */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Refine list</CardTitle>
+          <CardTitle className="text-sm font-medium">Refine List</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
           <div className="relative">

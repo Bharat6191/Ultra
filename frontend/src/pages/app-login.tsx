@@ -213,7 +213,7 @@ export function AppLoginPage() {
             <form onSubmit={onSubmitPassword} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="username" showRequired>
-                  Email or username
+                  Email or Username
                 </Label>
                 <Input
                   id="username"

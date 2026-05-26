@@ -172,7 +172,7 @@ export function PartMasterCreatePage() {
       <header className="space-y-1 border-b border-border/70 pb-6">
         <div className="text-xs text-muted-foreground">
           <Link to="/dashboard/part-master" className="underline-offset-2 hover:underline">
-            Part master
+            Part Master
           </Link>
           <span className="mx-1">/</span>
           <span>New</span>

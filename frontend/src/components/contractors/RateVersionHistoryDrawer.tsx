@@ -384,7 +384,7 @@ export function RateVersionHistoryDrawer({
             {resource === "part-master" ? (
               <Button asChild>
                 <Link to={`/dashboard/part-master/${parentId}`} onClick={() => onOpenChange(false)}>
-                  Open part master
+                  Open Part Master
                 </Link>
               </Button>
             ) : (
@@ -393,7 +393,7 @@ export function RateVersionHistoryDrawer({
                   to={`/dashboard/negotiated-rates/${parentId}`}
                   onClick={() => onOpenChange(false)}
                 >
-                  Open negotiation page
+                  Open Negotiation Page
                 </Link>
               </Button>
             )}

@@ -63,7 +63,7 @@ const shellNavItems: ShellNavItem[] = [
   },
   {
     id: "admin-settings",
-    label: "System settings",
+    label: "System Settings",
     icon: Settings,
     to: "/dashboard/system-settings",
     permission: ["settings.view", "settings.update"],
@@ -77,7 +77,7 @@ const shellNavItems: ShellNavItem[] = [
   },
   {
     id: "part-master",
-    label: "Part master",
+    label: "Part Master",
     icon: BadgeIndianRupee,
     to: "/dashboard/part-master",
     permission: ["part_master.view", "part_master.create", "part_master.update"],

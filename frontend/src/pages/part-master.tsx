@@ -106,7 +106,7 @@ export function PartMasterPage() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Part master</CardTitle>
+          <CardTitle>Part Master</CardTitle>
           <CardDescription>
             You need <span className="font-mono">part_master.view</span> to access this module.
           </CardDescription>
@@ -119,7 +119,7 @@ export function PartMasterPage() {
     <div className="grid gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Part master</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Part Master</h1>
           {/* <p className="text-sm text-muted-foreground">
             Commercial baselines: unit logic, pricing method, and effective rates per plant.
           </p> */}

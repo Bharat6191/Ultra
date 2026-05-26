@@ -96,7 +96,7 @@ export function ContractorsPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Contractors</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">CONTRACTORS</h1>
           <div className="text-sm text-muted-foreground">
             Manage contractor master, plant mappings and compliance documents.
           </div>

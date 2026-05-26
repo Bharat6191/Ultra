@@ -223,7 +223,7 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
               <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
                 <div className="space-y-1.5">
                   <Label htmlFor="email" showRequired>
-                    Email or username
+                    Email or Username
                   </Label>
                   <Input
                     id="email"

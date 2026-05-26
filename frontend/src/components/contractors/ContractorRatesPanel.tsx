@@ -420,7 +420,7 @@ export function ContractorRatesPanel({
         {canCreate ? (
           <Button asChild>
             <Link to={`/dashboard/negotiated-rates/new?contractorId=${contractorId}`}>
-              <Plus className="size-4" /> New negotiation
+              <Plus className="size-4" /> New Negotiation
             </Link>
           </Button>
         ) : null}
@@ -434,7 +434,7 @@ export function ContractorRatesPanel({
           icon={<MessagesSquare className="size-4" />}
         />
         <KpiCard
-          title="Pending approvals"
+          title="Pending Approvals"
           value={summary.pending_approvals}
           icon={<Hourglass className="size-4" />}
           tone="warning"

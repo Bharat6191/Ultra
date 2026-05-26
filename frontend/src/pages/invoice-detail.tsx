@@ -18,7 +18,6 @@ import {
 } from "@/lib/invoice-validation-display"
 import { hasPermission } from "@/lib/permissions"
 import { InvoicePdfDownloadButton } from "@/components/invoices/invoice-pdf"
-import { InvoicePreview } from "@/components/invoices/invoice-preview"
 import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
 
 function InvoiceLineStatusBadge({ line, validated }: { line: any; validated: boolean }) {
@@ -365,15 +364,14 @@ export function InvoiceDetailPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      {/* <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Invoice preview</CardTitle>
-          <CardDescription>Printable layout matching the PDF download.</CardDescription>
         </CardHeader>
         <CardContent>
           <InvoicePreview data={pdfData} />
         </CardContent>
-      </Card>
+      </Card> */}
 
       <Card>
         <CardHeader className="pb-2">

@@ -357,7 +357,7 @@ export function PartMasterDetailPage() {
     return (
       <Card className="rounded-2xl border-border/50 shadow-sm">
         <CardHeader>
-          <CardTitle>Part master</CardTitle>
+          <CardTitle>Part Master</CardTitle>
           <CardDescription>
             You need <span className="font-mono">part_master.view</span>.
           </CardDescription>
@@ -405,7 +405,7 @@ export function PartMasterDetailPage() {
         <div className="min-w-0 space-y-1">
           <div className="text-xs text-muted-foreground">
             <Link to="/dashboard/part-master" className="underline-offset-2 hover:underline">
-              Part master
+              Part Master
             </Link>
             <span className="mx-1">/</span>
             <span>Detail</span>
