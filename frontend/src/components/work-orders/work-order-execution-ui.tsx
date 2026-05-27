@@ -823,7 +823,7 @@ export function WorkOrderExecutionFooter(props: {
             </Button>
           ) : null}
           {showSubmit ? (
-            <Button type="button" disabled={busy} className="min-w-[160px]" onClick={() => onSubmitApproval?.()}>
+            <Button type="button" disabled={busy} onClick={() => onSubmitApproval?.()}>
               {busy ? "Working…" : submitLabel}
             </Button>
           ) : null}

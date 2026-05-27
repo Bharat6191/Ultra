@@ -292,7 +292,7 @@ class ApprovalEngineService:
                         f"{pm.part_code} · {pm.part_name}" if pm is not None else "part"
                     )
                     contractor_name = contractor.name if contractor is not None else f"Contractor #{rate.contractor_id}"
-                    title = f"Rate approval: {contractor_name} · {part_label}"
+                    title = f"Negotiation Approval: {contractor_name} · {part_label}"
                     bits = [
                         f"Negotiated ₹{rate.negotiated_rate}",
                     ]

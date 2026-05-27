@@ -118,6 +118,11 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
   const [previewWo, setPreviewWo] = React.useState<PartWorkOrderRow | null>(null)
   const [previewOpen, setPreviewOpen] = React.useState(false)
 
+  const summaryLabelClass = "text-sm font-semibold text-foreground"
+  const summaryValueClass = "text-xs font-normal text-foreground"
+  const summaryValueMonoClass = "font-mono text-xs font-normal text-foreground"
+  const summaryMetricValueClass = "text-xs font-normal tabular-nums text-foreground"
+
   const filterParams = React.useMemo<PartAnalyticsFilters>(
     () => ({
       date_from: dateFrom || undefined,
@@ -308,68 +313,68 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Part summary</CardTitle>
+          <CardTitle className="text-base">Part Summary</CardTitle>
           <CardDescription>Master data snapshot and cross-module footprint.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <div className="text-xs text-muted-foreground">Part number</div>
-            <div className="font-mono font-semibold">{h.part_code}</div>
+            <div className={summaryLabelClass}>Part Number</div>
+            <div className={summaryValueMonoClass}>{h.part_code}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Name</div>
-            <div className="font-medium">{h.part_name}</div>
+            <div className={summaryLabelClass}>Name</div>
+            <div className={summaryValueClass}>{h.part_name}</div>
           </div>
           <div className="sm:col-span-2">
-            <div className="text-xs text-muted-foreground">Description</div>
-            <div className="text-muted-foreground">{h.description?.trim() || "—"}</div>
+            <div className={summaryLabelClass}>Description</div>
+            <div className="text-xs font-normal text-muted-foreground">{h.description?.trim() || "—"}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Category / pricing</div>
-            <div className="font-medium">{h.part_category.replace(/_/g, " ")}</div>
+            <div className={summaryLabelClass}>Category / Pricing</div>
+            <div className={summaryValueClass}>{h.part_category.replace(/_/g, " ")}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Part type (rate UOM)</div>
-            <div className="font-medium">{h.part_type.replace(/_/g, " ")}</div>
+            <div className={summaryLabelClass}>Part Type (Rate UOM)</div>
+            <div className={summaryValueClass}>{h.part_type.replace(/_/g, " ")}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Billing UOM</div>
-            <div className="font-medium">{h.unit_of_measurement}</div>
+            <div className={summaryLabelClass}>Billing UOM</div>
+            <div className={summaryValueClass}>{h.unit_of_measurement}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Weight / unit</div>
-            <div className="font-medium tabular-nums">{h.weight_per_unit != null ? String(h.weight_per_unit) : "—"}</div>
+            <div className={summaryLabelClass}>Weight / Unit</div>
+            <div className={summaryMetricValueClass}>{h.weight_per_unit != null ? String(h.weight_per_unit) : "—"}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Should cost</div>
-            <div className="text-lg font-semibold tabular-nums">{formatMoney(h.base_rate)}</div>
+            <div className={summaryLabelClass}>Should Cost</div>
+            <div className={summaryMetricValueClass}>{formatMoney(h.base_rate)}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Active / status</div>
+            <div className={summaryLabelClass}>Active / Status</div>
             <div className="flex flex-wrap gap-2">
               <Badge variant={h.is_active ? "default" : "secondary"}>{h.is_active ? "Active" : "Inactive"}</Badge>
               <Badge variant="outline">{h.record_status}</Badge>
             </div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Home plant</div>
-            <div className="font-medium">{h.home_plant_name ?? "—"}</div>
+            <div className={summaryLabelClass}>Plant</div>
+            <div className={summaryValueClass}>{h.home_plant_name ?? "—"}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Active work orders</div>
-            <div className="text-lg font-semibold tabular-nums">{h.total_active_work_orders}</div>
+            <div className={summaryLabelClass}>Active Work Orders</div>
+            <div className={summaryMetricValueClass}>{h.total_active_work_orders}</div>
           </div>
           <div className="sm:col-span-2">
-            <div className="text-xs text-muted-foreground">Plants using this part (WO footprint)</div>
-            <div className="font-medium">{h.plant_names_used.length ? h.plant_names_used.join(", ") : "—"}</div>
+            <div className={summaryLabelClass}>Plants Using This Part (WO Footprint)</div>
+            <div className={summaryValueClass}>{h.plant_names_used.length ? h.plant_names_used.join(", ") : "—"}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Contractors (rates + WO)</div>
-            <div className="text-lg font-semibold tabular-nums">{h.total_contractors_touching}</div>
+            <div className={summaryLabelClass}>Contractors (Rates + WO)</div>
+            <div className={summaryMetricValueClass}>{h.total_contractors_touching}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Negotiation records</div>
-            <div className="text-lg font-semibold tabular-nums">{h.total_negotiation_records}</div>
+            <div className={summaryLabelClass}>Negotiation Records</div>
+            <div className={summaryMetricValueClass}>{h.total_negotiation_records}</div>
           </div>
         </CardContent>
       </Card>

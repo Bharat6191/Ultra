@@ -181,6 +181,7 @@ export function WorkOrderDetailPage() {
   const [submitBusy, setSubmitBusy] = React.useState(false)
   const [saveDraftBusy, setSaveDraftBusy] = React.useState(false)
   const [completeBusy, setCompleteBusy] = React.useState(false)
+  const [lifecycleBusy, setLifecycleBusy] = React.useState(false)
 
   const [partMasters, setPartMasters] = React.useState<PartMasterLite[]>([])
   const [pmsLoading, setPmsLoading] = React.useState(false)
@@ -319,21 +320,24 @@ export function WorkOrderDetailPage() {
     }
   }
 
-async function archive() {
+  async function archive() {
     if (!row) return
     if (!confirm("Inactive this work order?")) return
+    setLifecycleBusy(true)
     try {
       await deleteJson(`/work-orders/${row.id}`)
       toast.success("Work order inactivated")
       navigate("/dashboard/work-orders?tab=inactive", { replace: true })
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Inactive failed")
+      setLifecycleBusy(false)
     }
   }
 
   async function unarchive() {
     if (!row) return
     if (!confirm("Activate this work order?")) return
+    setLifecycleBusy(true)
     try {
       const res = await postJson<{ status?: string }>(`/work-orders/${row.id}/unarchive`, {})
       toast.success("Work order activated")
@@ -341,6 +345,7 @@ async function archive() {
       navigate(nextTab ? `/dashboard/work-orders?tab=${nextTab}` : "/dashboard/work-orders", { replace: true })
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Activate failed")
+      setLifecycleBusy(false)
     }
   }
 
@@ -533,9 +538,9 @@ async function archive() {
   }
 
   const showSubmitButton = row.is_active !== false && canSubmit && (row.status === "draft" || row.status === "rejected")
-
+  const showHeaderArchiveButton = canDelete && row.is_active !== false && row.status !== "draft"
+  const showFooterActivateButton = row.is_active === false && canDelete
   const showCompletionEngine = row.is_active !== false && row.status === "active" && canManageCompletion && !editableDraft
-  const topActionLabel = row.is_active === false ? "Activate" : "Inactive"
 
   return (
     <div className="space-y-6">
@@ -567,13 +572,9 @@ async function archive() {
               Back
             </Link>
           </Button>
-          {canDelete ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void (row.is_active === false ? unarchive() : archive())}
-            >
-              {topActionLabel}
+          {showHeaderArchiveButton ? (
+            <Button size="sm" variant="outline" disabled={lifecycleBusy} onClick={() => void archive()}>
+              {lifecycleBusy ? "Working…" : "Inactive"}
             </Button>
           ) : null}
         </div>
@@ -623,12 +624,13 @@ async function archive() {
       ) : null}
 
       <WorkOrderExecutionFooter
-        busy={submitBusy || saveDraftBusy || completeBusy}
+        busy={submitBusy || saveDraftBusy || completeBusy || lifecycleBusy}
         showSave={editableDraft}
-        showSubmit={showSubmitButton}
+        showSubmit={showSubmitButton || showFooterActivateButton}
+        submitLabel={showFooterActivateButton ? "Activate" : undefined}
         tip={null}
         onSave={() => void saveDraft()}
-        onSubmitApproval={() => void submit()}
+        onSubmitApproval={() => void (showFooterActivateButton ? unarchive() : submit())}
       />
 
       {(row.status === "active" || row.status === "closed") &&
