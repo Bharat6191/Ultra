@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import Annotated
 
@@ -18,6 +19,7 @@ from modules.invoices.schema import (
     InvoicePreflightResponse,
     InvoicePublic,
     InvoiceIssueJustificationUpdate,
+    InvoiceReportSummaryPublic,
     InvoiceAuditEntry,
     SuggestedInvoiceNumber,
 )
@@ -239,6 +241,30 @@ def _resolve_user_name(db: Session, user_id: int | None) -> str | None:
     if u is None:
         return None
     return str(u.full_name or u.username or f"User #{user_id}")
+
+
+@router.get(
+    "/invoices/reports/summary",
+    response_model=InvoiceReportSummaryPublic,
+    dependencies=[Depends(require_permission("invoices.view"))],
+)
+def invoice_report_summary(
+    svc: Annotated[InvoiceService, Depends(_svc)],
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    contractor_id: int | None = Query(None),
+    org_unit_id: int | None = Query(None),
+) -> InvoiceReportSummaryPublic:
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise HTTPException(status_code=422, detail="date_from must be on or before date_to.")
+    return svc.report_summary(
+        date_from=date_from,
+        date_to=date_to,
+        status=status_filter,
+        contractor_id=contractor_id,
+        org_unit_id=org_unit_id,
+    )
 
 
 @router.get(

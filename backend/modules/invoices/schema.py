@@ -210,3 +210,30 @@ class InvoiceAuditEntry(BaseModel):
     new_value: dict[str, Any] | None = None
     metadata: dict[str, Any] | None = None
     created_at: datetime | None = None
+
+
+class InvoiceReportBucketPublic(BaseModel):
+    entity_id: int | None = None
+    entity_name: str
+    invoice_count: int
+    total_value: Decimal
+
+
+class InvoiceReportRowPublic(BaseModel):
+    id: int
+    invoice_number: str
+    invoice_date: date
+    status: str
+    contractor_id: int | None = None
+    contractor_name: str | None = None
+    org_unit_id: int | None = None
+    org_unit_name: str | None = None
+    total_amount: Decimal
+
+
+class InvoiceReportSummaryPublic(BaseModel):
+    total_invoices: int
+    total_value: Decimal
+    rows: list[InvoiceReportRowPublic] = Field(default_factory=list)
+    by_plant: list[InvoiceReportBucketPublic] = Field(default_factory=list)
+    by_contractor: list[InvoiceReportBucketPublic] = Field(default_factory=list)

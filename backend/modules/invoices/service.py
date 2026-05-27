@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -49,6 +49,7 @@ from modules.invoices.schema import (
     InvoiceCreate,
     InvoiceIssueJustificationUpdate,
     InvoiceLineCreate,
+    InvoiceReportSummaryPublic,
     InvoiceUpdate,
 )
 from modules.work_orders.models import WorkOrder, WorkOrderItem
@@ -127,6 +128,149 @@ class InvoiceService:
             stmt = stmt.where(Invoice.status == status.strip().lower())
         stmt = stmt.limit(int(limit))
         return list(self._db.execute(stmt, execution_options={"populate_existing": True}).scalars().unique().all())
+
+    def report_summary(
+        self,
+        *,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        status: str | None = None,
+        contractor_id: int | None = None,
+        org_unit_id: int | None = None,
+    ) -> InvoiceReportSummaryPublic:
+        conditions = []
+        if date_from is not None:
+            conditions.append(Invoice.invoice_date >= date_from)
+        if date_to is not None:
+            conditions.append(Invoice.invoice_date <= date_to)
+        if status:
+            conditions.append(Invoice.status == status.strip().lower())
+        if contractor_id is not None:
+            conditions.append(Invoice.contractor_id == int(contractor_id))
+        if org_unit_id is not None:
+            conditions.append(Invoice.org_unit_id == int(org_unit_id))
+
+        total_invoices = int(
+            self._db.scalar(select(func.count()).select_from(Invoice).where(*conditions)) or 0
+        )
+        total_value = self._db.scalar(
+            select(func.coalesce(func.sum(Invoice.total_amount), 0)).select_from(Invoice).where(*conditions)
+        ) or Decimal("0")
+
+        plant_count = func.count(Invoice.id)
+        plant_total = func.coalesce(func.sum(Invoice.total_amount), 0)
+        plant_stmt = (
+            select(
+                Invoice.org_unit_id,
+                OrgUnit.name,
+                plant_count.label("invoice_count"),
+                plant_total.label("total_value"),
+            )
+            .select_from(Invoice)
+            .join(OrgUnit, OrgUnit.id == Invoice.org_unit_id, isouter=True)
+            .where(*conditions)
+            .group_by(Invoice.org_unit_id, OrgUnit.name)
+            .order_by(plant_total.desc(), plant_count.desc(), OrgUnit.name.asc().nullslast())
+        )
+
+        contractor_count = func.count(Invoice.id)
+        contractor_total = func.coalesce(func.sum(Invoice.total_amount), 0)
+        contractor_stmt = (
+            select(
+                Invoice.contractor_id,
+                Contractor.name,
+                contractor_count.label("invoice_count"),
+                contractor_total.label("total_value"),
+            )
+            .select_from(Invoice)
+            .join(Contractor, Contractor.id == Invoice.contractor_id, isouter=True)
+            .where(*conditions)
+            .group_by(Invoice.contractor_id, Contractor.name)
+            .order_by(contractor_total.desc(), contractor_count.desc(), Contractor.name.asc().nullslast())
+        )
+
+        by_plant = [
+            {
+                "entity_id": int(org_unit_id) if org_unit_id is not None else None,
+                "entity_name": str(name or f"Plant #{org_unit_id}" if org_unit_id is not None else "Unassigned plant"),
+                "invoice_count": int(invoice_count or 0),
+                "total_value": total_value_row or Decimal("0"),
+            }
+            for org_unit_id, name, invoice_count, total_value_row in self._db.execute(plant_stmt).all()
+        ]
+
+        by_contractor = [
+            {
+                "entity_id": int(contractor_id) if contractor_id is not None else None,
+                "entity_name": str(
+                    name or f"Contractor #{contractor_id}" if contractor_id is not None else "Unassigned contractor"
+                ),
+                "invoice_count": int(invoice_count or 0),
+                "total_value": total_value_row or Decimal("0"),
+            }
+            for contractor_id, name, invoice_count, total_value_row in self._db.execute(contractor_stmt).all()
+        ]
+
+        row_stmt = (
+            select(
+                Invoice.id,
+                Invoice.invoice_number,
+                Invoice.invoice_date,
+                Invoice.status,
+                Invoice.contractor_id,
+                Contractor.name,
+                Invoice.org_unit_id,
+                OrgUnit.name,
+                Invoice.total_amount,
+            )
+            .select_from(Invoice)
+            .join(Contractor, Contractor.id == Invoice.contractor_id, isouter=True)
+            .join(OrgUnit, OrgUnit.id == Invoice.org_unit_id, isouter=True)
+            .where(*conditions)
+            .order_by(Invoice.invoice_date.desc(), Invoice.id.desc())
+        )
+
+        rows = [
+            {
+                "id": int(invoice_id),
+                "invoice_number": str(invoice_number),
+                "invoice_date": invoice_date_row,
+                "status": str(status_row),
+                "contractor_id": int(contractor_id_row) if contractor_id_row is not None else None,
+                "contractor_name": str(
+                    contractor_name
+                    or f"Contractor #{contractor_id_row}"
+                    if contractor_id_row is not None
+                    else "Unassigned contractor"
+                ),
+                "org_unit_id": int(org_unit_id_row) if org_unit_id_row is not None else None,
+                "org_unit_name": str(
+                    org_unit_name or f"Plant #{org_unit_id_row}" if org_unit_id_row is not None else "Unassigned plant"
+                ),
+                "total_amount": total_amount_row or Decimal("0"),
+            }
+            for (
+                invoice_id,
+                invoice_number,
+                invoice_date_row,
+                status_row,
+                contractor_id_row,
+                contractor_name,
+                org_unit_id_row,
+                org_unit_name,
+                total_amount_row,
+            ) in self._db.execute(row_stmt).all()
+        ]
+
+        return InvoiceReportSummaryPublic.model_validate(
+            {
+                "total_invoices": total_invoices,
+                "total_value": total_value,
+                "rows": rows,
+                "by_plant": by_plant,
+                "by_contractor": by_contractor,
+            }
+        )
 
     _INV_NUM_SEQ = re.compile(r"^INV(\d+)$", re.IGNORECASE)
 

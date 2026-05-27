@@ -1,6 +1,7 @@
 import * as React from "react"
 import {
   BadgeIndianRupee,
+  BarChart3,
   BriefcaseBusiness,
   ClipboardList,
   Factory,
@@ -108,6 +109,13 @@ const shellNavItems: ShellNavItem[] = [
     to: "/dashboard/invoices",
     permission: ["invoices.view", "invoices.create", "invoices.update", "invoices.validate"],
   },
+  {
+    id: "reports",
+    label: "Reports",
+    icon: BarChart3,
+    to: "/dashboard/reports",
+    permission: "invoices.view",
+  },
 ]
 
 function navItemVisible(item: ShellNavItem): boolean {
@@ -163,10 +171,10 @@ export function AppShellLayout({
   }, [])
 
   return (
-    <div className="flex h-svh min-h-0 w-full overflow-hidden bg-gray-50 text-foreground">
+    <div className="flex h-svh min-h-0 w-full overflow-hidden bg-gray-50 text-foreground print:block print:h-auto print:overflow-visible print:bg-white">
       <AppSidebar items={sidebarItems} />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden print:block print:overflow-visible">
         <AppNavbar
           title={title}
           userEmail={userEmail}
@@ -174,7 +182,10 @@ export function AppShellLayout({
           onRefreshProfile={onRefreshProfile}
         />
 
-        <main ref={mainRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+        <main
+          ref={mainRef}
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 sm:px-6 lg:px-8 print:overflow-visible print:px-0 print:py-0"
+        >
           <div className="w-full">{children}</div>
         </main>
       </div>

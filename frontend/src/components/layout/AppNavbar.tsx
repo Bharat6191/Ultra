@@ -40,7 +40,7 @@ export function AppNavbar({
   const [refreshing, setRefreshing] = React.useState(false)
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-gray-200 bg-white px-6">
+    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-gray-200 bg-white px-6 print:hidden">
       <h1 className="truncate text-sm font-medium text-zinc-950">{title}</h1>
 
       <div className="flex items-center gap-2">
@@ -106,4 +106,3 @@ export function AppNavbar({
     </header>
   )
 }
-

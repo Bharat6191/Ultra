@@ -42,6 +42,7 @@ import { MyTaskDetailPage } from "@/pages/my-task-detail"
 import { ForgotPasswordPage } from "@/pages/forgot-password"
 import { ResetPasswordPage } from "@/pages/reset-password"
 import { MfaSetupPage } from "@/pages/mfa-setup"
+import { ReportsPage } from "@/pages/reports"
 import * as React from "react"
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { getJson } from "@/lib/api"
@@ -267,6 +268,14 @@ function App() {
             />
             <Route path=":id" element={<InvoiceDetailPage />} />
           </Route>
+          <Route
+            path="reports"
+            element={
+              <RequirePermission code="invoices.view">
+                <ReportsPage />
+              </RequirePermission>
+            }
+          />
         </Route>
         <Route path="/admin/login" element={<LoginRoute />} />
         <Route path="/admin" element={<AdminRoute />}>

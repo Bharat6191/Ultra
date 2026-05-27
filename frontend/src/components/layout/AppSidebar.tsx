@@ -32,7 +32,7 @@ export function AppSidebar({ items = defaultItems }: AppSidebarProps) {
   const location = useLocation()
 
   return (
-    <aside className="hidden h-svh min-h-0 w-64 shrink-0 flex-col border-r border-gray-200 bg-gray-50 lg:flex">
+    <aside className="hidden h-svh min-h-0 w-64 shrink-0 flex-col border-r border-gray-200 bg-gray-50 lg:flex print:hidden">
       <div className="shrink-0 px-4 py-5">
         <AppLogo className="mx-auto w-[176px]" />
       </div>
