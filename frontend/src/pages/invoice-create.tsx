@@ -440,11 +440,11 @@ export function InvoiceCreatePage() {
 
   const woPassedRemainingExVat = React.useMemo(() => {
     if (preflight?.approved_value_total == null) return null
-    const base =
+    return (
       preflight.remaining_after_passed_ex_tax ??
       q2Money(Math.max(0, (preflight.approved_value_total ?? 0) - (preflight.approved_invoiced_ex_tax_total ?? 0)))
-    return q2Money(base - draftExVat)
-  }, [preflight, draftExVat])
+    )
+  }, [preflight])
 
   const invoiceOverWoCap = React.useMemo(() => {
     if (preflight?.approved_value_total == null || draftExVat <= 0) return null

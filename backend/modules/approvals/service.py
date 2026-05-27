@@ -13,6 +13,7 @@ from modules.approvals.model import (
     ApprovalStep,
     ApprovalTask,
     ApprovalWorkflow,
+    ApprovalWorkflowMapping,
     TaskAuditLog,
     TaskComment,
 )
@@ -129,6 +130,49 @@ class ApprovalWorkflowService:
         wf.is_active = True
         self._db.commit()
         return self.get_workflow(wf.id)
+
+    def deactivate_workflow(self, workflow_id: int, *, actor_user_id: int | None) -> ApprovalWorkflow:
+        wf = self.get_workflow(workflow_id)
+        wf.is_active = False
+        self._db.execute(
+            ApprovalWorkflowMapping.__table__.update()
+            .where(
+                ApprovalWorkflowMapping.workflow_id == wf.id,
+                ApprovalWorkflowMapping.is_active.is_(True),
+            )
+            .values(is_active=False)
+        )
+        self._db.commit()
+        return self.get_workflow(wf.id)
+
+    def remove_step(self, *, workflow_id: int, step_id: int) -> ApprovalWorkflow:
+        wf = self.get_workflow(workflow_id)
+        step = self._db.scalar(
+            select(ApprovalStep).where(
+                ApprovalStep.id == step_id,
+                ApprovalStep.workflow_id == workflow_id,
+            )
+        )
+        if step is None:
+            raise NotFoundError("ApprovalStep", step_id)
+        if wf.is_active:
+            raise ConflictError("Deactivate the workflow before removing approval levels.")
+        if self._db.scalar(select(ApprovalRequest.id).where(ApprovalRequest.workflow_id == workflow_id).limit(1)) is not None:
+            raise ConflictError("Cannot remove levels from a workflow that has already been used.")
+
+        removed_order = int(step.step_order)
+        self._db.delete(step)
+        self._db.flush()
+        self._db.execute(
+            ApprovalStep.__table__.update()
+            .where(
+                ApprovalStep.workflow_id == workflow_id,
+                ApprovalStep.step_order > removed_order,
+            )
+            .values(step_order=ApprovalStep.step_order - 1)
+        )
+        self._db.commit()
+        return self.get_workflow(workflow_id)
 
     def get_active_workflow_for_entity(self, entity_type: str) -> ApprovalWorkflow | None:
         return self._db.scalar(

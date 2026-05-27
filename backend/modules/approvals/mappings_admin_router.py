@@ -74,3 +74,24 @@ def create_mapping(
         is_active=m.is_active,
         created_at=m.created_at,
     )
+
+
+@router.patch("/{mapping_id}/deactivate", response_model=WorkflowMappingPublic)
+def deactivate_mapping(
+    mapping_id: int,
+    _: Annotated[CurrentUser, Depends(get_current_user)],
+    svc: Annotated[WorkflowMappingService, Depends(get_mapping_service)],
+) -> WorkflowMappingPublic:
+    try:
+        m = svc.deactivate_mapping(mapping_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    wn = m.workflow.name if m.workflow is not None else None
+    return WorkflowMappingPublic(
+        id=m.id,
+        action_code=m.action_code,
+        workflow_id=m.workflow_id,
+        workflow_name=wn,
+        is_active=m.is_active,
+        created_at=m.created_at,
+    )

@@ -32,7 +32,7 @@ export function workOrderStatusBadgeVariant(
 
 export function workOrderStatusLabel(status: string, isActive?: boolean): string {
   if (isActive === false) {
-    return "Archived"
+    return "Inactive"
   }
   switch (String(status || "").toLowerCase()) {
     case "closed":

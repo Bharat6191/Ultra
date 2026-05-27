@@ -147,3 +147,21 @@ class WorkflowMappingService:
         )
         assert reloaded is not None
         return reloaded
+
+    def deactivate_mapping(self, mapping_id: int) -> ApprovalWorkflowMapping:
+        row = self._db.scalar(
+            select(ApprovalWorkflowMapping)
+            .where(ApprovalWorkflowMapping.id == mapping_id)
+            .options(selectinload(ApprovalWorkflowMapping.workflow))
+        )
+        if row is None:
+            raise NotFoundError("ApprovalWorkflowMapping", mapping_id)
+        row.is_active = False
+        self._db.commit()
+        reloaded = self._db.scalar(
+            select(ApprovalWorkflowMapping)
+            .where(ApprovalWorkflowMapping.id == mapping_id)
+            .options(selectinload(ApprovalWorkflowMapping.workflow))
+        )
+        assert reloaded is not None
+        return reloaded

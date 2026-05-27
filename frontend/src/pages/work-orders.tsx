@@ -11,17 +11,16 @@ import { getJson, getJsonList } from "@/lib/api"
 import { workOrderStatusBadgeVariant, workOrderStatusLabel } from "@/lib/work-order-status-badge"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
-type WoTab = "all" | "draft" | "approval" | "operating" | "completed" | "archive"
+type WoTab = "all" | "draft" | "operating" | "completed" | "inactive"
 
 const WO_PAGE_SIZE = 20
 
 const WO_TABS: { id: WoTab; label: string }[] = [
   { id: "all", label: "All" },
   { id: "draft", label: "Draft" },
-  { id: "approval", label: "In Approval" },
   { id: "operating", label: "Active" },
   { id: "completed", label: "Completed" },
-  { id: "archive", label: "Archive" },
+  { id: "inactive", label: "Inactive" },
 ]
 
 function isWoTab(value: string | null): value is WoTab {
@@ -36,14 +35,12 @@ function workOrdersListPath(tab: WoTab, page: number): string {
   if (tab === "draft") {
     q.append("statuses", "draft")
     q.append("statuses", "rejected")
-  } else if (tab === "approval") {
-    q.set("status", "pending_approval")
   } else if (tab === "operating") {
     q.append("statuses", "active")
     q.append("statuses", "approved")
   } else if (tab === "completed") {
     q.set("status", "closed")
-  } else if (tab === "archive") {
+  } else if (tab === "inactive") {
     q.set("active", "false")
   }
   return `/work-orders?${q.toString()}`

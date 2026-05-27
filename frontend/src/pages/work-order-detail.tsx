@@ -138,13 +138,13 @@ function fallbackLineCompletion(it: NonNullable<WorkOrder["items"]>[number]): Li
   }
 }
 
-function workOrderListTabForStatus(status: string): "draft" | "approval" | "operating" | "completed" | null {
+function workOrderListTabForStatus(status: string): "draft" | "operating" | "completed" | null {
   switch (String(status || "").toLowerCase()) {
     case "draft":
     case "rejected":
       return "draft"
     case "pending_approval":
-      return "approval"
+      return null
     case "approved":
     case "active":
       return "operating"
@@ -157,10 +157,11 @@ function workOrderListTabForStatus(status: string): "draft" | "approval" | "oper
 
 function workOrderAuditActionLabel(entry: AuditEntry): string {
   const action = String(entry.action || "").toUpperCase()
-  if (action === "ARCHIVED" || action === "UNARCHIVED") return action
+  if (action === "ARCHIVED") return "INACTIVATED"
+  if (action === "UNARCHIVED") return "ACTIVATED"
   const next =
     entry.new_value && typeof entry.new_value === "object" ? (entry.new_value as Record<string, unknown>) : null
-  if (action === "CANCELLED" && next?.is_active === false) return "ARCHIVED"
+  if (action === "CANCELLED" && next?.is_active === false) return "INACTIVATED"
   return action
 }
 
@@ -318,28 +319,28 @@ export function WorkOrderDetailPage() {
     }
   }
 
-  async function archive() {
+async function archive() {
     if (!row) return
-    if (!confirm("Archive this work order? It will move to the Archive tab.")) return
+    if (!confirm("Inactive this work order?")) return
     try {
       await deleteJson(`/work-orders/${row.id}`)
-      toast.success("Work order archived")
-      navigate("/dashboard/work-orders?tab=archive", { replace: true })
+      toast.success("Work order inactivated")
+      navigate("/dashboard/work-orders?tab=inactive", { replace: true })
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Archive failed")
+      toast.error(e instanceof ApiError ? e.message : "Inactive failed")
     }
   }
 
   async function unarchive() {
     if (!row) return
-    if (!confirm("Unarchive this work order?")) return
+    if (!confirm("Activate this work order?")) return
     try {
       const res = await postJson<{ status?: string }>(`/work-orders/${row.id}/unarchive`, {})
-      toast.success("Work order unarchived")
+      toast.success("Work order activated")
       const nextTab = workOrderListTabForStatus(String(res?.status ?? row.status))
       navigate(nextTab ? `/dashboard/work-orders?tab=${nextTab}` : "/dashboard/work-orders", { replace: true })
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Unarchive failed")
+      toast.error(e instanceof ApiError ? e.message : "Activate failed")
     }
   }
 
@@ -534,6 +535,7 @@ export function WorkOrderDetailPage() {
   const showSubmitButton = row.is_active !== false && canSubmit && (row.status === "draft" || row.status === "rejected")
 
   const showCompletionEngine = row.is_active !== false && row.status === "active" && canManageCompletion && !editableDraft
+  const topActionLabel = row.is_active === false ? "Activate" : "Inactive"
 
   return (
     <div className="space-y-6">
@@ -561,7 +563,7 @@ export function WorkOrderDetailPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild size="sm" variant="outline">
-            <Link to={row.is_active === false ? "/dashboard/work-orders?tab=archive" : "/dashboard/work-orders"}>
+            <Link to={row.is_active === false ? "/dashboard/work-orders?tab=inactive" : "/dashboard/work-orders"}>
               Back
             </Link>
           </Button>
@@ -571,7 +573,7 @@ export function WorkOrderDetailPage() {
               variant="outline"
               onClick={() => void (row.is_active === false ? unarchive() : archive())}
             >
-              {row.is_active === false ? "Unarchive" : "Archive"}
+              {topActionLabel}
             </Button>
           ) : null}
         </div>

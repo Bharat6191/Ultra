@@ -70,6 +70,20 @@ def add_step(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
+@router.delete("/{workflow_id}/steps/{step_id}", response_model=ApprovalWorkflowDetail)
+def remove_step(
+    workflow_id: int,
+    step_id: int,
+    svc: Annotated[ApprovalWorkflowService, Depends(get_workflow_service)],
+) -> ApprovalWorkflowDetail:
+    try:
+        return svc.remove_step(workflow_id=workflow_id, step_id=step_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
 @router.patch("/{workflow_id}/activate", response_model=ApprovalWorkflowDetail)
 def activate_workflow(
     workflow_id: int,
@@ -85,3 +99,18 @@ def activate_workflow(
     except ApprovalError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+
+@router.patch("/{workflow_id}/deactivate", response_model=ApprovalWorkflowDetail)
+def deactivate_workflow(
+    workflow_id: int,
+    current: Annotated[CurrentUser, Depends(get_current_user)],
+    svc: Annotated[ApprovalWorkflowService, Depends(get_workflow_service)],
+) -> ApprovalWorkflowDetail:
+    try:
+        return svc.deactivate_workflow(workflow_id, actor_user_id=int(current.subject))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ApprovalError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

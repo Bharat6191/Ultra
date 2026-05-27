@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ApiError, getJson, patchJson, postJson } from "@/lib/api"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ApiError, deleteJson, getJson, patchJson, postJson } from "@/lib/api"
 
 type PermissionActionOption = {
   code: string
@@ -59,6 +60,7 @@ function roleName(roles: RoleListItem[], roleId: number): string {
 }
 
 export function WorkflowAssignmentPage() {
+  const [tab, setTab] = React.useState("design")
   const [actions, setActions] = React.useState<PermissionActionOption[] | null>(null)
   const [workflows, setWorkflows] = React.useState<WorkflowDetail[] | null>(null)
   const [roles, setRoles] = React.useState<RoleListItem[] | null>(null)
@@ -67,6 +69,7 @@ export function WorkflowAssignmentPage() {
   const [actionCode, setActionCode] = React.useState("")
   const [workflowId, setWorkflowId] = React.useState("")
   const [builderWorkflowId, setBuilderWorkflowId] = React.useState("")
+  const [manageWorkflowId, setManageWorkflowId] = React.useState("")
   const [newWorkflowName, setNewWorkflowName] = React.useState("User creation approval")
   const [newEntityType, setNewEntityType] = React.useState("user_creation")
   const [newRoleId, setNewRoleId] = React.useState("")
@@ -76,6 +79,9 @@ export function WorkflowAssignmentPage() {
   const [creatingWf, setCreatingWf] = React.useState(false)
   const [addingStep, setAddingStep] = React.useState(false)
   const [activating, setActivating] = React.useState(false)
+  const [removingStepId, setRemovingStepId] = React.useState<number | null>(null)
+  const [deactivatingWorkflowId, setDeactivatingWorkflowId] = React.useState<number | null>(null)
+  const [unassigningMappingId, setUnassigningMappingId] = React.useState<number | null>(null)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -122,6 +128,12 @@ export function WorkflowAssignmentPage() {
     if (steps.length === 0) return 1
     return Math.max(...steps.map((s) => s.step_order)) + 1
   }, [selectedBuilderWf])
+
+  const selectedManageWf = React.useMemo(() => {
+    const id = Number(manageWorkflowId)
+    if (!Number.isFinite(id) || id < 1) return null
+    return (workflows ?? []).find((w) => w.id === id) ?? null
+  }, [workflows, manageWorkflowId])
 
   async function onCreateWorkflow() {
     const name = newWorkflowName.trim()
@@ -238,6 +250,58 @@ export function WorkflowAssignmentPage() {
     }
   }
 
+  async function onRemoveStep(step: StepRow) {
+    const wid = Number(manageWorkflowId)
+    if (!Number.isFinite(wid) || wid < 1) {
+      toast.error("Select a workflow to manage.")
+      return
+    }
+    if (!window.confirm(`Remove level ${step.step_order} from this workflow?`)) return
+    setRemovingStepId(step.id)
+    try {
+      await deleteJson<WorkflowDetail>(`/admin/approval-workflows/${wid}/steps/${step.id}`)
+      toast.success(`Level ${step.step_order} removed.`)
+      await load()
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Could not remove level."
+      toast.error(msg)
+    } finally {
+      setRemovingStepId(null)
+    }
+  }
+
+  async function onDeactivateWorkflow(workflow: WorkflowDetail) {
+    if (!window.confirm(`Deactivate "${workflow.name}"? This also unassigns any active action mappings using it.`)) {
+      return
+    }
+    setDeactivatingWorkflowId(workflow.id)
+    try {
+      await patchJson<WorkflowDetail>(`/admin/approval-workflows/${workflow.id}/deactivate`, {})
+      toast.success("Workflow deactivated.")
+      await load()
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Could not deactivate workflow."
+      toast.error(msg)
+    } finally {
+      setDeactivatingWorkflowId(null)
+    }
+  }
+
+  async function onUnassignMapping(mapping: MappingRow) {
+    if (!window.confirm(`Turn off approval for action "${mapping.action_code}"?`)) return
+    setUnassigningMappingId(mapping.id)
+    try {
+      await patchJson<MappingRow>(`/admin/workflow-mappings/${mapping.id}/deactivate`, {})
+      toast.success("Workflow unassigned from action.")
+      await load()
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Could not unassign workflow."
+      toast.error(msg)
+    } finally {
+      setUnassigningMappingId(null)
+    }
+  }
+
   return (
     <div className="w-full space-y-6">
       {activeWorkflows.length === 0 ? (
@@ -251,272 +315,396 @@ export function WorkflowAssignmentPage() {
         </Alert>
       ) : null}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Design approval workflow</CardTitle>
-          <CardDescription>
-            Each <strong>level</strong> runs in order. For a level, every user who has the selected <strong>approver
-            role</strong> gets a task; <strong>Required approvals</strong> is how many approvals must complete that
-            level before the next level starts.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-3">
-            <div className="text-sm font-medium">1. Create a draft</div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="wf-name" showRequired>
-                  Workflow name
-                </Label>
-                <Input
-                  id="wf-name"
-                  value={newWorkflowName}
-                  onChange={(e) => setNewWorkflowName(e.target.value)}
-                  disabled={loading || creatingWf}
-                  placeholder="e.g. User creation — 2 levels"
-                />
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-1 p-1 sm:w-auto">
+          <TabsTrigger value="design">Design Workflow</TabsTrigger>
+          <TabsTrigger value="manage">Manage Workflow</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="design" className="mt-4 space-y-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Design approval workflow</CardTitle>
+              <CardDescription>
+                Each <strong>level</strong> runs in order. For a level, every user who has the selected <strong>approver
+                role</strong> gets a task; <strong>Required approvals</strong> is how many approvals must complete that
+                level before the next level starts.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-3">
+                <div className="text-sm font-medium">1. Create a draft</div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="wf-name" showRequired>
+                      Workflow name
+                    </Label>
+                    <Input
+                      id="wf-name"
+                      value={newWorkflowName}
+                      onChange={(e) => setNewWorkflowName(e.target.value)}
+                      disabled={loading || creatingWf}
+                      placeholder="e.g. User creation — 2 levels"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="wf-entity" showRequired>
+                      Entity type
+                    </Label>
+                    <Input
+                      id="wf-entity"
+                      value={newEntityType}
+                      onChange={(e) => setNewEntityType(e.target.value)}
+                      disabled={loading || creatingWf}
+                      placeholder="user_creation"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Use <code className="rounded bg-muted px-1">user_creation</code> for the user signup approval path
+                      (legacy finalizer).
+                    </p>
+                  </div>
+                </div>
+                <Button type="button" variant="secondary" onClick={() => void onCreateWorkflow()} disabled={loading || creatingWf}>
+                  {creatingWf ? "Creating…" : "Create draft workflow"}
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="wf-entity" showRequired>
-                  Entity type
-                </Label>
-                <Input
-                  id="wf-entity"
-                  value={newEntityType}
-                  onChange={(e) => setNewEntityType(e.target.value)}
-                  disabled={loading || creatingWf}
-                  placeholder="user_creation"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Use <code className="rounded bg-muted px-1">user_creation</code> for the user signup approval path
-                  (legacy finalizer).
-                </p>
-              </div>
-            </div>
-            <Button type="button" variant="secondary" onClick={() => void onCreateWorkflow()} disabled={loading || creatingWf}>
-              {creatingWf ? "Creating…" : "Create draft workflow"}
-            </Button>
-          </div>
 
-          <Separator />
+              <Separator />
 
-          <div className="space-y-3">
-            <div className="text-sm font-medium">2. Add approval levels</div>
-            <div className="space-y-2">
-              <Label htmlFor="builder-wf" showRequired>
-                Workflow to edit
-              </Label>
-              <select
-                id="builder-wf"
-                className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"
-                value={builderWorkflowId}
-                onChange={(e) => setBuilderWorkflowId(e.target.value)}
-                disabled={loading}
-              >
-                <option value="">Select a draft or inactive workflow…</option>
-                {(workflows ?? []).map((w) => (
-                  <option key={w.id} value={String(w.id)}>
-                    {w.name} · {w.entity_type} · {w.is_active ? "active" : "inactive"} · {w.steps?.length ?? 0} level(s)
-                  </option>
-                ))}
-              </select>
-            </div>
+              <div className="space-y-3">
+                <div className="text-sm font-medium">2. Add approval levels</div>
+                <div className="space-y-2">
+                  <Label htmlFor="builder-wf" showRequired>
+                    Workflow to edit
+                  </Label>
+                  <select
+                    id="builder-wf"
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"
+                    value={builderWorkflowId}
+                    onChange={(e) => setBuilderWorkflowId(e.target.value)}
+                    disabled={loading}
+                  >
+                    <option value="">Select a draft or inactive workflow…</option>
+                    {(workflows ?? []).map((w) => (
+                      <option key={w.id} value={String(w.id)}>
+                        {w.name} · {w.entity_type} · {w.is_active ? "active" : "inactive"} · {w.steps?.length ?? 0} level(s)
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-            {selectedBuilderWf ? (
-              <div className="space-y-4">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Level</TableHead>
-                      <TableHead>Approver role</TableHead>
-                      <TableHead>Required approvals</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(selectedBuilderWf.steps ?? []).length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-muted-foreground text-sm">
-                          No levels yet. Add the first level below.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      [...(selectedBuilderWf.steps ?? [])]
-                        .sort((a, b) => a.step_order - b.step_order)
-                        .map((s) => (
-                          <TableRow key={s.id}>
-                            <TableCell className="font-medium">{s.step_order}</TableCell>
-                            <TableCell>{roleName(roles ?? [], s.approver_role_id)}</TableCell>
-                            <TableCell>{s.required_approvals}</TableCell>
+                {selectedBuilderWf ? (
+                  <div className="space-y-4">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Level</TableHead>
+                          <TableHead>Approver role</TableHead>
+                          <TableHead>Required approvals</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(selectedBuilderWf.steps ?? []).length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={3} className="text-muted-foreground text-sm">
+                              No levels yet. Add the first level below.
+                            </TableCell>
                           </TableRow>
-                        ))
-                    )}
-                  </TableBody>
-                </Table>
+                        ) : (
+                          [...(selectedBuilderWf.steps ?? [])]
+                            .sort((a, b) => a.step_order - b.step_order)
+                            .map((s) => (
+                              <TableRow key={s.id}>
+                                <TableCell className="font-medium">{s.step_order}</TableCell>
+                                <TableCell>{roleName(roles ?? [], s.approver_role_id)}</TableCell>
+                                <TableCell>{s.required_approvals}</TableCell>
+                              </TableRow>
+                            ))
+                        )}
+                      </TableBody>
+                    </Table>
 
-                <div className="rounded-md border bg-muted/30 p-4 space-y-3">
-                  <div className="text-sm font-medium">Add next level ({nextStepOrder})</div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="step-role" showRequired>
-                        Approver role
-                      </Label>
-                      <select
-                        id="step-role"
-                        className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"
-                        value={newRoleId}
-                        onChange={(e) => setNewRoleId(e.target.value)}
-                        disabled={loading}
-                      >
-                        <option value="">Select role…</option>
-                        {(roles ?? []).map((r) => (
-                          <option key={r.id} value={String(r.id)}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="rounded-md border bg-muted/30 p-4 space-y-3">
+                      <div className="text-sm font-medium">Add next level ({nextStepOrder})</div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="step-role" showRequired>
+                            Approver role
+                          </Label>
+                          <select
+                            id="step-role"
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"
+                            value={newRoleId}
+                            onChange={(e) => setNewRoleId(e.target.value)}
+                            disabled={loading}
+                          >
+                            <option value="">Select role…</option>
+                            {(roles ?? []).map((r) => (
+                              <option key={r.id} value={String(r.id)}>
+                                {r.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="step-req" showRequired>
+                            Required approvals at this level
+                          </Label>
+                          <Input
+                            id="step-req"
+                            type="number"
+                            min={1}
+                            value={newRequired}
+                            onChange={(e) => setNewRequired(e.target.value)}
+                            disabled={loading}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Use 2+ when multiple approvers in that role must all approve (or quorum-style counts).
+                          </p>
+                        </div>
+                      </div>
+                      <Button type="button" onClick={() => void onAddStep()} disabled={loading || addingStep}>
+                        {addingStep ? "Adding…" : `Add level ${nextStepOrder}`}
+                      </Button>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="step-req" showRequired>
-                        Required approvals at this level
-                      </Label>
-                      <Input
-                        id="step-req"
-                        type="number"
-                        min={1}
-                        value={newRequired}
-                        onChange={(e) => setNewRequired(e.target.value)}
-                        disabled={loading}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Use 2+ when multiple approvers in that role must all approve (or quorum-style counts).
-                      </p>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button
+                        type="button"
+                        variant="default"
+                        onClick={() => void onActivateWorkflow()}
+                        disabled={loading || activating || selectedBuilderWf.is_active}
+                      >
+                        {activating ? "Activating…" : selectedBuilderWf.is_active ? "Already active" : "Activate workflow"}
+                      </Button>
+                      {selectedBuilderWf.is_active ? (
+                        <Badge variant="secondary">Active</Badge>
+                      ) : (
+                        <Badge variant="outline">Inactive draft</Badge>
+                      )}
                     </div>
                   </div>
-                  <Button type="button" onClick={() => void onAddStep()} disabled={loading || addingStep}>
-                    {addingStep ? "Adding…" : `Add level ${nextStepOrder}`}
-                  </Button>
-                </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Select a workflow to view levels and add more.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="default"
-                    onClick={() => void onActivateWorkflow()}
-                    disabled={loading || activating || selectedBuilderWf.is_active}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Assign workflow to an action</CardTitle>
+              <CardDescription>
+                Only <strong>active</strong> workflows appear here. Use the section above to build and activate one first.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="action-select" showRequired>
+                    Action (permission code)
+                  </Label>
+                  <select
+                    id="action-select"
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"
+                    value={actionCode}
+                    onChange={(e) => setActionCode(e.target.value)}
+                    disabled={loading}
                   >
-                    {activating ? "Activating…" : selectedBuilderWf.is_active ? "Already active" : "Activate workflow"}
-                  </Button>
-                  {selectedBuilderWf.is_active ? (
-                    <Badge variant="secondary">Active</Badge>
-                  ) : (
-                    <Badge variant="outline">Inactive draft</Badge>
-                  )}
+                    <option value="">Select…</option>
+                    {(actions ?? []).map((a) => (
+                      <option key={a.code} value={a.code}>
+                        {a.code}
+                        {a.feature_name ? ` — ${a.feature_name}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="workflow-select" showRequired>
+                    Workflow (active only)
+                  </Label>
+                  <select
+                    id="workflow-select"
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"
+                    value={workflowId}
+                    onChange={(e) => setWorkflowId(e.target.value)}
+                    disabled={loading}
+                  >
+                    <option value="">
+                      {activeWorkflows.length ? "Select…" : "No active workflows — create one above"}
+                    </option>
+                    {activeWorkflows.map((w) => (
+                      <option key={w.id} value={String(w.id)}>
+                        {w.name} ({w.entity_type}) — {w.steps?.length ?? 0} level(s)
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Select a workflow to view levels and add more.</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Assign workflow to an action</CardTitle>
-          <CardDescription>
-            Only <strong>active</strong> workflows appear here. Use the section above to build and activate one first.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="action-select" showRequired>
-                Action (permission code)
-              </Label>
-              <select
-                id="action-select"
-                className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"
-                value={actionCode}
-                onChange={(e) => setActionCode(e.target.value)}
-                disabled={loading}
+              <Button
+                type="button"
+                onClick={() => void onAssign()}
+                disabled={loading || saving || activeWorkflows.length === 0}
               >
-                <option value="">Select…</option>
-                {(actions ?? []).map((a) => (
-                  <option key={a.code} value={a.code}>
-                    {a.code}
-                    {a.feature_name ? ` — ${a.feature_name}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="workflow-select" showRequired>
-                Workflow (active only)
-              </Label>
-              <select
-                id="workflow-select"
-                className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"
-                value={workflowId}
-                onChange={(e) => setWorkflowId(e.target.value)}
-                disabled={loading}
-              >
-                <option value="">
-                  {activeWorkflows.length ? "Select…" : "No active workflows — create one above"}
-                </option>
-                {activeWorkflows.map((w) => (
-                  <option key={w.id} value={String(w.id)}>
-                    {w.name} ({w.entity_type}) — {w.steps?.length ?? 0} level(s)
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <Button
-            type="button"
-            onClick={() => void onAssign()}
-            disabled={loading || saving || activeWorkflows.length === 0}
-          >
-            {saving ? "Saving…" : "Assign workflow"}
-          </Button>
-        </CardContent>
-      </Card>
+                {saving ? "Saving…" : "Assign workflow"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Current mappings</CardTitle>
-          <CardDescription>Active and historical rows (inactive mappings are kept for audit).</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Action</TableHead>
-                <TableHead>Workflow</TableHead>
-                <TableHead>Active</TableHead>
-                <TableHead>Created</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(mappings ?? []).length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground">
-                    {loading ? "Loading…" : "No mappings yet."}
-                  </TableCell>
-                </TableRow>
+        <TabsContent value="manage" className="mt-4 space-y-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Manage workflow</CardTitle>
+              <CardDescription>
+                Remove unused approval levels, deactivate a workflow, or turn approval off for an action from this tab.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="manage-wf" showRequired>
+                  Workflow to manage
+                </Label>
+                <select
+                  id="manage-wf"
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm"
+                  value={manageWorkflowId}
+                  onChange={(e) => setManageWorkflowId(e.target.value)}
+                  disabled={loading}
+                >
+                  <option value="">Select workflow…</option>
+                  {(workflows ?? []).map((w) => (
+                    <option key={w.id} value={String(w.id)}>
+                      {w.name} · {w.entity_type} · {w.is_active ? "active" : "inactive"} · {w.steps?.length ?? 0} level(s)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedManageWf ? (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    {selectedManageWf.is_active ? <Badge variant="secondary">Active</Badge> : <Badge variant="outline">Inactive</Badge>}
+                    <Badge variant="outline">{selectedManageWf.entity_type}</Badge>
+                    {selectedManageWf.is_active ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void onDeactivateWorkflow(selectedManageWf)}
+                        disabled={deactivatingWorkflowId === selectedManageWf.id}
+                      >
+                        {deactivatingWorkflowId === selectedManageWf.id ? "Deactivating…" : "Deactivate Workflow"}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Level</TableHead>
+                        <TableHead>Approver role</TableHead>
+                        <TableHead>Required approvals</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(selectedManageWf.steps ?? []).length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-muted-foreground text-sm">
+                            No approval levels configured.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        [...(selectedManageWf.steps ?? [])]
+                          .sort((a, b) => a.step_order - b.step_order)
+                          .map((s) => (
+                            <TableRow key={s.id}>
+                              <TableCell className="font-medium">{s.step_order}</TableCell>
+                              <TableCell>{roleName(roles ?? [], s.approver_role_id)}</TableCell>
+                              <TableCell>{s.required_approvals}</TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => void onRemoveStep(s)}
+                                  disabled={selectedManageWf.is_active || removingStepId === s.id}
+                                >
+                                  {removingStepId === s.id ? "Removing…" : "Remove Level"}
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                      )}
+                    </TableBody>
+                  </Table>
+
+                  <p className="text-xs text-muted-foreground">
+                    Levels can be removed only from inactive workflows that have never been used in an approval request.
+                    To stop approvals completely, deactivate the workflow or unassign the action below.
+                  </p>
+                </div>
               ) : (
-                (mappings ?? []).map((m) => (
-                  <TableRow key={m.id}>
-                    <TableCell className="font-mono text-xs">{m.action_code}</TableCell>
-                    <TableCell>{m.workflow_name ?? `Workflow #${m.workflow_id}`}</TableCell>
-                    <TableCell>{m.is_active ? "Yes" : "No"}</TableCell>
-                    <TableCell className="text-muted-foreground text-xs">{formatDateTime(m.created_at)}</TableCell>
-                  </TableRow>
-                ))
+                <p className="text-sm text-muted-foreground">Select a workflow to remove levels or deactivate it.</p>
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Current mappings</CardTitle>
+              <CardDescription>
+                Unassigning an active mapping turns approval off for that action. Historical inactive rows remain for audit.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Workflow</TableHead>
+                    <TableHead>Active</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(mappings ?? []).length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-muted-foreground">
+                        {loading ? "Loading…" : "No mappings yet."}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    (mappings ?? []).map((m) => (
+                      <TableRow key={m.id}>
+                        <TableCell className="font-mono text-xs">{m.action_code}</TableCell>
+                        <TableCell>{m.workflow_name ?? `Workflow #${m.workflow_id}`}</TableCell>
+                        <TableCell>{m.is_active ? "Yes" : "No"}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">{formatDateTime(m.created_at)}</TableCell>
+                        <TableCell className="text-right">
+                          {m.is_active ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void onUnassignMapping(m)}
+                              disabled={unassigningMappingId === m.id}
+                            >
+                              {unassigningMappingId === m.id ? "Unassigning…" : "Unassign"}
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Inactive</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

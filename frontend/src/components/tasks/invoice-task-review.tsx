@@ -1,7 +1,5 @@
 import * as React from "react"
 
-import { InvoicePreview } from "@/components/invoices/invoice-preview"
-import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -228,27 +226,6 @@ export function InvoiceExceptionApprovalReview({
               .filter((value): value is string => Boolean(value)),
           ),
         )
-  const pdfLines: InvoiceDisplayLine[] = (row.lines ?? []).map((line) => {
-    const taxable = parseNumber(line.taxable_value ?? line.amount)
-    const taxAmount = parseNumber(line.tax_amount)
-    const totalInclTax =
-      Number.isFinite(parseNumber(line.amount_including_tax))
-        ? parseNumber(line.amount_including_tax)
-        : (Number.isFinite(taxable) ? taxable : 0) + (Number.isFinite(taxAmount) ? taxAmount : 0)
-    return {
-      description:
-        `${line.work_order_number ? `${line.work_order_number} · ` : ""}${line.job_description ? `${line.job_description} · ` : ""}Item #${line.work_order_item_id}`,
-      qty: parseNumber(line.quantity),
-      weightKg: Number.isFinite(parseNumber(line.weight_per_piece_kg)) ? parseNumber(line.weight_per_piece_kg) : null,
-      unit: line.unit_label ?? line.unit_type ?? "—",
-      unitPrice: parseNumber(line.unit_rate ?? line.rate),
-      taxable: Number.isFinite(taxable) ? taxable : 0,
-      lineTaxPct: Number.isFinite(parseNumber(line.tax_pct)) ? parseNumber(line.tax_pct) : undefined,
-      taxAmount: Number.isFinite(taxAmount) ? taxAmount : undefined,
-      totalInclTax: Number.isFinite(totalInclTax) ? totalInclTax : 0,
-    }
-  })
-
   return (
     <div className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
@@ -397,27 +374,6 @@ export function InvoiceExceptionApprovalReview({
         </CardContent>
       </Card>
 
-      <Card className="border-border/80 shadow-sm">
-        <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base">Invoice preview</CardTitle>
-          <CardDescription className="text-xs">Same invoice body the approver can cross-check against the work order and the blocker messages.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <InvoicePreview
-            data={{
-              invoiceNo: row.invoice_number,
-              invoiceDate: row.invoice_date,
-              issuedTo: {
-                name: row.contractor_name?.trim() || `Contractor #${row.contractor_id}`,
-                address: row.org_unit_name?.trim() || `Plant #${row.org_unit_id}`,
-              },
-              payTo: { name: "Ultra Workspace", bank: "—", accountName: "—", accountNoMasked: "—" },
-              currencySymbol: "₹",
-              lines: pdfLines,
-            }}
-          />
-        </CardContent>
-      </Card>
     </div>
   )
 }

@@ -248,10 +248,10 @@ export async function putJson<TResponse>(
   return data as TResponse
 }
 
-export async function deleteJson(
+export async function deleteJson<TResponse = void>(
   path: string,
   init?: Omit<RequestInit, "method" | "body">,
-): Promise<void> {
+): Promise<TResponse> {
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`
   const token = getAccessToken()
 
@@ -270,4 +270,6 @@ export async function deleteJson(
   if (!res.ok) {
     throw new ApiError(parseErrorMessage(data, res.status), res.status, data)
   }
+
+  return data as TResponse
 }

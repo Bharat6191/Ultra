@@ -799,7 +799,7 @@ export function WorkOrderExecutionFooter(props: {
     busy,
     showSave = true,
     showSubmit,
-    submitLabel = "Submit for approval",
+    submitLabel = "Activate",
     saveLabel = "Save",
     tip = "Tip: choose the contractor once, then add part lines. Taxable value uses negotiated rate when approved, else Part Master base.",
     onCancel,
