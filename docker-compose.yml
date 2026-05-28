@@ -86,9 +86,28 @@ services:
     networks:
       - ultra_demo_network
 
+  pgadmin:
+    image: dpage/pgadmin4:8
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-Admin123!}
+      PGADMIN_DISABLE_POSTFIX: "true"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - ultra_demo_pgadmin_data:/var/lib/pgadmin
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    networks:
+      - ultra_demo_network
+
 volumes:
   ultra_demo_db_data:
   ultra_demo_uploads:
+  ultra_demo_pgadmin_data:
 
 networks:
   ultra_demo_network:
