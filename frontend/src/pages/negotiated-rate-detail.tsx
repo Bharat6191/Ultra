@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getJson, postJson } from "@/lib/api"
-import { hasPermission, isSuperuser } from "@/lib/permissions"
+import { canReadNegotiatedRates, hasPermission, isSuperuser } from "@/lib/permissions"
 import {
   rateStatusLabel,
   rateStatusVariant,
@@ -33,7 +33,7 @@ export function NegotiatedRateDetailPage() {
   const [error, setError] = React.useState<string | null>(null)
   const [actionBusy, setActionBusy] = React.useState(false)
 
-  const canView = hasPermission("contractor_rates.view") || isSuperuser()
+  const canView = canReadNegotiatedRates()
   const canUpdate = hasPermission("contractor_rates.update") || isSuperuser()
   const canCreate = hasPermission("contractor_rates.create") || isSuperuser()
 
@@ -87,7 +87,8 @@ export function NegotiatedRateDetailPage() {
       <Alert>
         <AlertTitle>Permission required</AlertTitle>
         <AlertDescription>
-          You need <span className="font-mono">contractor_rates.view</span> to access this page.
+          You need <span className="font-mono">contractor_rates.view</span> or{" "}
+          <span className="font-mono">contractor_rates.approve</span> to access this page.
         </AlertDescription>
       </Alert>
     )

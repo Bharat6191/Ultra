@@ -73,6 +73,17 @@ def _friendly_approval_inbox_title(task: ApprovalTaskModel) -> str | None:
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
+TASK_INBOX_PERMISSION_CODES = (
+    "task.view",
+    "task.act",
+    "task.close",
+    "approval.view",
+    "approval.act",
+    "contractor_rates.approve",
+    "work_orders.approve",
+    "invoices.approve_exceptions",
+)
+
 
 def get_task_service(db: Session = Depends(get_db)) -> TaskService:
     return TaskService(db)
@@ -84,7 +95,7 @@ def my_tasks(
     svc: Annotated[TaskService, Depends(get_task_service)],
     _: Annotated[
         object,
-        Depends(require_any_permission("task.view", "approval.view")),
+        Depends(require_any_permission(*TASK_INBOX_PERMISSION_CODES)),
     ],
     status_filter: str | None = Query(default=None, alias="status"),
     task_type: str | None = Query(default=None),
@@ -146,7 +157,7 @@ def get_task(
     svc: Annotated[TaskService, Depends(get_task_service)],
     _: Annotated[
         object,
-        Depends(require_any_permission("task.view", "approval.view")),
+        Depends(require_any_permission(*TASK_INBOX_PERMISSION_CODES)),
     ],
     db: Session = Depends(get_db),
 ) -> TaskDetailPublic:
@@ -240,7 +251,7 @@ def add_comment(
     svc: Annotated[TaskService, Depends(get_task_service)],
     _: Annotated[
         object,
-        Depends(require_any_permission("task.view", "approval.view")),
+        Depends(require_any_permission(*TASK_INBOX_PERMISSION_CODES)),
     ],
 ) -> dict:
     try:
@@ -252,4 +263,3 @@ def add_comment(
 
     svc.add_comment(task_id=task_id, actor_user_id=int(current.subject), comment=payload.comment)
     return {"ok": True}
-

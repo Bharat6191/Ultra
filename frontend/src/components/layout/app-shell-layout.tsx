@@ -18,7 +18,7 @@ import { useLocation } from "react-router-dom"
 
 import { AppNavbar } from "@/components/layout/AppNavbar"
 import { AppSidebar } from "@/components/layout/AppSidebar"
-import { hasPermission } from "@/lib/permissions"
+import { hasPermission, TASK_INBOX_PERMISSION_CODES } from "@/lib/permissions"
 import type { SidebarNavItem } from "@/components/layout/AppSidebar"
 
 type NavPerm = string | string[] | null
@@ -39,7 +39,7 @@ const shellNavItems: ShellNavItem[] = [
     label: "My Tasks",
     icon: ClipboardList,
     to: "/dashboard/tasks",
-    permission: ["approval.view", "task.view"],
+    permission: TASK_INBOX_PERMISSION_CODES,
   },
   {
     id: "plants",

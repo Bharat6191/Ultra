@@ -1,0 +1,1 @@
+{"nodes": [], "edges": [{"source": "modules_contractor", "target": "db_models", "relation": "references", "confidence": "EXTRACTED", "confidence_score": 1.0, "source_file": "docs/db-diagram.md", "source_location": null, "weight": 1.0}], "hyperedges": []}

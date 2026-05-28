@@ -57,6 +57,11 @@ from modules.users.model import User
 
 router = APIRouter(tags=["app", "contractor_rates"])
 
+CONTRACTOR_RATE_READ_PERMISSION_CODES = (
+    "contractor_rates.view",
+    "contractor_rates.approve",
+)
+
 
 def _require_multipart(request: Request) -> None:
     """Browsers send ``multipart/form-data; boundary=…`` — do not require an exact match."""
@@ -166,7 +171,7 @@ def _versions_to_public(db: Session, versions: list) -> list[RateVersionEntry]:
 
 @router.get(
     "/contractor-rates/summary",
-    dependencies=[Depends(require_permission("contractor_rates.view"))],
+    dependencies=[Depends(require_any_permission(*CONTRACTOR_RATE_READ_PERMISSION_CODES))],
 )
 def contractor_rate_summary(
     svc: Annotated[ContractorRateService, Depends(_get_rate_service)],
@@ -178,7 +183,7 @@ def contractor_rate_summary(
 @router.get(
     "/contractor-rates",
     response_model=list[ContractorRatePublic],
-    dependencies=[Depends(require_permission("contractor_rates.view"))],
+    dependencies=[Depends(require_any_permission(*CONTRACTOR_RATE_READ_PERMISSION_CODES))],
 )
 def list_contractor_rates(
     svc: Annotated[ContractorRateService, Depends(_get_rate_service)],
@@ -259,7 +264,7 @@ async def upload_opening_evidence(
 @router.get(
     "/contractor-rates/{rate_id:int}",
     response_model=ContractorRatePublic,
-    dependencies=[Depends(require_permission("contractor_rates.view"))],
+    dependencies=[Depends(require_any_permission(*CONTRACTOR_RATE_READ_PERMISSION_CODES))],
 )
 def get_contractor_rate(
     rate_id: int,
@@ -358,7 +363,7 @@ async def upload_negotiation_attachment(
 
 @router.get(
     "/contractor-rates/{rate_id:int}/negotiation-logs/{log_id:int}/attachments/{attachment_id:int}/content",
-    dependencies=[Depends(require_permission("contractor_rates.view"))],
+    dependencies=[Depends(require_any_permission(*CONTRACTOR_RATE_READ_PERMISSION_CODES))],
 )
 def negotiation_attachment_content(
     rate_id: int,
@@ -424,7 +429,7 @@ def cancel_contractor_rate(
 @router.get(
     "/contractor-rates/{rate_id:int}/timeline",
     response_model=list[ContractorRateTimelineEvent],
-    dependencies=[Depends(require_permission("contractor_rates.view"))],
+    dependencies=[Depends(require_any_permission(*CONTRACTOR_RATE_READ_PERMISSION_CODES))],
 )
 def get_contractor_rate_timeline(
     rate_id: int,
@@ -440,7 +445,7 @@ def get_contractor_rate_timeline(
 @router.get(
     "/contractor-rates/{rate_id:int}/versions",
     response_model=list[RateVersionEntry],
-    dependencies=[Depends(require_permission("contractor_rates.view"))],
+    dependencies=[Depends(require_any_permission(*CONTRACTOR_RATE_READ_PERMISSION_CODES))],
 )
 def list_contractor_rate_versions(
     rate_id: int,

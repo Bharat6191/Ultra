@@ -6,6 +6,22 @@ export type MePermissionsPayload = {
   permissions?: string[]
 }
 
+export const TASK_INBOX_PERMISSION_CODES = [
+  "task.view",
+  "task.act",
+  "task.close",
+  "approval.view",
+  "approval.act",
+  "contractor_rates.approve",
+  "work_orders.approve",
+  "invoices.approve_exceptions",
+]
+
+export const NEGOTIATED_RATE_READ_PERMISSION_CODES = [
+  "contractor_rates.view",
+  "contractor_rates.approve",
+]
+
 /** Persist RBAC snapshot from ``GET /me`` (call after login when token is set). */
 export function persistAuthFromMe(me: MePermissionsPayload): void {
   try {
@@ -77,6 +93,18 @@ export function hasPermission(code: string): boolean {
   }
 }
 
+export function hasAnyPermission(codes: readonly string[]): boolean {
+  return isSuperuser() || codes.some((code) => hasPermission(code))
+}
+
+export function canAccessTaskInbox(): boolean {
+  return hasAnyPermission(TASK_INBOX_PERMISSION_CODES)
+}
+
+export function canReadNegotiatedRates(): boolean {
+  return hasAnyPermission(NEGOTIATED_RATE_READ_PERMISSION_CODES)
+}
+
 /**
  * List org units (plants) for user/role pickers without opening the Plants admin module.
  * Matches ``GET /admin/org-units`` authorization (OR of these codes).
@@ -117,4 +145,3 @@ export function canListOrgUnitsForAssignments(): boolean {
     return false
   }
 }
-

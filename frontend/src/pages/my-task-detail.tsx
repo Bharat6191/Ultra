@@ -15,7 +15,12 @@ import {
 } from "@/components/tasks/work-order-task-review"
 import { InvoiceExceptionApprovalReview } from "@/components/tasks/invoice-task-review"
 import { ApiError, getJson, postJson } from "@/lib/api"
-import { hasPermission, isSuperuser, persistAuthFromMe } from "@/lib/permissions"
+import {
+  canReadNegotiatedRates,
+  hasPermission,
+  isSuperuser,
+  persistAuthFromMe,
+} from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
 type TaskComment = {
@@ -213,7 +218,7 @@ function openRecordAction(task: UnifiedTaskDetail): { href: string; label: strin
     hasPermission("work_orders.create")
   if (et === "work_order_approval" || et === "work_order_rate_override") return woAccess ? base : null
 
-  if (et === "contractor_rate_approval") return hasPermission("contractor_rates.view") ? base : null
+  if (et === "contractor_rate_approval") return canReadNegotiatedRates() ? base : null
 
   if (
     et === "contractor_creation" ||
@@ -364,14 +369,20 @@ export function MyTaskDetailPage() {
   const [actionComment, setActionComment] = React.useState("")
 
   const [, forcePermRefresh] = React.useReducer((x: number) => x + 1, 0)
-  const approvalActionCode =
-    task?.approval?.entity_type === "invoice_exception_approval"
-      ? "invoices.approve_exceptions"
-      : "approval.act"
-  const canApprovalAct =
-    hasPermission("approval.act") ||
-    (task?.approval?.entity_type === "invoice_exception_approval" &&
-      hasPermission("invoices.approve_exceptions"))
+  const approvalActionCodes = React.useMemo(() => {
+    switch (task?.approval?.entity_type) {
+      case "contractor_rate_approval":
+        return ["contractor_rates.approve", "approval.act"]
+      case "work_order_approval":
+      case "work_order_rate_override":
+        return ["work_orders.approve", "approval.act"]
+      case "invoice_exception_approval":
+        return ["invoices.approve_exceptions", "approval.act"]
+      default:
+        return ["approval.act"]
+    }
+  }, [task?.approval?.entity_type])
+  const canApprovalAct = isSuperuser() || approvalActionCodes.some((code) => hasPermission(code))
   const canTaskAct = hasPermission("task.act")
   const canTaskClose = hasPermission("task.close")
 
@@ -578,8 +589,8 @@ export function MyTaskDetailPage() {
         </div>
         {!canApprovalAct ? (
           <p className="text-right text-xs text-muted-foreground">
-            Needs <span className="font-mono">{approvalActionCode}</span>
-            {task?.approval?.entity_type === "invoice_exception_approval" ? " or approval.act" : ""} on your role.
+            Needs{" "}
+            <span className="font-mono">{approvalActionCodes.join(" or ")}</span> on your role.
           </p>
         ) : null}
       </div>

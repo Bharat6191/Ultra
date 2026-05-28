@@ -436,12 +436,15 @@ class ApprovalEngineService:
             # Preserve original temporary password across resubmits so the final "USER_CREATED"
             # email can still include the initial credential if the template requires it.
             prev_temp_password: str | None = None
+            prev_is_active: bool | None = None
             if isinstance(req.payload, dict):
                 raw_prev = req.payload.get("temp_password")
                 if isinstance(raw_prev, str) and raw_prev.strip():
                     prev_temp_password = raw_prev
+                if "is_active" in req.payload:
+                    prev_is_active = bool(req.payload.get("is_active"))
 
-            req.payload = self._build_user_creation_payload(user)
+            req.payload = self._build_user_creation_payload(user, requested_is_active=prev_is_active)
             if prev_temp_password and isinstance(req.payload, dict) and not req.payload.get("temp_password"):
                 req.payload["temp_password"] = prev_temp_password
 
@@ -578,7 +581,7 @@ class ApprovalEngineService:
             )
 
     @staticmethod
-    def _build_user_creation_payload(user: User) -> dict[str, Any]:
+    def _build_user_creation_payload(user: User, requested_is_active: bool | None = None) -> dict[str, Any]:
         role = user.roles[0] if user.roles else None
         org = user.org_units[0] if user.org_units else None
         return {
@@ -588,6 +591,7 @@ class ApprovalEngineService:
             "email": user.email,
             "role_id": int(role.id) if role is not None else None,
             "org_unit_id": int(org.id) if org is not None else None,
+            "is_active": bool(user.is_active) if requested_is_active is None else bool(requested_is_active),
         }
 
     def act_on_task(
@@ -884,9 +888,12 @@ class ApprovalEngineService:
             user = self._db.get(User, req.entity_id)
             if user is None:
                 raise ApprovalError("Target user not found for approval request.")
-            user.is_active = True
+            desired_active = True
+            if isinstance(req.payload, dict) and "is_active" in req.payload:
+                desired_active = bool(req.payload.get("is_active"))
+            user.is_active = desired_active
             # Trigger configurable email notification (template-driven).
-            if user.email:
+            if user.email and desired_active:
                 payload: dict[str, Any] = {
                     "user_name": user.full_name,
                     "username": user.username,

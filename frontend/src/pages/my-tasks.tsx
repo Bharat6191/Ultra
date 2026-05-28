@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError, getJson } from "@/lib/api"
-import { hasPermission, isSuperuser, persistAuthFromMe } from "@/lib/permissions"
+import { canAccessTaskInbox, persistAuthFromMe } from "@/lib/permissions"
 
 type UnifiedTaskRow = {
   id: number
@@ -46,7 +46,7 @@ function InboxTable({ rows, loading, canView, emptyMessage, onOpen }: InboxTable
               <TableRow>
                 <TableCell colSpan={4} className="text-muted-foreground">
                   {!canView
-                    ? "Missing permission: task.view or approval.view"
+                    ? "Missing a My Tasks permission on your role."
                     : loading
                       ? "Loading…"
                       : emptyMessage}
@@ -80,8 +80,7 @@ export function MyTasksPage() {
   const navigate = useNavigate()
 
   const [, forcePermRefresh] = React.useReducer((x: number) => x + 1, 0)
-  const canView =
-    hasPermission("task.view") || hasPermission("approval.view") || isSuperuser()
+  const canView = canAccessTaskInbox()
 
   const syncMe = React.useCallback(async () => {
     try {

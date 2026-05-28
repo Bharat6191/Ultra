@@ -1,0 +1,1992 @@
+{
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/create_superuser.py": {
+    "mtime": 1779857690.0703292,
+    "ast_hash": "68b359c6771e8dc65bc7d951060f838f",
+    "semantic_hash": "68b359c6771e8dc65bc7d951060f838f"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/pyrsa-sign": {
+    "mtime": 1778961076.1181161,
+    "ast_hash": "a769f587259bcc41ea9d868d48e3fb9c",
+    "semantic_hash": "a769f587259bcc41ea9d868d48e3fb9c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/Activate.ps1": {
+    "mtime": 1778960437.3796642,
+    "ast_hash": "ffb074b8336789578f50a6c1a1632342",
+    "semantic_hash": "ffb074b8336789578f50a6c1a1632342"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/dotenv": {
+    "mtime": 1778961074.0705898,
+    "ast_hash": "24eb731b158e422731554706e3724ebb",
+    "semantic_hash": "24eb731b158e422731554706e3724ebb"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/pyrsa-priv2pub": {
+    "mtime": 1778961076.1179698,
+    "ast_hash": "7bbb8219d8568c18884e3a9527813b86",
+    "semantic_hash": "7bbb8219d8568c18884e3a9527813b86"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/pytest": {
+    "mtime": 1778961076.2716491,
+    "ast_hash": "6db4907c7b213f27f9551c2fd6c44d60",
+    "semantic_hash": "6db4907c7b213f27f9551c2fd6c44d60"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/pip3": {
+    "mtime": 1778960437.3371413,
+    "ast_hash": "7a40894bc1ac005a86e2022153e2707b",
+    "semantic_hash": "7a40894bc1ac005a86e2022153e2707b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/mako-render": {
+    "mtime": 1778961076.5484998,
+    "ast_hash": "2862c99d9c88bb2dd80faa80daf13a55",
+    "semantic_hash": "2862c99d9c88bb2dd80faa80daf13a55"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/pyrsa-keygen": {
+    "mtime": 1778961076.1178694,
+    "ast_hash": "26ba8036249043016540deeb6c9322bc",
+    "semantic_hash": "26ba8036249043016540deeb6c9322bc"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/pip": {
+    "mtime": 1778960437.3369956,
+    "ast_hash": "7a40894bc1ac005a86e2022153e2707b",
+    "semantic_hash": "7a40894bc1ac005a86e2022153e2707b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/pyrsa-decrypt": {
+    "mtime": 1778961076.1175923,
+    "ast_hash": "8804eb458f7b0986863ebe4242fcd8dc",
+    "semantic_hash": "8804eb458f7b0986863ebe4242fcd8dc"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/fastapi": {
+    "mtime": 1778961077.5433314,
+    "ast_hash": "46752fa4dbcb7a7857ddddb6623a0abb",
+    "semantic_hash": "46752fa4dbcb7a7857ddddb6623a0abb"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/pygmentize": {
+    "mtime": 1778961074.5935788,
+    "ast_hash": "e75f467e667e0162178940c54c894508",
+    "semantic_hash": "e75f467e667e0162178940c54c894508"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/pyrsa-encrypt": {
+    "mtime": 1778961076.1177337,
+    "ast_hash": "c410575690b83791a32f046ab53abdd6",
+    "semantic_hash": "c410575690b83791a32f046ab53abdd6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/uvicorn": {
+    "mtime": 1778961075.2916467,
+    "ast_hash": "d55f694fcc5bdd1e9ef6804fc46400b3",
+    "semantic_hash": "d55f694fcc5bdd1e9ef6804fc46400b3"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/alembic": {
+    "mtime": 1778961077.4866972,
+    "ast_hash": "675278bb94f8c615152f19a75da78767",
+    "semantic_hash": "675278bb94f8c615152f19a75da78767"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/pyrsa-verify": {
+    "mtime": 1778961076.1182609,
+    "ast_hash": "e92a7eba1a4bae77c231692fa3d895dd",
+    "semantic_hash": "e92a7eba1a4bae77c231692fa3d895dd"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/engin/bin/email_validator": {
+    "mtime": 1778961076.6239347,
+    "ast_hash": "3c0956582e28020998689b00fe7a29e6",
+    "semantic_hash": "3c0956582e28020998689b00fe7a29e6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/tsconfig.node.json": {
+    "mtime": 1778960085.9690378,
+    "ast_hash": "70bdd0a673bcfc0e828080b306e7c680",
+    "semantic_hash": "70bdd0a673bcfc0e828080b306e7c680"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/tsconfig.app.json": {
+    "mtime": 1779215690.9723659,
+    "ast_hash": "416b885d45f0c94ea25687fca0f760b1",
+    "semantic_hash": "416b885d45f0c94ea25687fca0f760b1"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/package.json": {
+    "mtime": 1778960155.1791253,
+    "ast_hash": "a4a4472e34cceb748f9b5091fdfc4e78",
+    "semantic_hash": "a4a4472e34cceb748f9b5091fdfc4e78"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/components.json": {
+    "mtime": 1778960085.9595726,
+    "ast_hash": "4309401ded0527ef65581f5ae99855a6",
+    "semantic_hash": "4309401ded0527ef65581f5ae99855a6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/tsconfig.json": {
+    "mtime": 1778960085.968948,
+    "ast_hash": "7b5e29df8aa966a4f53eeb1d92c1c602",
+    "semantic_hash": "7b5e29df8aa966a4f53eeb1d92c1c602"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/eslint.config.js": {
+    "mtime": 1778960085.9596708,
+    "ast_hash": "b8893da386a89dfd3672dad848f4ec7e",
+    "semantic_hash": "b8893da386a89dfd3672dad848f4ec7e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/vite.config.ts": {
+    "mtime": 1778960155.2008245,
+    "ast_hash": "aab85698eb9de21b52fec570a0dcacc9",
+    "semantic_hash": "aab85698eb9de21b52fec570a0dcacc9"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/App.tsx": {
+    "mtime": 1779786870.1163788,
+    "ast_hash": "6811f6bacbae38f0b26897deb30c49e1",
+    "semantic_hash": "6811f6bacbae38f0b26897deb30c49e1"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/main.tsx": {
+    "mtime": 1778960085.9654071,
+    "ast_hash": "31bd90057b43e1c98b48611f2d7ef4cb",
+    "semantic_hash": "31bd90057b43e1c98b48611f2d7ef4cb"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/approval-workflow-timeline.tsx": {
+    "mtime": 1779712957.6380491,
+    "ast_hash": "e906c18b462a9d1a55692328f2ed079e",
+    "semantic_hash": "e906c18b462a9d1a55692328f2ed079e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/app-toaster.tsx": {
+    "mtime": 1778960085.9622831,
+    "ast_hash": "7cc0a48114243a921159823020129d42",
+    "semantic_hash": "7cc0a48114243a921159823020129d42"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/tabs.tsx": {
+    "mtime": 1778960085.964744,
+    "ast_hash": "8c9978c988ac60d5ff8f3d8dcec24184",
+    "semantic_hash": "8c9978c988ac60d5ff8f3d8dcec24184"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/card.tsx": {
+    "mtime": 1778960155.193238,
+    "ast_hash": "d1a7566c1c71fd122d0b6428a0998058",
+    "semantic_hash": "d1a7566c1c71fd122d0b6428a0998058"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/scroll-area.tsx": {
+    "mtime": 1778960085.9641986,
+    "ast_hash": "5a04c269a377e8176ebbf27ee8ac35bf",
+    "semantic_hash": "5a04c269a377e8176ebbf27ee8ac35bf"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/label.tsx": {
+    "mtime": 1778960155.1935563,
+    "ast_hash": "26dbdec6786520eb4367b14f396de522",
+    "semantic_hash": "26dbdec6786520eb4367b14f396de522"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/sonner.tsx": {
+    "mtime": 1778960085.964468,
+    "ast_hash": "f46214bc2a6a5153a6e04fad523d5587",
+    "semantic_hash": "f46214bc2a6a5153a6e04fad523d5587"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/alert.tsx": {
+    "mtime": 1778960085.9631467,
+    "ast_hash": "739c28799fae98b4fa01132494788e85",
+    "semantic_hash": "739c28799fae98b4fa01132494788e85"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/switch.tsx": {
+    "mtime": 1778960085.9645574,
+    "ast_hash": "604ee45e3e0f857f7cfc1028df246f72",
+    "semantic_hash": "604ee45e3e0f857f7cfc1028df246f72"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/section-hint.tsx": {
+    "mtime": 1778960155.1936297,
+    "ast_hash": "ab7103c506fcb753219b8ce7e3316d97",
+    "semantic_hash": "ab7103c506fcb753219b8ce7e3316d97"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/avatar.tsx": {
+    "mtime": 1778960085.963245,
+    "ast_hash": "27b492afbe72e648f8f73daf5783d077",
+    "semantic_hash": "27b492afbe72e648f8f73daf5783d077"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/dialog.tsx": {
+    "mtime": 1778960085.963725,
+    "ast_hash": "19b87e9c4f03dce211685c5744fd4d61",
+    "semantic_hash": "19b87e9c4f03dce211685c5744fd4d61"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/badge.tsx": {
+    "mtime": 1778960155.1929772,
+    "ast_hash": "eac572f9f425c2d8cd65a7031c469d83",
+    "semantic_hash": "eac572f9f425c2d8cd65a7031c469d83"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/table.tsx": {
+    "mtime": 1778960155.1937509,
+    "ast_hash": "a6fb3f40edbdb67bdb71c4c4e63d751c",
+    "semantic_hash": "a6fb3f40edbdb67bdb71c4c4e63d751c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/separator.tsx": {
+    "mtime": 1778960085.964285,
+    "ast_hash": "f57449eae78fbd87d99e4edc45ab3c1e",
+    "semantic_hash": "f57449eae78fbd87d99e4edc45ab3c1e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/button.tsx": {
+    "mtime": 1779778445.27932,
+    "ast_hash": "a4ef14782301edcd4e481390d7ea7804",
+    "semantic_hash": "a4ef14782301edcd4e481390d7ea7804"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/checkbox.tsx": {
+    "mtime": 1778960085.9636164,
+    "ast_hash": "3836ce198d69e236e7ae046fafd7aa00",
+    "semantic_hash": "3836ce198d69e236e7ae046fafd7aa00"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/dropdown-menu.tsx": {
+    "mtime": 1778960085.9639134,
+    "ast_hash": "c784eebd8ae3e2e697619e48de7c803c",
+    "semantic_hash": "c784eebd8ae3e2e697619e48de7c803c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/textarea.tsx": {
+    "mtime": 1778960155.1938257,
+    "ast_hash": "ccd49604d923b00ff60e10efa7d592a2",
+    "semantic_hash": "ccd49604d923b00ff60e10efa7d592a2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/input.tsx": {
+    "mtime": 1778960155.193411,
+    "ast_hash": "517a7eb3de7b7ce12394a6c7d5582ec0",
+    "semantic_hash": "517a7eb3de7b7ce12394a6c7d5582ec0"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/ui/skeleton.tsx": {
+    "mtime": 1778960085.9643784,
+    "ast_hash": "0e6e825c43d858d98c9903f4da975382",
+    "semantic_hash": "0e6e825c43d858d98c9903f4da975382"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/work-orders/work-order-execution-ui.tsx": {
+    "mtime": 1779897836.7476408,
+    "ast_hash": "d22f58d43080e8addd615bbf15af0cbc",
+    "semantic_hash": "d22f58d43080e8addd615bbf15af0cbc"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/work-orders/work-order-completion-tracker.tsx": {
+    "mtime": 1779778899.71613,
+    "ast_hash": "1282b131495cb88d1eb6f12892e3a641",
+    "semantic_hash": "1282b131495cb88d1eb6f12892e3a641"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/tasks/work-order-task-review.tsx": {
+    "mtime": 1779103831.0293667,
+    "ast_hash": "f5335b58be193ac66745f09a29aba137",
+    "semantic_hash": "f5335b58be193ac66745f09a29aba137"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/tasks/invoice-task-review.tsx": {
+    "mtime": 1779903904.6496754,
+    "ast_hash": "ecf5278870d81964c156cdae32c55945",
+    "semantic_hash": "ecf5278870d81964c156cdae32c55945"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/invoices/invoice-line-types.ts": {
+    "mtime": 1778960155.1858077,
+    "ast_hash": "a0d4bce8ab5a017ef95604595055b519",
+    "semantic_hash": "a0d4bce8ab5a017ef95604595055b519"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/invoices/invoice-pdf.tsx": {
+    "mtime": 1779811156.562931,
+    "ast_hash": "8f4fc9038ffb92bc5126d0f16c1d80e1",
+    "semantic_hash": "8f4fc9038ffb92bc5126d0f16c1d80e1"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/invoices/invoice-preview.tsx": {
+    "mtime": 1779457645.3208091,
+    "ast_hash": "0087882a3cde90742962db8ba903f108",
+    "semantic_hash": "0087882a3cde90742962db8ba903f108"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/layout/AppLogo.tsx": {
+    "mtime": 1779737719.4373786,
+    "ast_hash": "6fbdfb6b12bea641f61dd254aba6a39d",
+    "semantic_hash": "6fbdfb6b12bea641f61dd254aba6a39d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/layout/app-auth-marketing-layout.tsx": {
+    "mtime": 1779738128.1639435,
+    "ast_hash": "9e82366731743291d4398d38a50c73af",
+    "semantic_hash": "9e82366731743291d4398d38a50c73af"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/layout/admin-layout.tsx": {
+    "mtime": 1779771630.9785094,
+    "ast_hash": "2bb3c77977a42158c760750ea37bef8a",
+    "semantic_hash": "2bb3c77977a42158c760750ea37bef8a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/layout/AppNavbar.tsx": {
+    "mtime": 1779788815.0716252,
+    "ast_hash": "ef8bba7bd7c77152bd57dcec28c9b64a",
+    "semantic_hash": "ef8bba7bd7c77152bd57dcec28c9b64a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/layout/PageHeader.tsx": {
+    "mtime": 1778960155.186324,
+    "ast_hash": "85a426d68d30c2e1a95830d90e4c659c",
+    "semantic_hash": "85a426d68d30c2e1a95830d90e4c659c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/layout/AppSidebar.tsx": {
+    "mtime": 1779788823.091552,
+    "ast_hash": "6c1a23652655c52dd52fedc5c32960e2",
+    "semantic_hash": "6c1a23652655c52dd52fedc5c32960e2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/layout/app-layout.tsx": {
+    "mtime": 1779737719.6264782,
+    "ast_hash": "7171872658444278aaa12f6548b7125e",
+    "semantic_hash": "7171872658444278aaa12f6548b7125e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/layout/app-shell-layout.tsx": {
+    "mtime": 1779788833.8277977,
+    "ast_hash": "e560534cec70600416301cc10a1e7cc0",
+    "semantic_hash": "e560534cec70600416301cc10a1e7cc0"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/admin/access-denied.tsx": {
+    "mtime": 1778960155.179976,
+    "ast_hash": "d45a5ab26ce22c68454a8af992c345b0",
+    "semantic_hash": "d45a5ab26ce22c68454a8af992c345b0"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/admin/require-permission.tsx": {
+    "mtime": 1778960085.9621966,
+    "ast_hash": "9242b1c6c3a2a4debe0d819ab7bf5dd6",
+    "semantic_hash": "9242b1c6c3a2a4debe0d819ab7bf5dd6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/shared/DataTable.tsx": {
+    "mtime": 1778960155.1925805,
+    "ast_hash": "8e631c312147fa393232945f3714680f",
+    "semantic_hash": "8e631c312147fa393232945f3714680f"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/shared/EmptyState.tsx": {
+    "mtime": 1778960155.192666,
+    "ast_hash": "232c733ea3721cbcc3c28b5ceacf6b6d",
+    "semantic_hash": "232c733ea3721cbcc3c28b5ceacf6b6d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/dashboard/task-dashboard.tsx": {
+    "mtime": 1779706513.8145924,
+    "ast_hash": "4d700e42a985806105ca5f1a5f072389",
+    "semantic_hash": "4d700e42a985806105ca5f1a5f072389"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/dashboard/status-bar-chart.tsx": {
+    "mtime": 1779215556.5937989,
+    "ast_hash": "90d56fbb3e4cc9a87fa21d6f7a4d543b",
+    "semantic_hash": "90d56fbb3e4cc9a87fa21d6f7a4d543b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/dashboard/workspace-overview-dashboard.tsx": {
+    "mtime": 1779215556.5940058,
+    "ast_hash": "1b6f59f34cc67dee39df34d580e7dada",
+    "semantic_hash": "1b6f59f34cc67dee39df34d580e7dada"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/dashboard/executive-overview-ui.tsx": {
+    "mtime": 1779738923.3310344,
+    "ast_hash": "2e9a42baa522bdfb06b6baa846a1b1e5",
+    "semantic_hash": "2e9a42baa522bdfb06b6baa846a1b1e5"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/dashboard/user-dashboard.tsx": {
+    "mtime": 1778960155.18559,
+    "ast_hash": "8f275cf5da1ffe70017db6ce4eaad493",
+    "semantic_hash": "8f275cf5da1ffe70017db6ce4eaad493"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/dashboard/invoices-dashboard.tsx": {
+    "mtime": 1779738923.2750268,
+    "ast_hash": "2e539ff6086babc87b2e98ca575c6580",
+    "semantic_hash": "2e539ff6086babc87b2e98ca575c6580"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/dashboard/work-orders-dashboard.tsx": {
+    "mtime": 1779711806.8534472,
+    "ast_hash": "0051e6550dc4ae11d947077a25aed3aa",
+    "semantic_hash": "0051e6550dc4ae11d947077a25aed3aa"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/dashboard/intelligence/types.ts": {
+    "mtime": 1778960155.1849968,
+    "ast_hash": "a24a74f31eb1901e5d571e1abf823159",
+    "semantic_hash": "a24a74f31eb1901e5d571e1abf823159"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/dashboard/intelligence/ExecutiveIntelligenceDashboard.tsx": {
+    "mtime": 1779711859.6912692,
+    "ast_hash": "c1571d35440128d553b91e06c87c81fc",
+    "semantic_hash": "c1571d35440128d553b91e06c87c81fc"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/parts/analytics/PartIntelligenceCharts.tsx": {
+    "mtime": 1779431395.1517963,
+    "ast_hash": "9c8ec89fb2a49f07926e6055f5946860",
+    "semantic_hash": "9c8ec89fb2a49f07926e6055f5946860"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/parts/analytics/types.ts": {
+    "mtime": 1778960155.1924486,
+    "ast_hash": "7f8d026d9189de57aa88bf74eebd594e",
+    "semantic_hash": "7f8d026d9189de57aa88bf74eebd594e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/parts/analytics/PartAnalyticsDashboard.tsx": {
+    "mtime": 1779901660.239479,
+    "ast_hash": "fe1ba666bfe582370da55212eef24cb0",
+    "semantic_hash": "fe1ba666bfe582370da55212eef24cb0"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/parts/analytics/PartWorkOrderPreviewDialog.tsx": {
+    "mtime": 1779777954.677852,
+    "ast_hash": "f2c7f1a703133bfb28a211edc5068973",
+    "semantic_hash": "f2c7f1a703133bfb28a211edc5068973"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/VsBaseToleranceBadge.tsx": {
+    "mtime": 1778960155.183852,
+    "ast_hash": "3c2047d0e2b90d2d6c63b58126d1d50f",
+    "semantic_hash": "3c2047d0e2b90d2d6c63b58126d1d50f"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/status.ts": {
+    "mtime": 1778960155.1847136,
+    "ast_hash": "2d8ac717dc2950b0e6ec1f64d9212f72",
+    "semantic_hash": "2d8ac717dc2950b0e6ec1f64d9212f72"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/RatesDashboard.tsx": {
+    "mtime": 1778960155.183769,
+    "ast_hash": "b4dc676c5437c47b6b4fdad1a3130ef7",
+    "semantic_hash": "b4dc676c5437c47b6b4fdad1a3130ef7"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorCompliance.tsx": {
+    "mtime": 1778960155.1802368,
+    "ast_hash": "d2a30442dcaa7f255d3fd66878eeb4d4",
+    "semantic_hash": "d2a30442dcaa7f255d3fd66878eeb4d4"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/CreateContractorDialog.tsx": {
+    "mtime": 1778960155.18353,
+    "ast_hash": "73a9502e1279506d18872b1dc83451ee",
+    "semantic_hash": "73a9502e1279506d18872b1dc83451ee"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorRatesPanel.tsx": {
+    "mtime": 1779775565.1409073,
+    "ast_hash": "6660c6f52ed27f5d1f8b42783a2c27ee",
+    "semantic_hash": "6660c6f52ed27f5d1f8b42783a2c27ee"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/RateVersionHistoryDrawer.tsx": {
+    "mtime": 1779775289.3872976,
+    "ast_hash": "e992e1867bb1a056b727d42ec638a748",
+    "semantic_hash": "e992e1867bb1a056b727d42ec638a748"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorPlants.tsx": {
+    "mtime": 1779734366.7265723,
+    "ast_hash": "a03574c27648eb47c0764c3c74135ac4",
+    "semantic_hash": "a03574c27648eb47c0764c3c74135ac4"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorDocuments.tsx": {
+    "mtime": 1779778899.6038349,
+    "ast_hash": "ffa24b3fccad37418cf96c915615dbce",
+    "semantic_hash": "ffa24b3fccad37418cf96c915615dbce"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorHeader.tsx": {
+    "mtime": 1779778899.477255,
+    "ast_hash": "7432ce899117771190c1e2d5516dfe1d",
+    "semantic_hash": "7432ce899117771190c1e2d5516dfe1d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorTimeline.tsx": {
+    "mtime": 1779734599.7398086,
+    "ast_hash": "9a11702519667dcc1b15f1d2d94846ed",
+    "semantic_hash": "9a11702519667dcc1b15f1d2d94846ed"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorTable.tsx": {
+    "mtime": 1779430746.612017,
+    "ast_hash": "85f1c25df9b5ec26782296d6513c667c",
+    "semantic_hash": "85f1c25df9b5ec26782296d6513c667c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorForm.tsx": {
+    "mtime": 1779103831.0275881,
+    "ast_hash": "6ae23421d86914921f9b1ca6e1a448d4",
+    "semantic_hash": "6ae23421d86914921f9b1ca6e1a448d4"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorOverview.tsx": {
+    "mtime": 1779733758.4538465,
+    "ast_hash": "317ee336b487876e487d62826687d195",
+    "semantic_hash": "317ee336b487876e487d62826687d195"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorCharts.tsx": {
+    "mtime": 1778960155.180129,
+    "ast_hash": "245a1ed6827e63daffceb494d86e5f58",
+    "semantic_hash": "245a1ed6827e63daffceb494d86e5f58"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/rateStatus.ts": {
+    "mtime": 1778960155.1846118,
+    "ast_hash": "7a95deaefc2038678b8c4ac2360baaea",
+    "semantic_hash": "7a95deaefc2038678b8c4ac2360baaea"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorRateTimeline.tsx": {
+    "mtime": 1779778899.6601977,
+    "ast_hash": "21883863958b40462bbab6454d3883ce",
+    "semantic_hash": "21883863958b40462bbab6454d3883ce"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorRateDialog.tsx": {
+    "mtime": 1779735587.3622303,
+    "ast_hash": "3ee6ae5854c88497b10aa4980f0bc454",
+    "semantic_hash": "3ee6ae5854c88497b10aa4980f0bc454"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorDashboard.tsx": {
+    "mtime": 1779215556.5932372,
+    "ast_hash": "3f676ee783ed6341a8b2e849abbeeed2",
+    "semantic_hash": "3f676ee783ed6341a8b2e849abbeeed2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorStats.tsx": {
+    "mtime": 1778960155.1828496,
+    "ast_hash": "ca717fc3d5cd0d73853fd61143d8f8b3",
+    "semantic_hash": "ca717fc3d5cd0d73853fd61143d8f8b3"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/ContractorListStats.tsx": {
+    "mtime": 1779776732.6772273,
+    "ast_hash": "4f0668e75061cbded08efff7a16fe2a9",
+    "semantic_hash": "4f0668e75061cbded08efff7a16fe2a9"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/analytics/types.ts": {
+    "mtime": 1779096599.0402892,
+    "ast_hash": "68f7a70fb6627bcb58c88c17a9d89380",
+    "semantic_hash": "68f7a70fb6627bcb58c88c17a9d89380"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/analytics/ContractorAnalyticsDashboard.tsx": {
+    "mtime": 1779735156.2955856,
+    "ast_hash": "ccb448e32c116e8b8e65232382b99618",
+    "semantic_hash": "ccb448e32c116e8b8e65232382b99618"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/components/contractors/analytics/index.ts": {
+    "mtime": 1778960155.184249,
+    "ast_hash": "bda74dc896feb4beb28e34c9907c2bee",
+    "semantic_hash": "bda74dc896feb4beb28e34c9907c2bee"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/lib/permissions.ts": {
+    "mtime": 1778960155.1945596,
+    "ast_hash": "97de3d9a6479c51a01d97ac927702dbe",
+    "semantic_hash": "97de3d9a6479c51a01d97ac927702dbe"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/lib/auth-routes.ts": {
+    "mtime": 1778960085.965137,
+    "ast_hash": "322310a07a396f084cfab776f8689cca",
+    "semantic_hash": "322310a07a396f084cfab776f8689cca"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/lib/utils.ts": {
+    "mtime": 1778960085.9653175,
+    "ast_hash": "5a6fd53fdcf2be529e9cc0b718fde352",
+    "semantic_hash": "5a6fd53fdcf2be529e9cc0b718fde352"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/lib/api.ts": {
+    "mtime": 1779863675.559177,
+    "ast_hash": "837f4d1a08b807edb438f45ee0ebad7b",
+    "semantic_hash": "837f4d1a08b807edb438f45ee0ebad7b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/lib/invoice-validation-display.ts": {
+    "mtime": 1779346050.262812,
+    "ast_hash": "e63d3854cb9ebcde3a0acac0df911402",
+    "semantic_hash": "e63d3854cb9ebcde3a0acac0df911402"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/lib/work-order-status-badge.ts": {
+    "mtime": 1779866737.4941227,
+    "ast_hash": "76a4482b181ca70ba4f998a9af0b2c18",
+    "semantic_hash": "76a4482b181ca70ba4f998a9af0b2c18"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/settings.tsx": {
+    "mtime": 1779732274.6812408,
+    "ast_hash": "eb34f0a3c98f922907100c87143d1573",
+    "semantic_hash": "eb34f0a3c98f922907100c87143d1573"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/workflow-assignment.tsx": {
+    "mtime": 1779863836.326616,
+    "ast_hash": "94cfdb7016aa8b651a51beee179c1ce9",
+    "semantic_hash": "94cfdb7016aa8b651a51beee179c1ce9"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/contractor-detail.tsx": {
+    "mtime": 1779734548.2276204,
+    "ast_hash": "0797a3e2c85549f5d8d118a23d0bad32",
+    "semantic_hash": "0797a3e2c85549f5d8d118a23d0bad32"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/roles.tsx": {
+    "mtime": 1779731161.8626635,
+    "ast_hash": "fd61cdc5d3f209ffb35416714f57b004",
+    "semantic_hash": "fd61cdc5d3f209ffb35416714f57b004"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/my-task-detail.tsx": {
+    "mtime": 1779730063.171107,
+    "ast_hash": "8e6f879260433050a33e4c32dfba3094",
+    "semantic_hash": "8e6f879260433050a33e4c32dfba3094"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/reports.tsx": {
+    "mtime": 1779812605.5374029,
+    "ast_hash": "caee758f30d4bfeb28c8f93b54002d09",
+    "semantic_hash": "caee758f30d4bfeb28c8f93b54002d09"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/part-master.tsx": {
+    "mtime": 1779775428.440562,
+    "ast_hash": "9d6fb3054c8dd2a43c095fe5da2b348a",
+    "semantic_hash": "9d6fb3054c8dd2a43c095fe5da2b348a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/login.tsx": {
+    "mtime": 1779773629.2574363,
+    "ast_hash": "81481958848c36b0cada7835b01aa32e",
+    "semantic_hash": "81481958848c36b0cada7835b01aa32e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/auth-settings.tsx": {
+    "mtime": 1779715212.0959122,
+    "ast_hash": "64024f8876961cc3c969923f7eb812c0",
+    "semantic_hash": "64024f8876961cc3c969923f7eb812c0"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/dashboard.tsx": {
+    "mtime": 1779215556.5955284,
+    "ast_hash": "5fcc2419eb25fd8ce160d2f2f9d8d71e",
+    "semantic_hash": "5fcc2419eb25fd8ce160d2f2f9d8d71e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/email-template-editor.tsx": {
+    "mtime": 1778960155.1959066,
+    "ast_hash": "5a099bad676bc6b917fa528a466b34eb",
+    "semantic_hash": "5a099bad676bc6b917fa528a466b34eb"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/roles-demo.tsx": {
+    "mtime": 1779731344.4958072,
+    "ast_hash": "0a46de33c7b613086a88e9b7ab6fc34d",
+    "semantic_hash": "0a46de33c7b613086a88e9b7ab6fc34d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/part-master-create.tsx": {
+    "mtime": 1779778656.2598782,
+    "ast_hash": "5f7d706bb40c8bf912c768a215b17ec3",
+    "semantic_hash": "5f7d706bb40c8bf912c768a215b17ec3"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/invoice-detail.tsx": {
+    "mtime": 1779779281.8890915,
+    "ast_hash": "f98102153fbcad90eac9f8ab85afdee1",
+    "semantic_hash": "f98102153fbcad90eac9f8ab85afdee1"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/contractor-edit.tsx": {
+    "mtime": 1779713797.140156,
+    "ast_hash": "c9236da0cad06af7da120e557626afbf",
+    "semantic_hash": "c9236da0cad06af7da120e557626afbf"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/permissions.tsx": {
+    "mtime": 1779714019.2840726,
+    "ast_hash": "3e9513be1da3fd6088fb37c6bcd886e2",
+    "semantic_hash": "3e9513be1da3fd6088fb37c6bcd886e2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/work-order-detail.tsx": {
+    "mtime": 1779897831.5505862,
+    "ast_hash": "cfb20d4ca4d39aaeb91595c8b9a24cc6",
+    "semantic_hash": "cfb20d4ca4d39aaeb91595c8b9a24cc6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/admin-notifications.tsx": {
+    "mtime": 1778960155.1948133,
+    "ast_hash": "25d0c6eeccfc80ee3c918bd1664a5cf3",
+    "semantic_hash": "25d0c6eeccfc80ee3c918bd1664a5cf3"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/email-templates.tsx": {
+    "mtime": 1778960155.196198,
+    "ast_hash": "84b331dc67c7a1cdd2f5d68dff020ec9",
+    "semantic_hash": "84b331dc67c7a1cdd2f5d68dff020ec9"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/my-tasks.tsx": {
+    "mtime": 1779706549.338617,
+    "ast_hash": "93f75de662119377cbdb3f3775622518",
+    "semantic_hash": "93f75de662119377cbdb3f3775622518"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/work-orders.tsx": {
+    "mtime": 1779881631.7420397,
+    "ast_hash": "0e6f750ef2a2359484a44e5c9719ddb2",
+    "semantic_hash": "0e6f750ef2a2359484a44e5c9719ddb2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/negotiated-rate-new.tsx": {
+    "mtime": 1779732755.5024214,
+    "ast_hash": "1ddabab0b480bc0166521993d6f989df",
+    "semantic_hash": "1ddabab0b480bc0166521993d6f989df"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/users.tsx": {
+    "mtime": 1779773689.0302384,
+    "ast_hash": "1d279b3d011c0d75073ab3b1eea53b0f",
+    "semantic_hash": "1d279b3d011c0d75073ab3b1eea53b0f"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/user-view.tsx": {
+    "mtime": 1779778899.5332086,
+    "ast_hash": "19363d7c9103a08ef92ad4d9eed58463",
+    "semantic_hash": "19363d7c9103a08ef92ad4d9eed58463"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/negotiated-rate-detail.tsx": {
+    "mtime": 1778960155.1977885,
+    "ast_hash": "923290f1b513729c75d0bc23888afece",
+    "semantic_hash": "923290f1b513729c75d0bc23888afece"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/plants.tsx": {
+    "mtime": 1779730188.527857,
+    "ast_hash": "9a383e7476803fe741385618359c9494",
+    "semantic_hash": "9a383e7476803fe741385618359c9494"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/contractor-create.tsx": {
+    "mtime": 1779103831.0303288,
+    "ast_hash": "d8ee0a40f50cc766388a4d9d4a410211",
+    "semantic_hash": "d8ee0a40f50cc766388a4d9d4a410211"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/app-login.tsx": {
+    "mtime": 1779773585.0521705,
+    "ast_hash": "702ecac4d452a8b08010ea9b094339e1",
+    "semantic_hash": "702ecac4d452a8b08010ea9b094339e1"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/mfa-setup.tsx": {
+    "mtime": 1778960155.1972861,
+    "ast_hash": "cb64956365a4c6624ed7300ecce71c95",
+    "semantic_hash": "cb64956365a4c6624ed7300ecce71c95"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/user-edit.tsx": {
+    "mtime": 1779745566.7126262,
+    "ast_hash": "cd7b67d82caa234ddbfb0feb4783e33f",
+    "semantic_hash": "cd7b67d82caa234ddbfb0feb4783e33f"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/work-order-create.tsx": {
+    "mtime": 1779712273.8124328,
+    "ast_hash": "c931c56a6d1337d7f59826fdc4f48602",
+    "semantic_hash": "c931c56a6d1337d7f59826fdc4f48602"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/negotiated-rates.tsx": {
+    "mtime": 1779776312.3187783,
+    "ast_hash": "b57e00a3af0eb2241f3d418c93c348e5",
+    "semantic_hash": "b57e00a3af0eb2241f3d418c93c348e5"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/invoice-create.tsx": {
+    "mtime": 1779864794.9314468,
+    "ast_hash": "9b85d0eed815350b8fd164fd0634e385",
+    "semantic_hash": "9b85d0eed815350b8fd164fd0634e385"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/negotiated-rate-negotiate.tsx": {
+    "mtime": 1779732717.5098717,
+    "ast_hash": "ab92740db3be97619f8e757ad8abab43",
+    "semantic_hash": "ab92740db3be97619f8e757ad8abab43"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/part-master-detail.tsx": {
+    "mtime": 1779778899.3183923,
+    "ast_hash": "f0ecf0bad6a4bf750943469effdebde6",
+    "semantic_hash": "f0ecf0bad6a4bf750943469effdebde6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/contractors.tsx": {
+    "mtime": 1779776732.6219857,
+    "ast_hash": "9bc977bd3c38b65e801f132fe99d854e",
+    "semantic_hash": "9bc977bd3c38b65e801f132fe99d854e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/user-create.tsx": {
+    "mtime": 1779773682.0297158,
+    "ast_hash": "643bddb01bc5998560f4780d0ee338be",
+    "semantic_hash": "643bddb01bc5998560f4780d0ee338be"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/frontend/src/pages/invoices.tsx": {
+    "mtime": 1779712130.8750923,
+    "ast_hash": "9b750ee4d0f7e33f208d164cf98aca24",
+    "semantic_hash": "9b750ee4d0f7e33f208d164cf98aca24"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/tests/conftest.py": {
+    "mtime": 1778960155.2026293,
+    "ast_hash": "1982ddfb878d126e0fa960a38d1af743",
+    "semantic_hash": "1982ddfb878d126e0fa960a38d1af743"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/tests/test_rbac_sync.py": {
+    "mtime": 1778960155.20344,
+    "ast_hash": "b0f90f2ef07bcf79df34978660f29189",
+    "semantic_hash": "b0f90f2ef07bcf79df34978660f29189"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/tests/test_contractor_rates.py": {
+    "mtime": 1779441012.560586,
+    "ast_hash": "6bec131a82e0e0c2ab16bbddb9833cc1",
+    "semantic_hash": "6bec131a82e0e0c2ab16bbddb9833cc1"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/tests/test_org_unit_hierarchy.py": {
+    "mtime": 1778960155.2030957,
+    "ast_hash": "429da607ba7031a18fe33737e184cdc7",
+    "semantic_hash": "429da607ba7031a18fe33737e184cdc7"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/tests/test_user_email_validation.py": {
+    "mtime": 1778960155.2039356,
+    "ast_hash": "f34205418d84f4827772e91a237b3b1b",
+    "semantic_hash": "f34205418d84f4827772e91a237b3b1b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/tests/test_contractor_rate_timeline.py": {
+    "mtime": 1778960155.2028701,
+    "ast_hash": "961c07d3fcb5d2d8caaefcbe18ba3335",
+    "semantic_hash": "961c07d3fcb5d2d8caaefcbe18ba3335"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/tests/test_contractor.py": {
+    "mtime": 1778960155.2027135,
+    "ast_hash": "516e3c963fd34a9016c8e67a1e7e0fbe",
+    "semantic_hash": "516e3c963fd34a9016c8e67a1e7e0fbe"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/tests/test_work_orders_and_invoices.py": {
+    "mtime": 1779446359.612997,
+    "ast_hash": "ccf5935f8b374cd4d0119b397f55359a",
+    "semantic_hash": "ccf5935f8b374cd4d0119b397f55359a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/tests/test_rate_card_versioning.py": {
+    "mtime": 1779440982.0189698,
+    "ast_hash": "7ec28b274d49a6289606222824db2d9b",
+    "semantic_hash": "7ec28b274d49a6289606222824db2d9b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/tests/test_user_create.py": {
+    "mtime": 1778960155.203842,
+    "ast_hash": "26bf54982b231d0f1dfc5b9838583acc",
+    "semantic_hash": "26bf54982b231d0f1dfc5b9838583acc"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/tests/test_permissions.py": {
+    "mtime": 1778960155.2032015,
+    "ast_hash": "55ed763befc0c102d929f99a4d900fbf",
+    "semantic_hash": "55ed763befc0c102d929f99a4d900fbf"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/app_api/deps.py": {
+    "mtime": 1778960155.1576982,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/app_api/__init__.py": {
+    "mtime": 1778960155.1576626,
+    "ast_hash": "d003e0741af5d4303c3fa8e1e70bd2a1",
+    "semantic_hash": "d003e0741af5d4303c3fa8e1e70bd2a1"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/app_api/router.py": {
+    "mtime": 1778960155.1577516,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/app_api/routes.py": {
+    "mtime": 1778960155.1579468,
+    "ast_hash": "cb88540d4f2cac575cdad0df411a60f3",
+    "semantic_hash": "cb88540d4f2cac575cdad0df411a60f3"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/app_api/routers/__init__.py": {
+    "mtime": 1778960155.1578505,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/docker/bootstrap.py": {
+    "mtime": 1779743899.374791,
+    "ast_hash": "a9d2184094a3cbe3dbf17c8c2b79725c",
+    "semantic_hash": "a9d2184094a3cbe3dbf17c8c2b79725c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/docker/entrypoint.sh": {
+    "mtime": 1779125133.8705618,
+    "ast_hash": "a5b777b4f2d291098e634a8316f8ea4a",
+    "semantic_hash": "a5b777b4f2d291098e634a8316f8ea4a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/core/auth.py": {
+    "mtime": 1778960155.158123,
+    "ast_hash": "7953bd13a4a420f2d8c4d8e8a87092c3",
+    "semantic_hash": "7953bd13a4a420f2d8c4d8e8a87092c3"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/core/config.py": {
+    "mtime": 1778960155.1582658,
+    "ast_hash": "2080620005162a240873c286cb426099",
+    "semantic_hash": "2080620005162a240873c286cb426099"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/core/security.py": {
+    "mtime": 1778960155.1587172,
+    "ast_hash": "10863e1efef4e6fe1b2c3512aa16fb7c",
+    "semantic_hash": "10863e1efef4e6fe1b2c3512aa16fb7c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/core/__init__.py": {
+    "mtime": 1778960155.1580224,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/core/captcha.py": {
+    "mtime": 1778960155.158194,
+    "ast_hash": "889122718bc1dd036968a24b3e00f0c8",
+    "semantic_hash": "889122718bc1dd036968a24b3e00f0c8"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/core/permissions.py": {
+    "mtime": 1778960155.158642,
+    "ast_hash": "80efb52bf44aebf1012e3361b5208ec9",
+    "semantic_hash": "80efb52bf44aebf1012e3361b5208ec9"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/core/exceptions.py": {
+    "mtime": 1778960155.1583014,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/core/mfa_crypto.py": {
+    "mtime": 1778960155.1584785,
+    "ast_hash": "0790403ac29fd9690bebbe5c3f4dda3f",
+    "semantic_hash": "0790403ac29fd9690bebbe5c3f4dda3f"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/core/login_rate_limit.py": {
+    "mtime": 1778960155.1584053,
+    "ast_hash": "184d148a4f8faf5b682cad77c910f736",
+    "semantic_hash": "184d148a4f8faf5b682cad77c910f736"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/app/__init__.py": {
+    "mtime": 1778960155.1569307,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/app/main.py": {
+    "mtime": 1778960155.1575263,
+    "ast_hash": "e949ce18aca00e2b8c98ea1002193c2e",
+    "semantic_hash": "e949ce18aca00e2b8c98ea1002193c2e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/app/core/__init__.py": {
+    "mtime": 1778960155.1570694,
+    "ast_hash": "61c7d44cf1a07826d981b4b8df84cea5",
+    "semantic_hash": "61c7d44cf1a07826d981b4b8df84cea5"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/app/core/permissions.py": {
+    "mtime": 1778960155.1571524,
+    "ast_hash": "4ab05851b9d6b11517932a3fcb6a2a38",
+    "semantic_hash": "4ab05851b9d6b11517932a3fcb6a2a38"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/app/jobs/contractor_expiry_check.py": {
+    "mtime": 1778960155.1573677,
+    "ast_hash": "24b3eebbdc13ca4dc8c165e092d30eab",
+    "semantic_hash": "24b3eebbdc13ca4dc8c165e092d30eab"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/app/jobs/__init__.py": {
+    "mtime": 1778960155.1572726,
+    "ast_hash": "f67129b69217efef7704003f2a65261a",
+    "semantic_hash": "f67129b69217efef7704003f2a65261a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/app/jobs/rate_expiry_check.py": {
+    "mtime": 1778960155.1574428,
+    "ast_hash": "8fb68b802b7dfb083b27b4fdc92cd94a",
+    "semantic_hash": "8fb68b802b7dfb083b27b4fdc92cd94a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/db/session.py": {
+    "mtime": 1778960155.1590776,
+    "ast_hash": "0884b1f3147b934678244fbd86d94181",
+    "semantic_hash": "0884b1f3147b934678244fbd86d94181"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/db/__init__.py": {
+    "mtime": 1778960155.1587973,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/db/base.py": {
+    "mtime": 1778960155.1588783,
+    "ast_hash": "16deb2759f7de2cf86f328dce6b2d38b",
+    "semantic_hash": "16deb2759f7de2cf86f328dce6b2d38b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/db/models/__init__.py": {
+    "mtime": 1778960155.1590004,
+    "ast_hash": "5c9d2268df3bf1276f10c4816a1197cc",
+    "semantic_hash": "5c9d2268df3bf1276f10c4816a1197cc"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/env.py": {
+    "mtime": 1778960155.1514792,
+    "ast_hash": "6bfe394d2086c1cbf844e5447ffa9c56",
+    "semantic_hash": "6bfe394d2086c1cbf844e5447ffa9c56"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/021_auth_policy_rbac.py": {
+    "mtime": 1778960155.1537766,
+    "ast_hash": "fcdc58799398ef17692eb4ffac04e2ab",
+    "semantic_hash": "fcdc58799398ef17692eb4ffac04e2ab"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/047_work_order_approved_value_total.py": {
+    "mtime": 1778960155.1566715,
+    "ast_hash": "cd0ee59b05fa548bd8c5997ec7fd7064",
+    "semantic_hash": "cd0ee59b05fa548bd8c5997ec7fd7064"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/030_expand_contractor_master_fields.py": {
+    "mtime": 1778960155.1545632,
+    "ast_hash": "5b12ac2fe37825aec8a1ce48c68a669a",
+    "semantic_hash": "5b12ac2fe37825aec8a1ce48c68a669a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/020_auth_policy_mfa.py": {
+    "mtime": 1778960155.1536884,
+    "ast_hash": "410a40d5b6cfc79e109715c00341a7b4",
+    "semantic_hash": "410a40d5b6cfc79e109715c00341a7b4"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/049_part_master_labour_cost_man_days.py": {
+    "mtime": 1778960155.156844,
+    "ast_hash": "9255bd3137e24459998de1f19389a2a7",
+    "semantic_hash": "9255bd3137e24459998de1f19389a2a7"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/036_rate_versioning_and_validity.py": {
+    "mtime": 1778960155.1552153,
+    "ast_hash": "38fd26f1831072ae0f8bd279a2a3d55e",
+    "semantic_hash": "38fd26f1831072ae0f8bd279a2a3d55e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/048_part_master_billing_basis.py": {
+    "mtime": 1778960155.1567526,
+    "ast_hash": "0bfac248c3d548f4c92d595c6bc7ae84",
+    "semantic_hash": "0bfac248c3d548f4c92d595c6bc7ae84"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/037_drop_rate_card_feature.py": {
+    "mtime": 1778960155.1552935,
+    "ast_hash": "9355ca1516ba53e100a03185403e79a6",
+    "semantic_hash": "9355ca1516ba53e100a03185403e79a6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/033_contractor_rate_negotiation.py": {
+    "mtime": 1778960155.154911,
+    "ast_hash": "b22639d06e68ec961a253729b2b25fa2",
+    "semantic_hash": "b22639d06e68ec961a253729b2b25fa2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/044_part_master_labour_fields.py": {
+    "mtime": 1778960155.1564171,
+    "ast_hash": "e2574a9b0a4a26689ae5f16a48a6368b",
+    "semantic_hash": "e2574a9b0a4a26689ae5f16a48a6368b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/017_email_notification_engine.py": {
+    "mtime": 1778960155.1534455,
+    "ast_hash": "a80f15ff15df315ed50fee004fb9e31d",
+    "semantic_hash": "a80f15ff15df315ed50fee004fb9e31d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/032_contractor_enterprise_upgrade.py": {
+    "mtime": 1778960155.154752,
+    "ast_hash": "4b089a9129103692e51064de9cc82fbb",
+    "semantic_hash": "4b089a9129103692e51064de9cc82fbb"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/043_part_master_commercial.py": {
+    "mtime": 1778960155.1563,
+    "ast_hash": "536503e3739c0c6dcf38b5f940741d53",
+    "semantic_hash": "536503e3739c0c6dcf38b5f940741d53"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/041_drop_approval_task_priority.py": {
+    "mtime": 1778960155.1556349,
+    "ast_hash": "ebe1605912bcfeb371317539309e1694",
+    "semantic_hash": "ebe1605912bcfeb371317539309e1694"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/008_audit_logs.py": {
+    "mtime": 1778960155.1525598,
+    "ast_hash": "b5866fe7b7e630715f2d898f8ceda80e",
+    "semantic_hash": "b5866fe7b7e630715f2d898f8ceda80e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/012_rbac_audit_and_permission_versions.py": {
+    "mtime": 1778960155.153012,
+    "ast_hash": "d94d27072618912207baa9393e7719a2",
+    "semantic_hash": "d94d27072618912207baa9393e7719a2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/003_user_roles_superuser.py": {
+    "mtime": 1778960155.152046,
+    "ast_hash": "c93320abfdd8acc58fe92377e902f75c",
+    "semantic_hash": "c93320abfdd8acc58fe92377e902f75c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/050_work_order_audit_logs_changed_by.py": {
+    "mtime": 1779103831.0213118,
+    "ast_hash": "4964d86dc04ea6d8d31961e10c3b0ba1",
+    "semantic_hash": "4964d86dc04ea6d8d31961e10c3b0ba1"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/010_role_org_units.py": {
+    "mtime": 1778960155.1528409,
+    "ast_hash": "6b9a0082d7235d97594aada5951411b7",
+    "semantic_hash": "6b9a0082d7235d97594aada5951411b7"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/040_work_orders_schema_reconcile.py": {
+    "mtime": 1778960155.155551,
+    "ast_hash": "fc005118acf4e73d857a970da5ddb73d",
+    "semantic_hash": "fc005118acf4e73d857a970da5ddb73d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/013_approval_workflows.py": {
+    "mtime": 1778960155.1531096,
+    "ast_hash": "e01da875e6ceaf4edf994e2881ec18e6",
+    "semantic_hash": "e01da875e6ceaf4edf994e2881ec18e6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/034_rate_master_audit_logs.py": {
+    "mtime": 1778960155.1549828,
+    "ast_hash": "6b8b4da715a0289669245c8443518626",
+    "semantic_hash": "6b8b4da715a0289669245c8443518626"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/038_work_orders_and_invoices.py": {
+    "mtime": 1778960155.1553826,
+    "ast_hash": "43b1661afafcb02fbe7a9ac71dcaa649",
+    "semantic_hash": "43b1661afafcb02fbe7a9ac71dcaa649"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/042_invoice_line_tax_pct.py": {
+    "mtime": 1778960155.1561742,
+    "ast_hash": "8ea61c58482876ed1d50a74acaabdb3a",
+    "semantic_hash": "8ea61c58482876ed1d50a74acaabdb3a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/016_unified_tasks_module.py": {
+    "mtime": 1778960155.153357,
+    "ast_hash": "97d43d401264daf81a14e6a47a823a05",
+    "semantic_hash": "97d43d401264daf81a14e6a47a823a05"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/005_settings_table.py": {
+    "mtime": 1778960155.1521826,
+    "ast_hash": "1b06407cf0ec49b4a2cd86fb02f58ddd",
+    "semantic_hash": "1b06407cf0ec49b4a2cd86fb02f58ddd"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/022_seed_default_email_templates.py": {
+    "mtime": 1778960155.1538801,
+    "ast_hash": "e31c32d8999649fe5ca2d28c92763119",
+    "semantic_hash": "e31c32d8999649fe5ca2d28c92763119"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/051_drop_work_orders_work_date.py": {
+    "mtime": 1779103831.0216024,
+    "ast_hash": "1d46a245a2856dd8a6f181ba7270d405",
+    "semantic_hash": "1d46a245a2856dd8a6f181ba7270d405"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/039_missing_revision_bridge.py": {
+    "mtime": 1778960155.1554644,
+    "ast_hash": "9263eed2c282805365417e6993b54659",
+    "semantic_hash": "9263eed2c282805365417e6993b54659"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/045_part_master_id_seq_sync.py": {
+    "mtime": 1778961164.20855,
+    "ast_hash": "0411a3e3f13da9b7b604a24e74052df8",
+    "semantic_hash": "0411a3e3f13da9b7b604a24e74052df8"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/053_invoice_extra_lines.py": {
+    "mtime": 1779215556.5894506,
+    "ast_hash": "21c41b4bd326e8dcf10ebc2f12f65830",
+    "semantic_hash": "21c41b4bd326e8dcf10ebc2f12f65830"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/026_rework_resubmit_fields.py": {
+    "mtime": 1778960155.1542222,
+    "ast_hash": "2eae469e64d7db135ef8148739de3b9b",
+    "semantic_hash": "2eae469e64d7db135ef8148739de3b9b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/014_approval_workflow_mappings.py": {
+    "mtime": 1778960155.1531985,
+    "ast_hash": "287d4e9e09c7c2d74606d720b0278441",
+    "semantic_hash": "287d4e9e09c7c2d74606d720b0278441"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/027_seed_rework_resubmit_email_templates.py": {
+    "mtime": 1778960155.1542997,
+    "ast_hash": "85045cadaa154efb9aee7c161f22ba95",
+    "semantic_hash": "85045cadaa154efb9aee7c161f22ba95"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/007_user_sessions.py": {
+    "mtime": 1778960155.1524878,
+    "ast_hash": "a3462531ea1d994e9519753d929af17b",
+    "semantic_hash": "a3462531ea1d994e9519753d929af17b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/002_features_permissions_roles.py": {
+    "mtime": 1778960155.1519775,
+    "ast_hash": "456f2f81196501db5be945672c2633fa",
+    "semantic_hash": "456f2f81196501db5be945672c2633fa"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/018_email_templates_rbac_permissions.py": {
+    "mtime": 1778960155.153521,
+    "ast_hash": "b4d21b158c53eea1a90968a05f41c580",
+    "semantic_hash": "b4d21b158c53eea1a90968a05f41c580"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/046_work_order_single_contractor.py": {
+    "mtime": 1778960155.1565905,
+    "ast_hash": "e69bcf0b202343a80e6f1fc3ebe018fc",
+    "semantic_hash": "e69bcf0b202343a80e6f1fc3ebe018fc"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/011_org_units_rbac_permissions.py": {
+    "mtime": 1778960155.152928,
+    "ast_hash": "b48dcf375526fb1267a4febe9956dd19",
+    "semantic_hash": "b48dcf375526fb1267a4febe9956dd19"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/009_user_management_org_units.py": {
+    "mtime": 1778960155.1526513,
+    "ast_hash": "91a5773b920389aa6cfded2bf5b87c1c",
+    "semantic_hash": "91a5773b920389aa6cfded2bf5b87c1c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/023_seed_task_email_templates.py": {
+    "mtime": 1778960155.1539707,
+    "ast_hash": "a6a4a7c2e00660793d0979c2806c43ba",
+    "semantic_hash": "a6a4a7c2e00660793d0979c2806c43ba"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/025_add_username_to_users.py": {
+    "mtime": 1778960155.1541445,
+    "ast_hash": "093653d6c29313d700c562b842057f03",
+    "semantic_hash": "093653d6c29313d700c562b842057f03"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/001_create_users_table.py": {
+    "mtime": 1778960155.1518843,
+    "ast_hash": "471ab3030c797b3176da6ae2151895d2",
+    "semantic_hash": "471ab3030c797b3176da6ae2151895d2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/031_expand_user_master_fields.py": {
+    "mtime": 1778960155.154647,
+    "ast_hash": "bafdebeb0f446212b88b848ddea5fdb9",
+    "semantic_hash": "bafdebeb0f446212b88b848ddea5fdb9"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/052_invoice_extra_amount_ex_vat.py": {
+    "mtime": 1779215556.5893512,
+    "ast_hash": "64a77d60093a2c1875d9870b72e15b27",
+    "semantic_hash": "64a77d60093a2c1875d9870b72e15b27"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/015_approval_tasks_role_assignment.py": {
+    "mtime": 1778960155.1532779,
+    "ast_hash": "986499d47f439c8bcea8766bc73760fb",
+    "semantic_hash": "986499d47f439c8bcea8766bc73760fb"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/035_contractor_rate_initial_rate.py": {
+    "mtime": 1778960155.1550612,
+    "ast_hash": "eb0077bc069ee9795d4fcde49e481ded",
+    "semantic_hash": "eb0077bc069ee9795d4fcde49e481ded"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/alembic/versions/029_contractor_module_and_notifications.py": {
+    "mtime": 1779784568.9110196,
+    "ast_hash": "420976d00161084f548dda7338f0f250",
+    "semantic_hash": "420976d00161084f548dda7338f0f250"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/rbac_constants.py": {
+    "mtime": 1778960155.1745257,
+    "ast_hash": "2180c79a300529c8e01f3aa073eeb67c",
+    "semantic_hash": "2180c79a300529c8e01f3aa073eeb67c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/module_config.py": {
+    "mtime": 1779714386.5071752,
+    "ast_hash": "85f1476112092982bff62f0b428560cb",
+    "semantic_hash": "85f1476112092982bff62f0b428560cb"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/__init__.py": {
+    "mtime": 1778960155.1591544,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/rbac_sync.py": {
+    "mtime": 1778960155.1746936,
+    "ast_hash": "2a48a00b6db936215ef17d1f6a5872bc",
+    "semantic_hash": "2a48a00b6db936215ef17d1f6a5872bc"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/rbac_safety.py": {
+    "mtime": 1778960155.1746209,
+    "ast_hash": "a366be87226801ffb4c7888442fe7d8b",
+    "semantic_hash": "a366be87226801ffb4c7888442fe7d8b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/errors.py": {
+    "mtime": 1778960155.168849,
+    "ast_hash": "5a5701528939cae4b1cbd705e9d8996b",
+    "semantic_hash": "5a5701528939cae4b1cbd705e9d8996b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/rbac_association.py": {
+    "mtime": 1778960155.174262,
+    "ast_hash": "4d41ee6a6d41c5977e3bf22da667b3e6",
+    "semantic_hash": "4d41ee6a6d41c5977e3bf22da667b3e6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/settings/service.py": {
+    "mtime": 1778960155.1757839,
+    "ast_hash": "93b7b72ae52c8a696baee574f069fbd0",
+    "semantic_hash": "93b7b72ae52c8a696baee574f069fbd0"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/settings/lookup.py": {
+    "mtime": 1778960155.175494,
+    "ast_hash": "3df2f370603d1444c02bf451c4c2b363",
+    "semantic_hash": "3df2f370603d1444c02bf451c4c2b363"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/settings/__init__.py": {
+    "mtime": 1778960155.175425,
+    "ast_hash": "e1f56d59abf73062bfe5f507e6359e38",
+    "semantic_hash": "e1f56d59abf73062bfe5f507e6359e38"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/settings/model.py": {
+    "mtime": 1778960155.175566,
+    "ast_hash": "80e923efe2639185aeae085f212f2421",
+    "semantic_hash": "80e923efe2639185aeae085f212f2421"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/settings/router.py": {
+    "mtime": 1778960155.175639,
+    "ast_hash": "d3dbcf1975e95a9503f4b1c905b433ad",
+    "semantic_hash": "d3dbcf1975e95a9503f4b1c905b433ad"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/settings/schema.py": {
+    "mtime": 1778960155.1757128,
+    "ast_hash": "b1f59e79e36206dba15d2e838491b695",
+    "semantic_hash": "b1f59e79e36206dba15d2e838491b695"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/org_units/service.py": {
+    "mtime": 1779742130.1884947,
+    "ast_hash": "58f6ddf0bf642489bfaf28fbf14311f2",
+    "semantic_hash": "58f6ddf0bf642489bfaf28fbf14311f2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/org_units/__init__.py": {
+    "mtime": 1778960155.1716597,
+    "ast_hash": "d5850cc50436a4c00a5209ae59dad354",
+    "semantic_hash": "d5850cc50436a4c00a5209ae59dad354"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/org_units/hierarchy.py": {
+    "mtime": 1778960155.1717372,
+    "ast_hash": "296dcfcc4bc4b4c3c3f614ceb956fa73",
+    "semantic_hash": "296dcfcc4bc4b4c3c3f614ceb956fa73"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/org_units/model.py": {
+    "mtime": 1778960155.1718092,
+    "ast_hash": "053aa9ca2979b8c72927029bcd47ced8",
+    "semantic_hash": "053aa9ca2979b8c72927029bcd47ced8"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/org_units/router.py": {
+    "mtime": 1779742130.2493815,
+    "ast_hash": "ef9115beccf872a66d99b98f1faa4b00",
+    "semantic_hash": "ef9115beccf872a66d99b98f1faa4b00"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/org_units/schema.py": {
+    "mtime": 1778960155.1725626,
+    "ast_hash": "254b4102643f19a10b9354e1c6c9f051",
+    "semantic_hash": "254b4102643f19a10b9354e1c6c9f051"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/tasks/service.py": {
+    "mtime": 1778960155.1761465,
+    "ast_hash": "eeb2d3b8c7d47462f6c59ce836a280fb",
+    "semantic_hash": "eeb2d3b8c7d47462f6c59ce836a280fb"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/tasks/router.py": {
+    "mtime": 1778960155.1759942,
+    "ast_hash": "fe175aac6622bbb1fc543b13526f008a",
+    "semantic_hash": "fe175aac6622bbb1fc543b13526f008a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/tasks/schema.py": {
+    "mtime": 1778960155.176077,
+    "ast_hash": "5fd6992b7b0a19566fd857bfd2f04cff",
+    "semantic_hash": "5fd6992b7b0a19566fd857bfd2f04cff"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor/service.py": {
+    "mtime": 1779103831.0230682,
+    "ast_hash": "51baaa040786233350dad9398c370492",
+    "semantic_hash": "51baaa040786233350dad9398c370492"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor/timeline.py": {
+    "mtime": 1778966065.0504663,
+    "ast_hash": "b93185877dba0f2cd114c9b96a81b286",
+    "semantic_hash": "b93185877dba0f2cd114c9b96a81b286"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor/audit.py": {
+    "mtime": 1778960155.1627572,
+    "ast_hash": "6ed97c8849c15278db6e688fcf4956c0",
+    "semantic_hash": "6ed97c8849c15278db6e688fcf4956c0"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor/models.py": {
+    "mtime": 1779193773.788818,
+    "ast_hash": "3b782251530c952133c0cd41b62fc4ae",
+    "semantic_hash": "3b782251530c952133c0cd41b62fc4ae"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor/compliance.py": {
+    "mtime": 1778960155.1628633,
+    "ast_hash": "afcd1e120ab7a65aa7e2155437502692",
+    "semantic_hash": "afcd1e120ab7a65aa7e2155437502692"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor/module_config.py": {
+    "mtime": 1779714693.9258127,
+    "ast_hash": "f66e08df007e8564c2ba10a248bb37a6",
+    "semantic_hash": "f66e08df007e8564c2ba10a248bb37a6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor/__init__.py": {
+    "mtime": 1778960155.1622305,
+    "ast_hash": "9471dbd07907b30a7207d81bb9bee697",
+    "semantic_hash": "9471dbd07907b30a7207d81bb9bee697"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor/analytics_schema.py": {
+    "mtime": 1779215556.5902033,
+    "ast_hash": "c3aeea39d6c82846c34665061c00d6dd",
+    "semantic_hash": "c3aeea39d6c82846c34665061c00d6dd"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor/router_app.py": {
+    "mtime": 1779308109.9119024,
+    "ast_hash": "3b448d1bca452a1a98eb1d1309756e08",
+    "semantic_hash": "3b448d1bca452a1a98eb1d1309756e08"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor/router_admin.py": {
+    "mtime": 1778960155.1631482,
+    "ast_hash": "c7ea82ed9f7874360c6482a6e36abb67",
+    "semantic_hash": "c7ea82ed9f7874360c6482a6e36abb67"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor/schema.py": {
+    "mtime": 1779103831.0225794,
+    "ast_hash": "a31ae39c4483c13ac49038858e459960",
+    "semantic_hash": "a31ae39c4483c13ac49038858e459960"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor/analytics_service.py": {
+    "mtime": 1779215556.5904243,
+    "ast_hash": "30e3577f00976e7bfc205f1069769dd2",
+    "semantic_hash": "30e3577f00976e7bfc205f1069769dd2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/service.py": {
+    "mtime": 1779788791.5426068,
+    "ast_hash": "0d15d0b83b6ab6c97826af38d3b6d897",
+    "semantic_hash": "0d15d0b83b6ab6c97826af38d3b6d897"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/commercial_amount.py": {
+    "mtime": 1778960155.169653,
+    "ast_hash": "2c447edc082e2ed0c8ab869541b99468",
+    "semantic_hash": "2c447edc082e2ed0c8ab869541b99468"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/extra_lines.py": {
+    "mtime": 1779215556.5909839,
+    "ast_hash": "d98cb2724935b2086627d1d461517aca",
+    "semantic_hash": "d98cb2724935b2086627d1d461517aca"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/audit.py": {
+    "mtime": 1778960155.1695693,
+    "ast_hash": "b464784ae286b2d1206517950d030d30",
+    "semantic_hash": "b464784ae286b2d1206517950d030d30"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/models.py": {
+    "mtime": 1779215556.5911615,
+    "ast_hash": "560af5f11f4c6b05e4275b06443bd497",
+    "semantic_hash": "560af5f11f4c6b05e4275b06443bd497"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/wo_invoice_policy.py": {
+    "mtime": 1779215556.5921814,
+    "ast_hash": "1702d4b9b0cea209a641c9ed21ac006e",
+    "semantic_hash": "1702d4b9b0cea209a641c9ed21ac006e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/module_config.py": {
+    "mtime": 1778960155.1699686,
+    "ast_hash": "25b9c5b602771a51764b2f1a82e13bc4",
+    "semantic_hash": "25b9c5b602771a51764b2f1a82e13bc4"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/__init__.py": {
+    "mtime": 1778960155.169479,
+    "ast_hash": "e091e140f5e20582d7751ca6f222d49b",
+    "semantic_hash": "e091e140f5e20582d7751ca6f222d49b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/line_format.py": {
+    "mtime": 1778960155.1697326,
+    "ast_hash": "cd2661baf38b14092d9ba2879a48f204",
+    "semantic_hash": "cd2661baf38b14092d9ba2879a48f204"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/storage.py": {
+    "mtime": 1778960155.1703897,
+    "ast_hash": "3948213851778450c35988ca43c11683",
+    "semantic_hash": "3948213851778450c35988ca43c11683"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/router_app.py": {
+    "mtime": 1779788805.4688857,
+    "ast_hash": "fa73e725a43a71ffffcfc130d95f7b22",
+    "semantic_hash": "fa73e725a43a71ffffcfc130d95f7b22"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/schema.py": {
+    "mtime": 1779788769.793651,
+    "ast_hash": "c540fa25f9fba688a4148e0f477be25e",
+    "semantic_hash": "c540fa25f9fba688a4148e0f477be25e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/invoices/validation.py": {
+    "mtime": 1779215556.592033,
+    "ast_hash": "7845ac4542721f6077f50ffd1bcd31c6",
+    "semantic_hash": "7845ac4542721f6077f50ffd1bcd31c6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/rbac_versioning/service.py": {
+    "mtime": 1778960155.1748974,
+    "ast_hash": "7add0c2ae5fc403c321a4d519cb964cc",
+    "semantic_hash": "7add0c2ae5fc403c321a4d519cb964cc"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/rbac_versioning/model.py": {
+    "mtime": 1778960155.1748106,
+    "ast_hash": "2249598cd832a6eb1f3508be894ee8b6",
+    "semantic_hash": "2249598cd832a6eb1f3508be894ee8b6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/auth/service.py": {
+    "mtime": 1778960155.161825,
+    "ast_hash": "e180dd73b4e90cacbe594922bbd59dd3",
+    "semantic_hash": "e180dd73b4e90cacbe594922bbd59dd3"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/auth/login_result.py": {
+    "mtime": 1778960155.1611435,
+    "ast_hash": "5702f3e93b6364763a11895d9dd1012e",
+    "semantic_hash": "5702f3e93b6364763a11895d9dd1012e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/auth/__init__.py": {
+    "mtime": 1778960155.161074,
+    "ast_hash": "b0f3d339b0d18872b54a772695ec6501",
+    "semantic_hash": "b0f3d339b0d18872b54a772695ec6501"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/auth/model.py": {
+    "mtime": 1778960155.1614091,
+    "ast_hash": "2b603a266c0e9f358edfc734c82fc2c3",
+    "semantic_hash": "2b603a266c0e9f358edfc734c82fc2c3"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/auth/mfa_routes.py": {
+    "mtime": 1778960155.1613364,
+    "ast_hash": "2af7114f73fed69610e9ddf300b973fe",
+    "semantic_hash": "2af7114f73fed69610e9ddf300b973fe"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/auth/schema.py": {
+    "mtime": 1778960155.1615722,
+    "ast_hash": "0dec4304e36c191b0a04d759c0d9260d",
+    "semantic_hash": "0dec4304e36c191b0a04d759c0d9260d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/auth/routes.py": {
+    "mtime": 1778960155.1615014,
+    "ast_hash": "fa7e2b24e73e157c9b1d38f12fbf40da",
+    "semantic_hash": "fa7e2b24e73e157c9b1d38f12fbf40da"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/emails/admin_router.py": {
+    "mtime": 1778960155.1683226,
+    "ast_hash": "717c6fb898d8f10e8be18c08cc5ded7a",
+    "semantic_hash": "717c6fb898d8f10e8be18c08cc5ded7a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/emails/service.py": {
+    "mtime": 1778960155.168766,
+    "ast_hash": "24e35098974fbbd17bf23aa686f83052",
+    "semantic_hash": "24e35098974fbbd17bf23aa686f83052"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/emails/constants.py": {
+    "mtime": 1778960155.168409,
+    "ast_hash": "b826e5daa9c1ada432b2d90aee1e487d",
+    "semantic_hash": "b826e5daa9c1ada432b2d90aee1e487d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/emails/model.py": {
+    "mtime": 1778960155.1684966,
+    "ast_hash": "90c5c75c6819d21c59eb4b83e568d8f9",
+    "semantic_hash": "90c5c75c6819d21c59eb4b83e568d8f9"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/emails/schema.py": {
+    "mtime": 1778960155.1685967,
+    "ast_hash": "74caedb72fa35d865430f402f0aab418",
+    "semantic_hash": "74caedb72fa35d865430f402f0aab418"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/features/service.py": {
+    "mtime": 1778960155.1693504,
+    "ast_hash": "a680a7841599617e37501c4d9fd24bfa",
+    "semantic_hash": "a680a7841599617e37501c4d9fd24bfa"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/features/__init__.py": {
+    "mtime": 1778960155.1690009,
+    "ast_hash": "b6537128d6736cb96eae3b108af2305f",
+    "semantic_hash": "b6537128d6736cb96eae3b108af2305f"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/features/model.py": {
+    "mtime": 1778960155.1690912,
+    "ast_hash": "459680d6d427765b5d8f60c09067caee",
+    "semantic_hash": "459680d6d427765b5d8f60c09067caee"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/features/router.py": {
+    "mtime": 1778960155.1691895,
+    "ast_hash": "7d71906cfaf904883446dce5cff1abd2",
+    "semantic_hash": "7d71906cfaf904883446dce5cff1abd2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/features/schema.py": {
+    "mtime": 1778960155.16927,
+    "ast_hash": "a9702108314fdc7e8605d335dd61d762",
+    "semantic_hash": "a9702108314fdc7e8605d335dd61d762"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/roles/service.py": {
+    "mtime": 1778960155.1753166,
+    "ast_hash": "3aa17e8abeb6a3cd71bfcfa00f04e129",
+    "semantic_hash": "3aa17e8abeb6a3cd71bfcfa00f04e129"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/roles/__init__.py": {
+    "mtime": 1778960155.1750124,
+    "ast_hash": "18ac09cb7c036bd56c07c6c6467ad915",
+    "semantic_hash": "18ac09cb7c036bd56c07c6c6467ad915"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/roles/model.py": {
+    "mtime": 1778960155.1750774,
+    "ast_hash": "f316b4b31db210c8f1aebfe80e8e6e98",
+    "semantic_hash": "f316b4b31db210c8f1aebfe80e8e6e98"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/roles/router.py": {
+    "mtime": 1778960155.1751542,
+    "ast_hash": "39672b055356c58bfa7f37022cecf856",
+    "semantic_hash": "39672b055356c58bfa7f37022cecf856"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/roles/schema.py": {
+    "mtime": 1778960155.1752248,
+    "ast_hash": "c7dd8fb535f7f718cd0bab3e41ab0338",
+    "semantic_hash": "c7dd8fb535f7f718cd0bab3e41ab0338"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/mfa/service.py": {
+    "mtime": 1778960155.1709929,
+    "ast_hash": "c60911e5a26aa99be73109f04c3af279",
+    "semantic_hash": "c60911e5a26aa99be73109f04c3af279"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/mfa/notify.py": {
+    "mtime": 1778960155.1708162,
+    "ast_hash": "8f6cd78461da1bba1f73e0e14266088d",
+    "semantic_hash": "8f6cd78461da1bba1f73e0e14266088d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/mfa/policy_hooks.py": {
+    "mtime": 1778960155.170897,
+    "ast_hash": "a9b3a53fa8a933ee948ba379815b9f27",
+    "semantic_hash": "a9b3a53fa8a933ee948ba379815b9f27"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/mfa/model.py": {
+    "mtime": 1778960155.1707358,
+    "ast_hash": "6bdf4da7b1fa235a6810015becc74ebc",
+    "semantic_hash": "6bdf4da7b1fa235a6810015becc74ebc"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/permissions/service.py": {
+    "mtime": 1778960155.1741862,
+    "ast_hash": "0af74f538e9565efef3026642fc322a2",
+    "semantic_hash": "0af74f538e9565efef3026642fc322a2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/permissions/__init__.py": {
+    "mtime": 1778960155.173887,
+    "ast_hash": "d835a06c7217ae43d07a943c212c1735",
+    "semantic_hash": "d835a06c7217ae43d07a943c212c1735"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/permissions/model.py": {
+    "mtime": 1778960155.1739533,
+    "ast_hash": "88f98441e4798df13c4de201ca794f2d",
+    "semantic_hash": "88f98441e4798df13c4de201ca794f2d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/permissions/router.py": {
+    "mtime": 1778960155.1740234,
+    "ast_hash": "6c4ff414693c2da24e9461ca51049591",
+    "semantic_hash": "6c4ff414693c2da24e9461ca51049591"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/permissions/schema.py": {
+    "mtime": 1778960155.1740882,
+    "ast_hash": "97a6b40f63c148258e76231efb202651",
+    "semantic_hash": "97a6b40f63c148258e76231efb202651"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/dashboard/app_router.py": {
+    "mtime": 1779738923.2123897,
+    "ast_hash": "4e90d951266634cdd0b83b1061fde61f",
+    "semantic_hash": "4e90d951266634cdd0b83b1061fde61f"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/dashboard/intelligence_service.py": {
+    "mtime": 1778960155.1679616,
+    "ast_hash": "baf51fa9df17fd73f691c29c23c33634",
+    "semantic_hash": "baf51fa9df17fd73f691c29c23c33634"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/dashboard/router.py": {
+    "mtime": 1778960155.1680856,
+    "ast_hash": "0c8d4d370f762c3b0f8a51c8e4f6bd5d",
+    "semantic_hash": "0c8d4d370f762c3b0f8a51c8e4f6bd5d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/part_master/service.py": {
+    "mtime": 1779745701.8515096,
+    "ast_hash": "4669e2da6ee38ee0cf929173e5cc6a0c",
+    "semantic_hash": "4669e2da6ee38ee0cf929173e5cc6a0c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/part_master/audit.py": {
+    "mtime": 1778960155.1728666,
+    "ast_hash": "802fd0baf534a7fb3d8e39b19732d897",
+    "semantic_hash": "802fd0baf534a7fb3d8e39b19732d897"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/part_master/models.py": {
+    "mtime": 1778960155.1729667,
+    "ast_hash": "e15c9522ac5f6bcafe96e301de8fd151",
+    "semantic_hash": "e15c9522ac5f6bcafe96e301de8fd151"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/part_master/part_master_analytics_schema.py": {
+    "mtime": 1778960155.1731167,
+    "ast_hash": "3523b41f4e2d50b92a1179a0ae55a168",
+    "semantic_hash": "3523b41f4e2d50b92a1179a0ae55a168"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/part_master/module_config.py": {
+    "mtime": 1779714898.7962456,
+    "ast_hash": "57e02af7d1dbba1cfaf34671f2795378",
+    "semantic_hash": "57e02af7d1dbba1cfaf34671f2795378"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/part_master/__init__.py": {
+    "mtime": 1778960155.1727808,
+    "ast_hash": "680c8650e4dd57df2847c306401af8a2",
+    "semantic_hash": "680c8650e4dd57df2847c306401af8a2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/part_master/storage.py": {
+    "mtime": 1778960155.1737804,
+    "ast_hash": "00ee4df5be08385ac7442de402e0dd31",
+    "semantic_hash": "00ee4df5be08385ac7442de402e0dd31"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/part_master/pricing.py": {
+    "mtime": 1778960155.1733155,
+    "ast_hash": "2f5990a36d8c5455a47c115bf44d5b1c",
+    "semantic_hash": "2f5990a36d8c5455a47c115bf44d5b1c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/part_master/part_master_analytics_service.py": {
+    "mtime": 1779714911.1444607,
+    "ast_hash": "f54907adedd14b2615ee8230684d5ddb",
+    "semantic_hash": "f54907adedd14b2615ee8230684d5ddb"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/part_master/router_app.py": {
+    "mtime": 1779745701.9048483,
+    "ast_hash": "1e858825a394e17438b20c5c8cc54e3f",
+    "semantic_hash": "1e858825a394e17438b20c5c8cc54e3f"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/part_master/schema.py": {
+    "mtime": 1778960155.1735926,
+    "ast_hash": "230e16a0741f5b175fcf497fd8d0bd17",
+    "semantic_hash": "230e16a0741f5b175fcf497fd8d0bd17"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/audit/__init__.py": {
+    "mtime": 1778960155.1606698,
+    "ast_hash": "a910b4916a20db448a2cee972de34ac8",
+    "semantic_hash": "a910b4916a20db448a2cee972de34ac8"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/audit/model.py": {
+    "mtime": 1778960155.1608632,
+    "ast_hash": "4f929f58b7fb0a0f511bfbebc777470a",
+    "semantic_hash": "4f929f58b7fb0a0f511bfbebc777470a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/audit/router.py": {
+    "mtime": 1778960155.1609433,
+    "ast_hash": "2bf6fd273c0e13d53ea0a1ae31d7a552",
+    "semantic_hash": "2bf6fd273c0e13d53ea0a1ae31d7a552"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/audit/middleware.py": {
+    "mtime": 1778960155.1607642,
+    "ast_hash": "c6a140e46d8ca4d2aa1a76f2a33326d7",
+    "semantic_hash": "c6a140e46d8ca4d2aa1a76f2a33326d7"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/users/service.py": {
+    "mtime": 1779743899.2069032,
+    "ast_hash": "9ee8885e2d69460d11ef2bc30b074f2d",
+    "semantic_hash": "9ee8885e2d69460d11ef2bc30b074f2d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/users/email_validation.py": {
+    "mtime": 1778960155.1763437,
+    "ast_hash": "cc72889d95bfa92489168ade24697b85",
+    "semantic_hash": "cc72889d95bfa92489168ade24697b85"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/users/__init__.py": {
+    "mtime": 1778960155.17627,
+    "ast_hash": "a4f35b1011afd42b0796a79a52805e69",
+    "semantic_hash": "a4f35b1011afd42b0796a79a52805e69"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/users/model.py": {
+    "mtime": 1779743899.2654498,
+    "ast_hash": "762b71585318e07ce75a3ec15db725af",
+    "semantic_hash": "762b71585318e07ce75a3ec15db725af"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/users/router.py": {
+    "mtime": 1779742680.6606703,
+    "ast_hash": "9b0a7d3718060f02adc78b64d8de1519",
+    "semantic_hash": "9b0a7d3718060f02adc78b64d8de1519"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/users/schema.py": {
+    "mtime": 1779743899.1302884,
+    "ast_hash": "150d1a47ab87e49fb4cbb4a7c0aeae71",
+    "semantic_hash": "150d1a47ab87e49fb4cbb4a7c0aeae71"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/work_orders/service.py": {
+    "mtime": 1779741382.9518127,
+    "ast_hash": "8aaf1d5d19f657a8c97aff2f58e32cbc",
+    "semantic_hash": "8aaf1d5d19f657a8c97aff2f58e32cbc"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/work_orders/audit.py": {
+    "mtime": 1779741382.7894106,
+    "ast_hash": "e823a13542b0dbe26a9e77ecca3380d4",
+    "semantic_hash": "e823a13542b0dbe26a9e77ecca3380d4"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/work_orders/models.py": {
+    "mtime": 1779103831.025374,
+    "ast_hash": "5d503127bd7584408254e929e2d3a516",
+    "semantic_hash": "5d503127bd7584408254e929e2d3a516"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/work_orders/module_config.py": {
+    "mtime": 1779715151.3248205,
+    "ast_hash": "cfe7eef8973a92634de9b2b33b9f9b71",
+    "semantic_hash": "cfe7eef8973a92634de9b2b33b9f9b71"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/work_orders/__init__.py": {
+    "mtime": 1778960155.1768079,
+    "ast_hash": "0005c4a56161d0d53bbb9642913ce010",
+    "semantic_hash": "0005c4a56161d0d53bbb9642913ce010"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/work_orders/router_app.py": {
+    "mtime": 1779741382.8972018,
+    "ast_hash": "c0698914b4c1fcc7202a125198fc392d",
+    "semantic_hash": "c0698914b4c1fcc7202a125198fc392d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/work_orders/schema.py": {
+    "mtime": 1779741382.8433444,
+    "ast_hash": "942667c74863766ecc8d42aa65634ed7",
+    "semantic_hash": "942667c74863766ecc8d42aa65634ed7"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/auth_policy/admin_router.py": {
+    "mtime": 1778960155.161948,
+    "ast_hash": "358fef88c3d036c682f9e8d178b717ea",
+    "semantic_hash": "358fef88c3d036c682f9e8d178b717ea"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/auth_policy/service.py": {
+    "mtime": 1778960155.1621096,
+    "ast_hash": "ed33c295199af14a256d9b68d9d56edb",
+    "semantic_hash": "ed33c295199af14a256d9b68d9d56edb"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/auth_policy/model.py": {
+    "mtime": 1778960155.162019,
+    "ast_hash": "e1674b02c804d815718ae14fc0b84bba",
+    "semantic_hash": "e1674b02c804d815718ae14fc0b84bba"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/approvals/admin_router.py": {
+    "mtime": 1779863640.5650988,
+    "ast_hash": "829b283e6c73af532899bd7a229a2ca6",
+    "semantic_hash": "829b283e6c73af532899bd7a229a2ca6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/approvals/service.py": {
+    "mtime": 1779903311.7548833,
+    "ast_hash": "2d5316250ee3d635fe158cdbf311bbec",
+    "semantic_hash": "2d5316250ee3d635fe158cdbf311bbec"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/approvals/inbox_service.py": {
+    "mtime": 1778960155.1595027,
+    "ast_hash": "90350982a6e0144300b01898af7ead5e",
+    "semantic_hash": "90350982a6e0144300b01898af7ead5e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/approvals/timeline_service.py": {
+    "mtime": 1778960155.1605072,
+    "ast_hash": "fcd65fe01470e18001f843c4d3afc89f",
+    "semantic_hash": "fcd65fe01470e18001f843c4d3afc89f"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/approvals/mappings_admin_router.py": {
+    "mtime": 1779863640.6170087,
+    "ast_hash": "4792cc1bb9aa8e90c8e4a41cc9311b60",
+    "semantic_hash": "4792cc1bb9aa8e90c8e4a41cc9311b60"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/approvals/model.py": {
+    "mtime": 1778960155.1598253,
+    "ast_hash": "8382f1184bc5f8f1e2c0c65913988d3d",
+    "semantic_hash": "8382f1184bc5f8f1e2c0c65913988d3d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/approvals/router.py": {
+    "mtime": 1779352777.189514,
+    "ast_hash": "050b2b9571055a16a8a8721699b0e011",
+    "semantic_hash": "050b2b9571055a16a8a8721699b0e011"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/approvals/assignment_service.py": {
+    "mtime": 1779863640.513325,
+    "ast_hash": "85e9ff62005c8c06153116faa93283c8",
+    "semantic_hash": "85e9ff62005c8c06153116faa93283c8"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/approvals/schema.py": {
+    "mtime": 1778960155.1601295,
+    "ast_hash": "08533ad04b2a7ca59f08ae4a433cb547",
+    "semantic_hash": "08533ad04b2a7ca59f08ae4a433cb547"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor_rates/service.py": {
+    "mtime": 1779440813.4777513,
+    "ast_hash": "63fbea6ef0d245a840cbf2d32cb9b856",
+    "semantic_hash": "63fbea6ef0d245a840cbf2d32cb9b856"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor_rates/timeline.py": {
+    "mtime": 1778960155.165901,
+    "ast_hash": "934fc80ff00bf94f713fa7760d233ac7",
+    "semantic_hash": "934fc80ff00bf94f713fa7760d233ac7"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor_rates/audit.py": {
+    "mtime": 1778960155.1640763,
+    "ast_hash": "d051873fa72e5fd6cb8d029c1cef0095",
+    "semantic_hash": "d051873fa72e5fd6cb8d029c1cef0095"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor_rates/models.py": {
+    "mtime": 1778960155.16478,
+    "ast_hash": "b8869a70d80ec104df05376d36afb5ee",
+    "semantic_hash": "b8869a70d80ec104df05376d36afb5ee"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor_rates/module_config.py": {
+    "mtime": 1779715070.268649,
+    "ast_hash": "005178c53ea141cc2d39dd9a301a1e63",
+    "semantic_hash": "005178c53ea141cc2d39dd9a301a1e63"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor_rates/rate_card.py": {
+    "mtime": 1778960155.1649683,
+    "ast_hash": "32b179dc7fcdd6f0e7b9db972ad0343c",
+    "semantic_hash": "32b179dc7fcdd6f0e7b9db972ad0343c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor_rates/__init__.py": {
+    "mtime": 1778960155.163988,
+    "ast_hash": "69f24effc7f49155373eab1380859752",
+    "semantic_hash": "69f24effc7f49155373eab1380859752"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor_rates/router_app.py": {
+    "mtime": 1778960155.1653259,
+    "ast_hash": "46b6bbdd7ef8b064637d1e69fb9479d2",
+    "semantic_hash": "46b6bbdd7ef8b064637d1e69fb9479d2"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor_rates/router_admin.py": {
+    "mtime": 1778960155.1652331,
+    "ast_hash": "93e68bb7f7ea0e142fef4b15ed8b9521",
+    "semantic_hash": "93e68bb7f7ea0e142fef4b15ed8b9521"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/contractor_rates/schema.py": {
+    "mtime": 1778960155.1655855,
+    "ast_hash": "db1337fe5ae0ba5153c0b9df56e48c91",
+    "semantic_hash": "db1337fe5ae0ba5153c0b9df56e48c91"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/rbac_audit/service.py": {
+    "mtime": 1778960155.1744561,
+    "ast_hash": "5f2829cd79659a4b7beb130c86887719",
+    "semantic_hash": "5f2829cd79659a4b7beb130c86887719"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/rbac_audit/model.py": {
+    "mtime": 1778960155.174369,
+    "ast_hash": "a52c59af3f413b3a05de01d480bdf495",
+    "semantic_hash": "a52c59af3f413b3a05de01d480bdf495"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/notifications/admin_router.py": {
+    "mtime": 1778960155.17131,
+    "ast_hash": "16b756b6df7850a335d233782fc9719b",
+    "semantic_hash": "16b756b6df7850a335d233782fc9719b"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/notifications/service.py": {
+    "mtime": 1778960155.1715384,
+    "ast_hash": "43e9d4df65aea2f0ed58e223ee3d4e43",
+    "semantic_hash": "43e9d4df65aea2f0ed58e223ee3d4e43"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/notifications/__init__.py": {
+    "mtime": 1778960155.1712332,
+    "ast_hash": "84ebc17e9672bdf49c17c69f486a39a1",
+    "semantic_hash": "84ebc17e9672bdf49c17c69f486a39a1"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/notifications/model.py": {
+    "mtime": 1778960155.171388,
+    "ast_hash": "11b6ad1417028450b83d57f42754e68d",
+    "semantic_hash": "11b6ad1417028450b83d57f42754e68d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/modules/notifications/schema.py": {
+    "mtime": 1778960155.1714633,
+    "ast_hash": "b2e7b910a523f80583fb44ae79f87332",
+    "semantic_hash": "b2e7b910a523f80583fb44ae79f87332"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/admin_api/deps.py": {
+    "mtime": 1778960155.1502237,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/admin_api/__init__.py": {
+    "mtime": 1778960155.1501842,
+    "ast_hash": "c513aa16b31fdf58ad3328fe2da972ba",
+    "semantic_hash": "c513aa16b31fdf58ad3328fe2da972ba"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/admin_api/router.py": {
+    "mtime": 1778960155.1502821,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/admin_api/routes.py": {
+    "mtime": 1778960155.1505957,
+    "ast_hash": "4639658fcf0fd5e50ae89d9e5ef91129",
+    "semantic_hash": "4639658fcf0fd5e50ae89d9e5ef91129"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/backend/admin_api/routers/__init__.py": {
+    "mtime": 1778960155.1503973,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/seed_demo_work_orders.py": {
+    "mtime": 1779103831.032478,
+    "ast_hash": "41a1066e4fcc85dbf444a29f9ccf664e",
+    "semantic_hash": "41a1066e4fcc85dbf444a29f9ccf664e"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/seed_five_parts.py": {
+    "mtime": 1778960155.2020156,
+    "ast_hash": "086b6ce08c2ae453acea2ddfc78bce1c",
+    "semantic_hash": "086b6ce08c2ae453acea2ddfc78bce1c"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/sync_modules.py": {
+    "mtime": 1778960155.2025137,
+    "ast_hash": "02fba8343e419c44337c178205d8cee5",
+    "semantic_hash": "02fba8343e419c44337c178205d8cee5"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/seed_manual_test_users.py": {
+    "mtime": 1779743899.6087363,
+    "ast_hash": "3599c68c23a626c110d3485adfeda89d",
+    "semantic_hash": "3599c68c23a626c110d3485adfeda89d"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/seed_demo_status_matrix.py": {
+    "mtime": 1779346998.34193,
+    "ast_hash": "6e853702d1962053527980390a6db262",
+    "semantic_hash": "6e853702d1962053527980390a6db262"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/seed_demo_work_order_two_level_scenario.py": {
+    "mtime": 1779103831.0321214,
+    "ast_hash": "f095e5ee67b0f5850f3fda139d0fe994",
+    "semantic_hash": "f095e5ee67b0f5850f3fda139d0fe994"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/seed_demo_users.py": {
+    "mtime": 1779743899.5540035,
+    "ast_hash": "78d57ab36e29935a86370ab2c53bc3f4",
+    "semantic_hash": "78d57ab36e29935a86370ab2c53bc3f4"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/seed_demo_completions_and_invoices.py": {
+    "mtime": 1778960155.201495,
+    "ast_hash": "00c7cbc3ff6882d188498e9959209547",
+    "semantic_hash": "00c7cbc3ff6882d188498e9959209547"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/clear_work_orders_and_invoices.py": {
+    "mtime": 1778960155.2011797,
+    "ast_hash": "613623f4eecd565585bbcec8b6e06291",
+    "semantic_hash": "613623f4eecd565585bbcec8b6e06291"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/clear_wo_invoice_parts.py": {
+    "mtime": 1778960155.2010965,
+    "ast_hash": "2186e6fc029e155714251eace3accbb0",
+    "semantic_hash": "2186e6fc029e155714251eace3accbb0"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/seed_manual_test_rates.py": {
+    "mtime": 1778960155.2022612,
+    "ast_hash": "22f8b4a6be5167bca07399ed06f20d15",
+    "semantic_hash": "22f8b4a6be5167bca07399ed06f20d15"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/seed_demo_access_matrix.py": {
+    "mtime": 1779743899.5011058,
+    "ast_hash": "80ba43e4ac93c2498d2d09594964b3f6",
+    "semantic_hash": "80ba43e4ac93c2498d2d09594964b3f6"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/_work_order_demo_workflow.py": {
+    "mtime": 1778960155.2010274,
+    "ast_hash": "2afa26e727a22a3a6f690da160c2b686",
+    "semantic_hash": "2afa26e727a22a3a6f690da160c2b686"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/seed_manual_test_contractors.py": {
+    "mtime": 1778961461.6345525,
+    "ast_hash": "476147845b181d1ee66b093ed5fada2a",
+    "semantic_hash": "476147845b181d1ee66b093ed5fada2a"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/seed_admin_test_data.py": {
+    "mtime": 1779743899.4464407,
+    "ast_hash": "2c747a13302ae8b3fcc533bcdd2e72fb",
+    "semantic_hash": "2c747a13302ae8b3fcc533bcdd2e72fb"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/clear_invoices.py": {
+    "mtime": 1779215556.5969305,
+    "ast_hash": "22121e97929d7e795bbe64de5bd606d8",
+    "semantic_hash": "22121e97929d7e795bbe64de5bd606d8"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/seed_five_invoices_one_wo.py": {
+    "mtime": 1779215556.5970616,
+    "ast_hash": "7c52f9949f718b421cd8f707b089cbaa",
+    "semantic_hash": "7c52f9949f718b421cd8f707b089cbaa"
+  },
+  "/Users/shubhambharambe/Desktop/quick_fix/Ultra/scripts/reset_commercial_and_ops_data.py": {
+    "mtime": 1778960155.2012737,
+    "ast_hash": "83b5c81284e9f6cf1ced84352d4398da",
+    "semantic_hash": "83b5c81284e9f6cf1ced84352d4398da"
+  }
+}

@@ -55,7 +55,7 @@ type UserPublic = {
 const createUserSchema = z.object({
   full_name: z.string().min(1, "Full name is required").max(255),
   username: z.string().min(3, "Username is required").max(64),
-  phone: z.string().trim().regex(/^\d{10}$/, "Phone must be exactly 10 digits"),
+  phone: z.string().trim().regex(/^[6-9]\d{9}$/, "Phone must start with 6, 7, 8, or 9 and be exactly 10 digits"),
   email: z.string().email("Enter a valid email"),
   employee_code: z.string().max(64).optional(),
   department: z.string().max(128).optional(),
@@ -224,7 +224,7 @@ export function UserCreatePage() {
                   autoComplete="tel"
                   inputMode="numeric"
                   maxLength={10}
-                  placeholder="10-digit phone number"
+                  placeholder="10-digit phone number starting with 6-9"
                   {...phoneField}
                   onChange={(e) => {
                     e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10)
@@ -335,7 +335,7 @@ export function UserCreatePage() {
                   <div className="flex items-center justify-between gap-3 sm:flex-1">
                     <div className="space-y-1">
                       <div className="text-sm font-medium">Status</div>
-                      <div className="text-xs text-muted-foreground">New users are created as active by default.</div>
+                      <div className="text-xs text-muted-foreground">Turn this off to create the user as inactive.</div>
                     </div>
                     <Switch checked={form.watch("is_active")} onCheckedChange={(v) => form.setValue("is_active", v, { shouldDirty: true })} />
                   </div>

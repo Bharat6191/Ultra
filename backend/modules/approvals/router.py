@@ -22,6 +22,13 @@ from modules.approvals.inbox_service import _viewer_can_access_request
 
 router = APIRouter(prefix="/approvals", tags=["approvals"])
 
+APPROVAL_ACTION_PERMISSION_CODES_BY_ENTITY_TYPE: dict[str, tuple[str, ...]] = {
+    "contractor_rate_approval": ("contractor_rates.approve",),
+    "work_order_approval": ("work_orders.approve",),
+    "work_order_rate_override": ("work_orders.approve",),
+    "invoice_exception_approval": ("invoices.approve_exceptions",),
+}
+
 
 def get_engine(db: Session = Depends(get_db)) -> ApprovalEngineService:
     return ApprovalEngineService(db)
@@ -29,6 +36,13 @@ def get_engine(db: Session = Depends(get_db)) -> ApprovalEngineService:
 
 def get_inbox(db: Session = Depends(get_db)) -> ApprovalInboxService:
     return ApprovalInboxService(db)
+
+
+def _approval_action_permission_codes(entity_type: str | None) -> tuple[str, ...]:
+    codes = ["approval.act"]
+    if entity_type:
+        codes.extend(APPROVAL_ACTION_PERMISSION_CODES_BY_ENTITY_TYPE.get(str(entity_type), ()))
+    return tuple(dict.fromkeys(codes))
 
 
 def require_task_action_permission(
@@ -49,9 +63,8 @@ def require_task_action_permission(
         ) from exc
 
     snapshot = _get_cached_permission_snapshot(db, user_id)
-    allowed_codes = ["approval.act"]
-    if task.request is not None and str(task.request.entity_type) == "invoice_exception_approval":
-        allowed_codes.append("invoices.approve_exceptions")
+    entity_type = str(task.request.entity_type) if task.request is not None else None
+    allowed_codes = _approval_action_permission_codes(entity_type)
 
     if not _has_any_permission(snapshot, allowed_codes):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")

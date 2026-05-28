@@ -46,7 +46,13 @@ import { ReportsPage } from "@/pages/reports"
 import * as React from "react"
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { getJson } from "@/lib/api"
-import { clearAuthProfile, isSuperuser, persistAuthFromMe } from "@/lib/permissions"
+import {
+  clearAuthProfile,
+  isSuperuser,
+  NEGOTIATED_RATE_READ_PERMISSION_CODES,
+  persistAuthFromMe,
+  TASK_INBOX_PERMISSION_CODES,
+} from "@/lib/permissions"
 
 /** Compare /me outcomes so we only remount dashboard routes when RBAC identity actually changes.
  *  Otherwise focus/visibility events (e.g. closing the native file picker) would bump the outlet key
@@ -89,7 +95,7 @@ function App() {
           <Route
             path="tasks"
             element={
-              <RequirePermission anyOf={["approval.view", "task.view"]}>
+              <RequirePermission anyOf={TASK_INBOX_PERMISSION_CODES}>
                 <Outlet />
               </RequirePermission>
             }
@@ -216,7 +222,7 @@ function App() {
             <Route
               path=":rateId"
               element={
-                <RequirePermission code="contractor_rates.view">
+                <RequirePermission anyOf={NEGOTIATED_RATE_READ_PERMISSION_CODES}>
                   <NegotiatedRateDetailPage />
                 </RequirePermission>
               }

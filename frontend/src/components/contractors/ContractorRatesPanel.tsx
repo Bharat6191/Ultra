@@ -307,7 +307,7 @@ export function ContractorRatesPanel({
 
   const [selectedRateId, setSelectedRateId] = React.useState<number | null>(null)
 
-  const canView = hasPermission("contractor_rates.view")
+  const canView = hasPermission("contractor_rates.view") || hasPermission("contractor_rates.approve")
   // ``readOnly`` strips every mutating affordance regardless of RBAC, used by
   // the contractor master tab to show negotiation history without edit access.
   const canCreate = !readOnly && hasPermission("contractor_rates.create")
@@ -939,7 +939,18 @@ export function RateDetailPanel({
             <Fact label="Should cost" value={formatMoney(rate.base_rate)} />
             <Fact label="Initial ask" value={formatMoney(rate.initial_rate)} />
             <Fact label="Agreed rate" value={formatMoney(rate.negotiated_rate)} strong />
-            <Fact
+             {rate.vs_base_percentage != null && rate.vs_base_percentage !== "" ? (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">VARIANCE</p>
+              <VsBaseToleranceBadge
+                negotiated={rate.negotiated_rate}
+                baseRate={rate.base_rate}
+                className="w-fit"
+              />
+            </div>
+          ) : null}
+             
+            {/* <Fact
               label="VARIANCE"
               value={
                 rate.savings_amount !== null && Number(rate.savings_amount) > 0
@@ -947,7 +958,7 @@ export function RateDetailPanel({
                   : "—"
               }
               strong
-            />
+            /> */}
             <Fact label="Effective from" value={rate.effective_from} />
             <Fact label="Effective to" value={rate.effective_to ?? "Open"} />
           </div>
@@ -966,7 +977,7 @@ export function RateDetailPanel({
             </div>
           ) : null} */}
 
-          {rate.vs_base_percentage != null && rate.vs_base_percentage !== "" ? (
+          {/* {rate.vs_base_percentage != null && rate.vs_base_percentage !== "" ? (
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Variance</p>
               <VsBaseToleranceBadge
@@ -975,7 +986,7 @@ export function RateDetailPanel({
                 className="w-fit"
               />
             </div>
-          ) : null}
+          ) : null} */}
 
           {canUploadOpeningDraft ? (
             <DraftOpeningEvidenceUploader rateId={rate.id} onUploaded={() => onAfterMutation?.()} />

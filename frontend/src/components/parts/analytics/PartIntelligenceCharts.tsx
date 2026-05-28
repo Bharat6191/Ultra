@@ -18,6 +18,8 @@ import { formatMoney } from "@/components/contractors/rateStatus"
 import type { PartContractorsAnalytics, PartWorkOrderAnalytics } from "@/components/parts/analytics/types"
 
 const STATUS_COLORS = ["#059669", "#0ea5e9", "#f59e0b", "#94a3b8", "#ef4444", "#8b5cf6"]
+const NEGOTIATED_COLOR = "#059669"
+const SHOULD_COST_COLOR = "#94a3b8"
 
 function statusLabel(name: string): string {
   return name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
@@ -26,6 +28,21 @@ function statusLabel(name: string): string {
 type Props = {
   contractors: PartContractorsAnalytics
   workOrders: PartWorkOrderAnalytics
+}
+
+function RateBarsLegend() {
+  return (
+    <div className="flex items-center justify-center gap-4 pt-1 text-[11px]">
+      <div className="flex items-center gap-1.5 text-foreground">
+        <span className="size-3 rounded-sm" style={{ backgroundColor: NEGOTIATED_COLOR }} />
+        <span>Negotiated</span>
+      </div>
+      <div className="flex items-center gap-1.5 text-foreground">
+        <span className="size-3 rounded-sm" style={{ backgroundColor: SHOULD_COST_COLOR }} />
+        <span>Should cost</span>
+      </div>
+    </div>
+  )
 }
 
 export function PartIntelligenceCharts({ contractors, workOrders }: Props) {
@@ -73,15 +90,16 @@ export function PartIntelligenceCharts({ contractors, workOrders }: Props) {
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-22} textAnchor="end" height={48} />
                 <YAxis tick={{ fontSize: 10 }} width={48} />
                 <Tooltip
+                  shared={false}
                   formatter={(v) => formatMoney(Number(v ?? 0))}
                   labelFormatter={(_, payload) => {
                     const row = payload?.[0]?.payload as { fullName?: string } | undefined
                     return row?.fullName ?? ""
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
-                <Bar dataKey="base" name="Should cost" fill="#94a3b8" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="negotiated" name="Negotiated" fill="#059669" radius={[3, 3, 0, 0]} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} content={() => <RateBarsLegend />} />
+                <Bar dataKey="negotiated" name="Negotiated" fill={NEGOTIATED_COLOR} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="base" name="Should cost" fill={SHOULD_COST_COLOR} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

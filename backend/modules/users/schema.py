@@ -25,8 +25,8 @@ def _before_user_phone(v: object) -> str:
     if not isinstance(v, str):
         raise TypeError("phone must be a string")
     phone = v.strip()
-    if not re.fullmatch(r"\d{10}", phone):
-        raise ValueError("Phone must be exactly 10 digits")
+    if not re.fullmatch(r"[6-9]\d{9}", phone):
+        raise ValueError("Phone must start with 6, 7, 8, or 9 and be exactly 10 digits")
     return phone
 
 
@@ -72,6 +72,7 @@ class UserCreate(BaseModel):
     role_id: int | None = Field(default=None, ge=1)
     role_ids: list[int] | None = Field(default=None, min_length=1)
     org_unit_id: int = Field(ge=1)
+    is_active: bool = True
 
     @model_validator(mode="after")
     def _resolve_role_ids(self) -> "UserCreate":

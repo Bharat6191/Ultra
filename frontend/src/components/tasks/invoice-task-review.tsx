@@ -231,7 +231,7 @@ export function InvoiceExceptionApprovalReview({
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <Card className="border-border/80 shadow-sm">
           <CardHeader className="space-y-1 pb-2">
-            <CardTitle className="text-base">Invoice identification</CardTitle>
+            <CardTitle className="text-base">Invoice Identification</CardTitle>
             <CardDescription className="text-xs">Key fields approvers use to identify the invoice and its work order coverage.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">

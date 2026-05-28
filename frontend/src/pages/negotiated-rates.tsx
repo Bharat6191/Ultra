@@ -13,7 +13,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson } from "@/lib/api"
-import { canListOrgUnitsForAssignments, hasPermission, isSuperuser } from "@/lib/permissions"
+import {
+  canListOrgUnitsForAssignments,
+  canReadNegotiatedRates,
+  hasPermission,
+  isSuperuser,
+} from "@/lib/permissions"
 import type { ContractorRateStatus } from "@/components/contractors/rateStatus"
 import {
   formatMoney,
@@ -112,7 +117,7 @@ export function NegotiatedRatesPage() {
   const [statusTab, setStatusTab] = React.useState<RateStatusTab>("all")
   const [plantFilter, setPlantFilter] = React.useState<string>("all")
 
-  const canView = hasPermission("contractor_rates.view") || isSuperuser()
+  const canView = canReadNegotiatedRates()
   const canCreate = hasPermission("contractor_rates.create") || isSuperuser()
 
   React.useEffect(() => {
@@ -190,7 +195,8 @@ export function NegotiatedRatesPage() {
       <Alert>
         <AlertTitle>Permission required</AlertTitle>
         <AlertDescription>
-          You need <span className="font-mono">contractor_rates.view</span> to access this page.
+          You need <span className="font-mono">contractor_rates.view</span> or{" "}
+          <span className="font-mono">contractor_rates.approve</span> to access this page.
         </AlertDescription>
       </Alert>
     )
