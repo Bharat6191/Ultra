@@ -14,7 +14,7 @@ for ``seed_demo_users.py`` and related demo tooling.
 
 from __future__ import annotations
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, selectinload
 
 import db.models  # noqa: F401 — register models
@@ -116,15 +116,21 @@ def ensure_work_orders_create_workflow(
         db.scalars(select(ApprovalWorkflowMapping).where(ApprovalWorkflowMapping.action_code == canonical)).all()
     )
     our_id = int(wf.id)
-    activated = False
-    for m in mappings:
-        m.is_active = int(m.workflow_id) == our_id
-        if m.is_active:
-            activated = True
-    if not activated:
+    target_mapping = next((m for m in mappings if int(m.workflow_id) == our_id), None)
+
+    db.execute(
+        update(ApprovalWorkflowMapping)
+        .where(ApprovalWorkflowMapping.action_code == canonical)
+        .values(is_active=False)
+    )
+    db.flush()
+
+    if target_mapping is None:
         db.add(
             ApprovalWorkflowMapping(action_code=canonical, workflow_id=our_id, is_active=True)
         )
+    else:
+        target_mapping.is_active = True
 
     repoint_pending_work_order_approval_tasks(db)
     db.commit()

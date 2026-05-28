@@ -18,7 +18,7 @@ export type InvoicesDashboardModule = {
 }
 
 export function InvoicesDashboard({ module }: { module: InvoicesDashboardModule }) {
-  const [mode, setMode] = React.useState<"count" | "value">("count")
+  const [mode, setMode] = React.useState<"count" | "value">("value")
   const showValues = mode === "value"
 
   return (

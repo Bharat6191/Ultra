@@ -46,7 +46,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[1] / "backend"
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 import db.models  # noqa: F401 — register all models on Base.metadata
@@ -216,11 +216,20 @@ def _ensure_workflow_for_action(
         # Keep tasks act-on-able when the DB still points at a retired approver role.
         step.approver_role_id = int(approver_role.id)
 
-    mapping = db.scalar(
-        select(ApprovalWorkflowMapping)
-        .where(ApprovalWorkflowMapping.action_code == action_code)
-        .where(ApprovalWorkflowMapping.workflow_id == wf.id)
+    mappings = list(
+        db.scalars(
+            select(ApprovalWorkflowMapping).where(ApprovalWorkflowMapping.action_code == action_code)
+        ).all()
     )
+    mapping = next((row for row in mappings if int(row.workflow_id) == int(wf.id)), None)
+
+    db.execute(
+        update(ApprovalWorkflowMapping)
+        .where(ApprovalWorkflowMapping.action_code == action_code)
+        .values(is_active=False)
+    )
+    db.flush()
+
     if mapping is None:
         db.add(
             ApprovalWorkflowMapping(

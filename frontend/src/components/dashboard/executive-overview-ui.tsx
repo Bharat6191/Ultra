@@ -8,7 +8,6 @@ import {
   Hourglass,
   Lock,
   Receipt,
-  ShieldAlert,
   Users,
   XCircle,
 } from "lucide-react"
@@ -169,11 +168,13 @@ function ModuleRow({
   healthPercent,
   metrics,
   sidebarFooter,
+  metricColumns = 4,
 }: {
   theme: ModuleTheme
   healthPercent: number
   metrics: React.ReactNode
   sidebarFooter?: React.ReactNode
+  metricColumns?: 3 | 4
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm">
@@ -185,7 +186,14 @@ function ModuleRow({
           {sidebarFooter ? <div className="pt-1">{sidebarFooter}</div> : null}
         </div>
 
-        <div className="grid flex-1 grid-cols-2 gap-2 p-3 sm:grid-cols-4 lg:p-4">{metrics}</div>
+        <div
+          className={cn(
+            "grid flex-1 grid-cols-2 gap-2 p-3 lg:p-4",
+            metricColumns === 3 ? "sm:grid-cols-3" : "sm:grid-cols-4",
+          )}
+        >
+          {metrics}
+        </div>
 
         <div className="flex items-center justify-center border-t border-zinc-100 px-4 py-4 lg:w-36 lg:border-l lg:border-t-0">
           <HealthDonut percent={healthPercent} label={theme.healthLabel} color={theme.accent} />
@@ -197,7 +205,7 @@ function ModuleRow({
 
 export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
   const { contractors: c, contractor_rates: r, work_orders: wo, invoices: inv } = data
-  const [invoiceMetricMode, setInvoiceMetricMode] = React.useState<"count" | "value">("count")
+  const [invoiceMetricMode, setInvoiceMetricMode] = React.useState<"count" | "value">("value")
 
   const contractorHealth = pct(c.active, c.total)
   const negotiationHealth = pct(r.approved, r.total_negotiations)
@@ -218,6 +226,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
           healthLabel: "Active contractors",
         }}
         healthPercent={contractorHealth}
+        metricColumns={3}
         metrics={
           <>
             <MetricTile label="Total" value={c.total} icon={<Users className="size-3.5" />} sparkColor="#f59e0b" />
@@ -228,13 +237,13 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
               tone="success"
               sparkColor="#f59e0b"
             />
-            <MetricTile
+            {/* <MetricTile
               label="Non-compliant"
               value={c.non_compliant}
               icon={<ShieldAlert className="size-3.5" />}
               tone="danger"
               sparkColor="#f59e0b"
-            />
+            /> */}
             <MetricTile
               label="Expiring docs"
               value={c.expiring_documents_7_days}

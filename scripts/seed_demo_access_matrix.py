@@ -29,7 +29,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[1] / "backend"
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, selectinload
 
 import db.models  # noqa: F401
@@ -271,12 +271,18 @@ def _ensure_single_step_workflow(
     mappings = list(
         db.scalars(select(ApprovalWorkflowMapping).where(ApprovalWorkflowMapping.action_code == canonical)).all()
     )
-    active = False
-    for mapping in mappings:
-        mapping.is_active = int(mapping.workflow_id) == int(wf.id)
-        if mapping.is_active:
-            active = True
-    if not active:
+    target_mapping = next((m for m in mappings if int(m.workflow_id) == int(wf.id)), None)
+
+    # Clear all active mappings for this action first so the partial unique index
+    # on ``(action_code) WHERE is_active`` never sees two active rows mid-flush.
+    db.execute(
+        update(ApprovalWorkflowMapping)
+        .where(ApprovalWorkflowMapping.action_code == canonical)
+        .values(is_active=False)
+    )
+    db.flush()
+
+    if target_mapping is None:
         db.add(
             ApprovalWorkflowMapping(
                 action_code=canonical,
@@ -284,6 +290,8 @@ def _ensure_single_step_workflow(
                 is_active=True,
             )
         )
+    else:
+        target_mapping.is_active = True
 
     _repoint_pending_role_tasks(db, entity_type=entity_type, approver_role_id=int(approver_role.id))
     db.commit()

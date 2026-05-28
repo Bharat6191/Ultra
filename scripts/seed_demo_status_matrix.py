@@ -32,7 +32,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 _SCRIPTS_ROOT = Path(__file__).resolve().parent
@@ -306,12 +306,16 @@ def _ensure_invoice_exception_workflow(
     mappings = list(
         db.scalars(select(ApprovalWorkflowMapping).where(ApprovalWorkflowMapping.action_code == canonical)).all()
     )
-    ours_active = False
-    for mapping in mappings:
-        mapping.is_active = int(mapping.workflow_id) == int(wf.id)
-        if mapping.is_active:
-            ours_active = True
-    if not ours_active:
+    target_mapping = next((m for m in mappings if int(m.workflow_id) == int(wf.id)), None)
+
+    db.execute(
+        update(ApprovalWorkflowMapping)
+        .where(ApprovalWorkflowMapping.action_code == canonical)
+        .values(is_active=False)
+    )
+    db.flush()
+
+    if target_mapping is None:
         db.add(
             ApprovalWorkflowMapping(
                 action_code=canonical,
@@ -319,6 +323,8 @@ def _ensure_invoice_exception_workflow(
                 is_active=True,
             )
         )
+    else:
+        target_mapping.is_active = True
     db.commit()
     db.refresh(wf)
     return wf
