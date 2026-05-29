@@ -335,7 +335,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
   const invoiceItems: ModuleMetricItem[] = [
     {
       key: "total",
-      label: showInvoiceValues ? "Total Invoice Value" : "Total Invoices",
+      label: showInvoiceValues ? "Total Invoice" : "Total Invoices",
       shortLabel: "Total",
       value: showInvoiceValues ? (inv.total_value ?? 0) : inv.total,
       valueText: showInvoiceValues ? formatCurrency(inv.total_value ?? 0) : undefined,
@@ -352,7 +352,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
     },
     {
       key: "pending",
-      label: showInvoiceValues ? "Pending Approval Value" : "Pending Approval",
+      label: showInvoiceValues ? "Pending Approval" : "Pending Approval",
       shortLabel: "Pending",
       value: showInvoiceValues ? (inv.pending_exception_approval_value ?? 0) : inv.pending_exception_approval,
       valueText: showInvoiceValues ? formatCurrency(inv.pending_exception_approval_value ?? 0) : undefined,
@@ -361,7 +361,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
     },
     {
       key: "blocked",
-      label: showInvoiceValues ? "Blocked Value" : "Blocked Invoices",
+      label: showInvoiceValues ? "Blocked Invoices" : "Blocked Invoices",
       shortLabel: "Blocked",
       value: showInvoiceValues ? (inv.blocked_value ?? 0) : (inv.blocked ?? 0),
       valueText: showInvoiceValues ? formatCurrency(inv.blocked_value ?? 0) : undefined,
