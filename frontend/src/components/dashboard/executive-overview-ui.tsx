@@ -156,7 +156,7 @@ function ModuleMetricChart({
                 />
                 <Bar
                   dataKey="value"
-                  radius={[12, 12, 0, 0]}
+                  radius={[0, 0, 0, 0]}
                   stroke={accent}
                   strokeWidth={1.25}
                   maxBarSize={compactMetricLayout ? 88 : 72}

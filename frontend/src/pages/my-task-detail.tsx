@@ -323,6 +323,18 @@ function actorLine(ev: TaskAuditLog): string {
   return "—"
 }
 
+function auditCommentText(ev: TaskAuditLog, comments: TaskComment[]): string {
+  const newValue = ev.new_value as { comment?: unknown; comment_id?: unknown } | null
+  if (newValue && typeof newValue.comment === "string" && newValue.comment.trim() !== "") {
+    return newValue.comment
+  }
+  if (newValue && typeof newValue.comment_id === "number") {
+    const row = comments.find((comment) => comment.id === newValue.comment_id)
+    if (row && row.comment.trim() !== "") return row.comment
+  }
+  return "—"
+}
+
 function approvalPayloadEntries(payload: Record<string, unknown>, entityType: string): { key: string; label: string; value: string }[] {
   const p = payload ?? {}
   if (entityType === "user_creation") {
@@ -982,18 +994,29 @@ export function MyTaskDetailPage() {
                   <ul className="space-y-2 text-sm">
                     {sortedAudit.map((ev) => (
                       <li key={ev.id} className="rounded-md border bg-muted/30 px-2.5 py-1.5">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="font-medium">{taskAuditTitle(ev)}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {ev.created_at ? formatDateTime(ev.created_at) : "—"}
-                          </span>
+                        <div className="space-y-1.5">
+                          <div className="min-w-0">
+                            <div className="flex items-start justify-between gap-3">
+                              {/* <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Task</div> */}
+                              <div className="min-w-0 text-xs font-medium leading-snug sm:text-sm">{taskAuditTitle(ev)}</div>
+                              <span className="shrink-0 text-right text-xs text-muted-foreground">
+                                {ev.created_at ? formatDateTime(ev.created_at) : "—"}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="min-w-0">
+                            {/* <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                              Task Performed By
+                            </div> */}
+                            <div className="text-xs leading-snug sm:text-sm">{actorLine(ev)}</div>
+                          </div>
+                          <div className="min-w-0">
+                            {/* <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Comment</div> */}
+                            <div className="text-xs whitespace-pre-wrap leading-snug sm:text-sm">
+                              {auditCommentText(ev, task.comments ?? [])}
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-xs text-muted-foreground">{actorLine(ev)}</p>
-                        {ev.new_value && typeof (ev.new_value as { comment?: unknown }).comment === "string" ? (
-                          <p className="mt-0.5 text-xs text-muted-foreground">
-                            {String((ev.new_value as { comment: string }).comment)}
-                          </p>
-                        ) : null}
                       </li>
                     ))}
                   </ul>
