@@ -35,6 +35,7 @@ function workOrdersListPath(tab: WoTab, page: number): string {
   if (tab === "draft") {
     q.append("statuses", "draft")
     q.append("statuses", "rejected")
+    q.append("statuses", "pending_approval")
   } else if (tab === "operating") {
     q.append("statuses", "active")
     q.append("statuses", "approved")

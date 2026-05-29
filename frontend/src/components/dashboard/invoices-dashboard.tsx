@@ -46,27 +46,27 @@ export function InvoicesDashboard({ module }: { module: InvoicesDashboardModule 
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi
-          title={showValues ? "Total invoice value" : "Total invoices"}
+          title={showValues ? "Total Invoices" : "Total invoices"}
           value={showValues ? (module.total_value ?? 0) : module.total}
           valueText={showValues ? formatCurrency(module.total_value ?? 0) : undefined}
           icon={<Receipt className="size-4" />}
         />
         <Kpi
-          title={showValues ? "Pass value" : "Pass"}
+          title={showValues ? "Approved Invoices" : "Approved Invoices"}
           value={showValues ? (module.pass_value ?? 0) : (module.pass ?? 0)}
           valueText={showValues ? formatCurrency(module.pass_value ?? 0) : undefined}
           icon={<CheckCircle2 className="size-4" />}
           tone="success"
         />
         <Kpi
-          title={showValues ? "Pending approval value" : "Pending approval"}
+          title={showValues ? "Pending Approval " : "Pending Approval"}
           value={showValues ? (module.pending_exception_approval_value ?? 0) : module.pending_exception_approval}
           valueText={showValues ? formatCurrency(module.pending_exception_approval_value ?? 0) : undefined}
           icon={<Hourglass className="size-4" />}
           tone="info"
         />
         <Kpi
-          title={showValues ? "Blocked value" : "Blocked"}
+          title={showValues ? "Blocked Invoices" : "Blocked Invoices"}
           value={showValues ? (module.blocked_value ?? 0) : (module.blocked ?? 0)}
           valueText={showValues ? formatCurrency(module.blocked_value ?? 0) : undefined}
           icon={<XCircle className="size-4" />}

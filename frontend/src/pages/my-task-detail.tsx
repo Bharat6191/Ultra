@@ -997,7 +997,6 @@ export function MyTaskDetailPage() {
                         <div className="space-y-1.5">
                           <div className="min-w-0">
                             <div className="flex items-start justify-between gap-3">
-                              {/* <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Task</div> */}
                               <div className="min-w-0 text-xs font-medium leading-snug sm:text-sm">{taskAuditTitle(ev)}</div>
                               <span className="shrink-0 text-right text-xs text-muted-foreground">
                                 {ev.created_at ? formatDateTime(ev.created_at) : "—"}
@@ -1005,13 +1004,9 @@ export function MyTaskDetailPage() {
                             </div>
                           </div>
                           <div className="min-w-0">
-                            {/* <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                              Task Performed By
-                            </div> */}
                             <div className="text-xs leading-snug sm:text-sm">{actorLine(ev)}</div>
                           </div>
                           <div className="min-w-0">
-                            {/* <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Comment</div> */}
                             <div className="text-xs whitespace-pre-wrap leading-snug sm:text-sm">
                               {auditCommentText(ev, task.comments ?? [])}
                             </div>

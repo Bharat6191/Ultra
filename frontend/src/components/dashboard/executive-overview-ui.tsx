@@ -126,6 +126,7 @@ function ModuleMetricChart({
           {hasAnyValue ? (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
+                accessibilityLayer={false}
                 data={data}
                 margin={{ top: 8, right: 8, left: 0, bottom: 8 }}
                 barCategoryGap={compactMetricLayout ? "8%" : "14%"}
@@ -133,14 +134,14 @@ function ModuleMetricChart({
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e4e4e7" />
                 <XAxis
                   dataKey="shortLabel"
-                  tick={{ fontSize: 10, fill: "#71717a" }}
+                  tick={{ fontSize: 10, fill: "#18181b", fontWeight: 700 }}
                   interval={0}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
                   allowDecimals={false}
-                  tick={{ fontSize: 10, fill: "#71717a" }}
+                  tick={{ fontSize: 10, fill: "#18181b", fontWeight: 700 }}
                   width={yAxisWidth}
                   axisLine={false}
                   tickLine={false}
@@ -181,12 +182,12 @@ function ModuleMetricChart({
           )}
         >
           {items.map((item) => (
-            <div key={item.key} className="min-w-0">
-              <div className="text-[11px] font-semibold leading-4 text-zinc-900">{item.label}</div>
+            <div key={item.key} className="min-w-0 text-center">
+              <div className="text-[11px] font-bold leading-4 text-zinc-950 sm:text-xs">{item.label}</div>
               <div
                 className={cn(
-                  "mt-1 font-medium tracking-tight text-zinc-700",
-                  item.valueText ? "text-sm leading-5 sm:text-base" : "text-xl tabular-nums",
+                  "mt-1 text-center font-medium tracking-tight text-zinc-700",
+                  item.valueText ? "text-[11px] leading-5 sm:text-xs" : "text-base tabular-nums sm:text-lg",
                 )}
               >
                 {item.valueText ?? formatNumber(item.value)}
@@ -241,7 +242,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
   const contractorItems: ModuleMetricItem[] = [
     {
       key: "total",
-      label: "Total contractors",
+      label: "Total Contractors",
       shortLabel: "Total",
       value: c.total,
       icon: <Users className="size-3.5" />,
@@ -256,7 +257,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
     },
     {
       key: "expiring",
-      label: "Expiring docs",
+      label: "Expiring Docs",
       shortLabel: "Expiring",
       value: c.expiring_documents_7_days,
       icon: <Clock3 className="size-3.5" />,
@@ -267,14 +268,14 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
   const negotiationItems: ModuleMetricItem[] = [
     {
       key: "total",
-      label: "Total negotiations",
+      label: "Total Negotiations",
       shortLabel: "Total",
       value: r.total_negotiations,
       icon: <Handshake className="size-3.5" />,
     },
     {
       key: "pending",
-      label: "Pending approval",
+      label: "Pending Approval",
       shortLabel: "Pending",
       value: r.pending_approvals,
       icon: <Hourglass className="size-3.5" />,
@@ -300,7 +301,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
   const workOrderItems: ModuleMetricItem[] = [
     {
       key: "total",
-      label: "Total work orders",
+      label: "Total Work Orders",
       shortLabel: "Total",
       value: wo.total,
       icon: <BriefcaseBusiness className="size-3.5" />,
@@ -315,7 +316,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
     },
     {
       key: "pending",
-      label: "Pending approval",
+      label: "Pending Approval",
       shortLabel: "Pending",
       value: wo.pending_approval,
       icon: <Hourglass className="size-3.5" />,
@@ -334,7 +335,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
   const invoiceItems: ModuleMetricItem[] = [
     {
       key: "total",
-      label: showInvoiceValues ? "Total invoice value" : "Total invoices",
+      label: showInvoiceValues ? "Total Invoice Value" : "Total Invoices",
       shortLabel: "Total",
       value: showInvoiceValues ? (inv.total_value ?? 0) : inv.total,
       valueText: showInvoiceValues ? formatCurrency(inv.total_value ?? 0) : undefined,
@@ -342,7 +343,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
     },
     {
       key: "pass",
-      label: showInvoiceValues ? "Pass value" : "Pass",
+      label: showInvoiceValues ? "Approved Invoices" : "Approved Invoices",
       shortLabel: "Pass",
       value: showInvoiceValues ? (inv.pass_value ?? 0) : (inv.pass ?? 0),
       valueText: showInvoiceValues ? formatCurrency(inv.pass_value ?? 0) : undefined,
@@ -351,7 +352,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
     },
     {
       key: "pending",
-      label: showInvoiceValues ? "Pending approval value" : "Pending approval",
+      label: showInvoiceValues ? "Pending Approval Value" : "Pending Approval",
       shortLabel: "Pending",
       value: showInvoiceValues ? (inv.pending_exception_approval_value ?? 0) : inv.pending_exception_approval,
       valueText: showInvoiceValues ? formatCurrency(inv.pending_exception_approval_value ?? 0) : undefined,
@@ -360,7 +361,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
     },
     {
       key: "blocked",
-      label: showInvoiceValues ? "Blocked value" : "Blocked",
+      label: showInvoiceValues ? "Blocked Value" : "Blocked Invoices",
       shortLabel: "Blocked",
       value: showInvoiceValues ? (inv.blocked_value ?? 0) : (inv.blocked ?? 0),
       valueText: showInvoiceValues ? formatCurrency(inv.blocked_value ?? 0) : undefined,

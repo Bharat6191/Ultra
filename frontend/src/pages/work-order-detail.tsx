@@ -142,9 +142,8 @@ function workOrderListTabForStatus(status: string): "draft" | "operating" | "com
   switch (String(status || "").toLowerCase()) {
     case "draft":
     case "rejected":
-      return "draft"
     case "pending_approval":
-      return null
+      return "draft"
     case "approved":
     case "active":
       return "operating"
@@ -541,6 +540,7 @@ export function WorkOrderDetailPage() {
   const showHeaderArchiveButton = canDelete && row.is_active !== false && row.status !== "draft"
   const showFooterActivateButton = row.is_active === false && canDelete
   const showCompletionEngine = row.is_active !== false && row.status === "active" && canManageCompletion && !editableDraft
+  const backTab = row.is_active === false ? "inactive" : workOrderListTabForStatus(row.status)
 
   return (
     <div className="space-y-6">
@@ -568,7 +568,7 @@ export function WorkOrderDetailPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild size="sm" variant="outline">
-            <Link to={row.is_active === false ? "/dashboard/work-orders?tab=inactive" : "/dashboard/work-orders"}>
+            <Link to={backTab ? `/dashboard/work-orders?tab=${backTab}` : "/dashboard/work-orders"}>
               Back
             </Link>
           </Button>
