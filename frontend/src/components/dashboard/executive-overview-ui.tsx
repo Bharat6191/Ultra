@@ -150,9 +150,15 @@ function ModuleMetricChart({
                 <Tooltip
                   cursor={{ fill: "rgba(15, 23, 42, 0.04)" }}
                   contentStyle={{ borderRadius: 14, borderColor: "#e4e4e7" }}
-                  formatter={(value, _name, entry) => {
-                    const row = entry?.payload as { tooltipValue?: string; label?: string } | undefined
-                    return [row?.tooltipValue ?? formatNumber(Number(value ?? 0)), row?.label ?? ""]
+                  content={({ active, payload }) => {
+                    const row = payload?.[0]?.payload as { tooltipValue?: string; label?: string } | undefined
+                    if (!active || !row) return null
+                    return (
+                      <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-sm">
+                        <div className="text-xs font-semibold text-zinc-900">{row.label ?? "—"}</div>
+                        <div className="mt-0.5 text-xs text-zinc-700">{row.tooltipValue ?? "—"}</div>
+                      </div>
+                    )
                   }}
                 />
                 <Bar

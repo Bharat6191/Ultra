@@ -43,7 +43,7 @@ type InvoiceReportSummary = {
 }
 
 const STATUS_OPTIONS = [
-  { value: "all", label: "All Statuses" },
+  { value: "all", label: "All Status" },
   { value: "draft", label: "Draft" },
   { value: "submitted", label: "Submitted" },
   { value: "pending_exception_approval", label: "Pending Approval" },
@@ -252,7 +252,7 @@ export function ReportsPage() {
   }, [loadReport])
 
   const selectedStatusLabel =
-    STATUS_OPTIONS.find((option) => option.value === appliedFilters.status)?.label ?? "All Statuses"
+    STATUS_OPTIONS.find((option) => option.value === appliedFilters.status)?.label ?? "All Status"
   const selectedPlantLabel = findName(plants, appliedFilters.orgUnitId, "All Plants")
   const selectedContractorLabel = findName(contractors, appliedFilters.contractorId, "All Contractors")
 
