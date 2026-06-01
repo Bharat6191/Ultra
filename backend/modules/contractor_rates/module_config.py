@@ -4,7 +4,7 @@ from __future__ import annotations
 
 CONTRACTOR_RATES_MODULE_CONFIG = {
     "key": "contractor_rates",
-    "title": "Negotiations Rates",
+    "title": "Negotiations",
     "tabs": [
         {
             "key": "contractor_rates",
