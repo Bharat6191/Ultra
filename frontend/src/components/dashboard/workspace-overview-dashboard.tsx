@@ -1,5 +1,3 @@
-import { Bell } from "lucide-react"
-
 import type { InvoicesDashboardModule } from "@/components/dashboard/invoices-dashboard"
 import { ExecutiveModuleRows, type ExecutiveOverviewData } from "@/components/dashboard/executive-overview-ui"
 import type { WorkOrdersDashboardModule } from "@/components/dashboard/work-orders-dashboard"
@@ -87,13 +85,6 @@ export function WorkspaceOverviewDashboard({
           <span className="inline-flex h-9 items-center rounded-lg border border-zinc-200 bg-white px-3 text-xs text-muted-foreground">
             All plants
           </span>
-          <button
-            type="button"
-            className="inline-flex size-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-muted-foreground"
-            aria-label="Notifications"
-          >
-            <Bell className="size-4" />
-          </button>
         </div>
       </div>
 
