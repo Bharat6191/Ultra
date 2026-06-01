@@ -503,6 +503,7 @@ export function RolesRedesignDemoPage() {
                 />
               </div>
             </CardHeader>
+
             <CardContent className="space-y-3">
               {filteredRoles.map((role) => {
                 const modules = modulesByRole[role.id] ?? []

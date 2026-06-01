@@ -169,7 +169,7 @@ export function RolesPage() {
   const [creating, setCreating] = React.useState(false)
   const [createOrgUnitIds, setCreateOrgUnitIds] = React.useState<Set<number>>(() => new Set())
   const [search, setSearch] = React.useState("")
-  const [expandedModules, setExpandedModules] = React.useState<Set<string>>(() => new Set())
+  const [expandedModuleKey, setExpandedModuleKey] = React.useState<string | null>(null)
 
   const canCreateRole = hasPermission("roles.create") || isSuperuser()
   /** Same as ``GET /admin/org-units`` (plant pickers for roles vs. Plants admin module). */
@@ -227,12 +227,6 @@ export function RolesPage() {
     if (selectedRoleId != null) void loadRole(selectedRoleId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRoleId])
-
-  React.useEffect(() => {
-    if (catalog?.modules?.length && expandedModules.size === 0) {
-      setExpandedModules(new Set(catalog.modules.slice(0, 4).map((mod) => mod.key)))
-    }
-  }, [catalog, expandedModules.size])
 
   const hasDirtyPermissions = React.useMemo(() => {
     if (!selectedRole) return false
@@ -298,12 +292,7 @@ export function RolesPage() {
   }
 
   function toggleModule(moduleKey: string) {
-    setExpandedModules((current) => {
-      const next = new Set(current)
-      if (next.has(moduleKey)) next.delete(moduleKey)
-      else next.add(moduleKey)
-      return next
-    })
+    setExpandedModuleKey((current) => (current === moduleKey ? null : moduleKey))
   }
 
   function setModuleEnabled(module: CatalogModule, enabled: boolean) {
@@ -519,7 +508,7 @@ export function RolesPage() {
               ) : null}
             </div>
 
-            <div className="relative">
+            <div className="relative mb-3">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search}
@@ -689,7 +678,7 @@ export function RolesPage() {
               ) : (
                 catalog.modules.map((mod) => {
                   const stats = countModulePermissionStats(mod, selectedPermissionIds)
-                  const isExpanded = expandedModules.has(mod.key)
+                  const isExpanded = expandedModuleKey === mod.key
                   const coverage = stats.total > 0 ? Math.round((stats.enabled / stats.total) * 100) : 0
                   return (
                     <Card key={mod.key} className="border-zinc-200 bg-white">

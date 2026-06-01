@@ -43,7 +43,7 @@ MODULE_CONFIG: list[ModuleConfigDict] = [
     },
     {
         "key": "org_units",
-        "title": "Clusters & Plants (org units)",
+        "title": "Clusters & Plants",
         "tabs": [
             {
                 "key": "org_units",
