@@ -21,6 +21,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import { useNavigate } from "react-router-dom"
 
 import type { RatesDashboardModule } from "@/components/contractors/RatesDashboard"
 import type { ContractorsDashboardModule } from "@/components/contractors/ContractorDashboard"
@@ -47,6 +48,7 @@ type ModuleMetricItem = {
   valueText?: string
   icon: React.ReactNode
   tone?: MetricTone
+  navigateTo?: string
 }
 
 type ModuleTheme = {
@@ -99,9 +101,11 @@ function formatCompactNumber(value: number): string {
 function ModuleMetricChart({
   items,
   accent,
+  onMetricClick,
 }: {
   items: ModuleMetricItem[]
   accent: string
+  onMetricClick?: (item: ModuleMetricItem) => void
 }) {
   const data = React.useMemo(
     () =>
@@ -119,10 +123,22 @@ function ModuleMetricChart({
   const yAxisTickFormatter = (value: number) => (maxValue >= 1000 ? formatCompactNumber(value) : formatNumber(value))
   const compactMetricLayout = items.length <= 3
 
+  function handleMetricClick(item: ModuleMetricItem) {
+    if (!item.navigateTo || !onMetricClick) return
+    onMetricClick(item)
+  }
+
   return (
     <Card className="rounded-2xl border-zinc-200/80 shadow-none">
       <CardContent className="space-y-3 p-4">
-        <div className="h-40 min-h-[160px] w-full min-w-0">
+        <div
+          className="dashboard-metric-chart h-40 min-h-[160px] w-full min-w-0"
+          onMouseDownCapture={(event) => {
+            if (event.target instanceof Element && event.target.closest(".recharts-surface")) {
+              event.preventDefault()
+            }
+          }}
+        >
           {hasAnyValue ? (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -169,7 +185,12 @@ function ModuleMetricChart({
                   maxBarSize={compactMetricLayout ? 88 : 72}
                 >
                   {data.map((item) => (
-                    <Cell key={item.key} fill={item.fill} />
+                    <Cell
+                      key={item.key}
+                      fill={item.fill}
+                      onClick={() => handleMetricClick(item)}
+                      style={item.navigateTo ? { cursor: "pointer" } : undefined}
+                    />
                   ))}
                 </Bar>
               </BarChart>
@@ -192,7 +213,7 @@ function ModuleMetricChart({
               <div className="text-[11px] font-bold leading-4 text-zinc-950 sm:text-xs">{item.label}</div>
               <div
                 className={cn(
-                  "mt-1 text-center font-medium tracking-tight text-zinc-700",
+                  "mt-1 text-center font-normal tracking-tight text-zinc-950",
                   item.valueText ? "text-[11px] leading-5 sm:text-xs" : "text-base tabular-nums sm:text-lg",
                 )}
               >
@@ -240,6 +261,7 @@ function ModuleRow({
 }
 
 export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
+  const navigate = useNavigate()
   const { contractors: c, contractor_rates: r, work_orders: wo, invoices: inv } = data
   const [invoiceMetricMode, setInvoiceMetricMode] = React.useState<"count" | "value">("value")
 
@@ -248,10 +270,11 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
   const contractorItems: ModuleMetricItem[] = [
     {
       key: "total",
-      label: "Total Contractors",
+      label: "Total",
       shortLabel: "Total",
       value: c.total,
       icon: <Users className="size-3.5" />,
+      navigateTo: "/dashboard/contractors",
     },
     {
       key: "active",
@@ -260,6 +283,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
       value: c.active,
       icon: <CheckCircle2 className="size-3.5" />,
       tone: "success",
+      navigateTo: "/dashboard/contractors?status=active",
     },
     {
       key: "expiring",
@@ -268,24 +292,27 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
       value: c.expiring_documents_7_days,
       icon: <Clock3 className="size-3.5" />,
       tone: "warning",
+      navigateTo: "/dashboard/contractors?expiring=soon",
     },
   ]
 
   const negotiationItems: ModuleMetricItem[] = [
     {
       key: "total",
-      label: "Total Negotiations",
+      label: "Total ",
       shortLabel: "Total",
       value: r.total_negotiations,
       icon: <Handshake className="size-3.5" />,
+      navigateTo: "/dashboard/negotiated-rates",
     },
     {
       key: "pending",
-      label: "Pending Approval",
+      label: "Pending",
       shortLabel: "Pending",
       value: r.pending_approvals,
       icon: <Hourglass className="size-3.5" />,
       tone: "warning",
+      navigateTo: "/dashboard/negotiated-rates?status=pending_approval",
     },
     {
       key: "approved",
@@ -294,6 +321,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
       value: r.approved,
       icon: <CheckCircle2 className="size-3.5" />,
       tone: "success",
+      navigateTo: "/dashboard/negotiated-rates?status=approved",
     },
     {
       key: "rejected",
@@ -301,16 +329,18 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
       shortLabel: "Rejected",
       value: r.rejected,
       icon: <XCircle className="size-3.5" />,
+      navigateTo: "/dashboard/negotiated-rates?status=rejected",
     },
   ]
 
   const workOrderItems: ModuleMetricItem[] = [
     {
       key: "total",
-      label: "Total Work Orders",
+      label: "Total",
       shortLabel: "Total",
       value: wo.total,
       icon: <BriefcaseBusiness className="size-3.5" />,
+      navigateTo: "/dashboard/work-orders",
     },
     {
       key: "active",
@@ -319,14 +349,16 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
       value: wo.active,
       icon: <CheckCircle2 className="size-3.5" />,
       tone: "success",
+      navigateTo: "/dashboard/work-orders?tab=operating",
     },
     {
       key: "pending",
-      label: "Pending Approval",
+      label: "Pending",
       shortLabel: "Pending",
       value: wo.pending_approval,
       icon: <Hourglass className="size-3.5" />,
       tone: "warning",
+      navigateTo: "/dashboard/work-orders?tab=draft&status=pending_approval",
     },
     {
       key: "drafts",
@@ -335,46 +367,59 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
       value: wo.draft,
       icon: <FileEdit className="size-3.5" />,
       tone: "info",
+      navigateTo: "/dashboard/work-orders?tab=draft&status=draft",
     },
   ]
 
   const invoiceItems: ModuleMetricItem[] = [
     {
       key: "total",
-      label: showInvoiceValues ? "Total Invoice" : "Total Invoices",
+      label: showInvoiceValues ? "Total" : "Total",
       shortLabel: "Total",
       value: showInvoiceValues ? (inv.total_value ?? 0) : inv.total,
       valueText: showInvoiceValues ? formatCurrency(inv.total_value ?? 0) : undefined,
       icon: <Receipt className="size-3.5" />,
+      navigateTo: "/dashboard/invoices",
     },
     {
       key: "pass",
-      label: showInvoiceValues ? "Approved Invoices" : "Approved Invoices",
+      label: showInvoiceValues ? "Approved " : "Approved",
       shortLabel: "Pass",
       value: showInvoiceValues ? (inv.pass_value ?? 0) : (inv.pass ?? 0),
       valueText: showInvoiceValues ? formatCurrency(inv.pass_value ?? 0) : undefined,
       icon: <CheckCircle2 className="size-3.5" />,
       tone: "success",
+      navigateTo: "/dashboard/invoices?status=pass",
     },
     {
       key: "pending",
-      label: showInvoiceValues ? "Pending Approval" : "Pending Approval",
+      label: showInvoiceValues ? "Approval" : " Approval",
       shortLabel: "Pending",
       value: showInvoiceValues ? (inv.pending_exception_approval_value ?? 0) : inv.pending_exception_approval,
       valueText: showInvoiceValues ? formatCurrency(inv.pending_exception_approval_value ?? 0) : undefined,
       icon: <Lock className="size-3.5" />,
       tone: "warning",
+      navigateTo: "/dashboard/invoices?status=pending_exception_approval",
     },
     {
       key: "blocked",
-      label: showInvoiceValues ? "Blocked Invoices" : "Blocked Invoices",
+      label: showInvoiceValues ? "Blocked" : "Blocked",
       shortLabel: "Blocked",
       value: showInvoiceValues ? (inv.blocked_value ?? 0) : (inv.blocked ?? 0),
       valueText: showInvoiceValues ? formatCurrency(inv.blocked_value ?? 0) : undefined,
       icon: <XCircle className="size-3.5" />,
       tone: "danger",
+      navigateTo: "/dashboard/invoices?status=blocked",
     },
   ]
+
+  const onMetricClick = React.useCallback(
+    (item: ModuleMetricItem) => {
+      if (!item.navigateTo) return
+      navigate(item.navigateTo)
+    },
+    [navigate],
+  )
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
@@ -387,7 +432,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
           subtitle: "Lifecycle, compliance and plant coverage.",
           healthLabel: "Active contractors",
         }}
-        chart={<ModuleMetricChart items={contractorItems} accent="#f59e0b" />}
+        chart={<ModuleMetricChart items={contractorItems} accent="#f59e0b" onMetricClick={onMetricClick} />}
       />
 
       <ModuleRow
@@ -399,7 +444,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
           subtitle: "Vendor rate negotiations and approvals.",
           healthLabel: "Approved rate share",
         }}
-        chart={<ModuleMetricChart items={negotiationItems} accent="#3b82f6" />}
+        chart={<ModuleMetricChart items={negotiationItems} accent="#3b82f6" onMetricClick={onMetricClick} />}
       />
 
       <ModuleRow
@@ -411,7 +456,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
           subtitle: "Execution and approval across plants.",
           healthLabel: "Active work orders",
         }}
-        chart={<ModuleMetricChart items={workOrderItems} accent="#10b981" />}
+        chart={<ModuleMetricChart items={workOrderItems} accent="#10b981" onMetricClick={onMetricClick} />}
       />
 
       <ModuleRow
@@ -451,7 +496,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
             </Button>
           </div>
         }
-        chart={<ModuleMetricChart items={invoiceItems} accent="#8b5cf6" />}
+        chart={<ModuleMetricChart items={invoiceItems} accent="#8b5cf6" onMetricClick={onMetricClick} />}
       />
     </div>
   )

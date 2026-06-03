@@ -568,43 +568,47 @@ export function MyTaskDetailPage() {
   function renderApprovalDecisionEditor(extraClassName?: string) {
     if (!task || task.task_type !== "approval" || !task.approval) return null
     return (
-      <div className={cn("flex w-full min-w-0 max-w-2xl flex-col gap-2", extraClassName)}>
+      <div className={cn("w-full min-w-0 space-y-2.5", extraClassName)}>
         <textarea
+          id="approval-comment"
           className={cn(
-            "min-h-[64px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40",
+            "min-h-[74px] w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40",
           )}
           value={actionComment}
           onChange={(e) => setActionComment(e.target.value)}
-          rows={2}
-          placeholder="Optional note for the approver record…"
+          rows={3}
+          placeholder="Optional note for the approver record..."
           disabled={acting}
         />
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="destructive"
-            onClick={() => void approveOrReject("reject")}
-            disabled={acting || !canApprovalAct}
-          >
-            Reject
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="default"
-            onClick={() => void approveOrReject("approve")}
-            disabled={acting || !canApprovalAct}
-          >
-            Approve
-          </Button>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          {!canApprovalAct ? (
+            <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
+              Needs <span className="font-mono">{approvalActionCodes.join(" or ")}</span> on your role.
+            </p>
+          ) : (
+            <div />
+          )}
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              onClick={() => void approveOrReject("reject")}
+              disabled={acting || !canApprovalAct}
+            >
+              Reject
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="default"
+              onClick={() => void approveOrReject("approve")}
+              disabled={acting || !canApprovalAct}
+            >
+              Approve
+            </Button>
+          </div>
         </div>
-        {!canApprovalAct ? (
-          <p className="text-right text-xs text-muted-foreground">
-            Needs{" "}
-            <span className="font-mono">{approvalActionCodes.join(" or ")}</span> on your role.
-          </p>
-        ) : null}
       </div>
     )
   }
@@ -745,17 +749,13 @@ export function MyTaskDetailPage() {
       ) : null}
 
       {approvalStepNeedsDecision && task?.approval && !loading ? (
-        <Card className="border-emerald-200/80 bg-emerald-50/40 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/20">
-          <CardHeader className="space-y-1 pb-2 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <div className="space-y-0.5">
+        <Card
+          size="sm"
+          className="border-emerald-200/80 bg-emerald-50/40 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/20"
+        >
+          <CardHeader className="pb-1.5 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div>
               <CardTitle className="text-base">Approve or reject this step</CardTitle>
-              <CardDescription className="text-sm">
-                {task.approval.step_order != null
-                  ? `Step ${task.approval.step_order}${
-                      task.approval.approver_role_name ? ` of ${task.approval.approver_role_name}` : ""
-                    }${task.approval.required_approvals != null ? ` · ${task.approval.required_approvals} approval(s) required` : ""}`
-                  : "Approval step"}
-              </CardDescription>
             </div>
             <Badge variant={taskStatusBadgeVariant(task.status)} className="w-fit shrink-0">
               {task.status}

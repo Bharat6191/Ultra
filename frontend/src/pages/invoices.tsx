@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { Plus } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -25,14 +25,17 @@ const INVOICE_STATUS_TABS: { id: InvoiceStatusTab; label: string }[] = [
 
 export function InvoicesPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const canCreate = hasPermission("invoices.create")
   const canView = hasPermission("invoices.view")
 
   const [rows, setRows] = React.useState<any[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
-  const [statusTab, setStatusTab] = React.useState<InvoiceStatusTab>("all")
   const [contractors, setContractors] = React.useState<{ id: number; name: string }[]>([])
   const [plants, setPlants] = React.useState<{ id: number; name: string }[]>([])
+  const statusFilter = (searchParams.get("status") ?? "all").trim().toLowerCase()
+  const statusTab: InvoiceStatusTab =
+    statusFilter === "pass" ? "pass" : statusFilter === "blocked" ? "blocked" : "all"
 
   const contractorLabel = React.useCallback(
     (id: number) => contractors.find((c) => c.id === id)?.name ?? `#${id}`,
@@ -110,10 +113,13 @@ export function InvoicesPage() {
 
   const filtered = React.useMemo(() => {
     if (!rows) return []
-    if (statusTab === "all") return rows
-    if (statusTab === "pass") return rows.filter((r) => invoiceDisplayStatus(r) === "pass")
-    return rows.filter((r) => invoiceDisplayStatus(r) === "blocked")
-  }, [rows, statusTab])
+    if (statusFilter === "pending_exception_approval") {
+      return rows.filter((r) => String(r.status ?? "").toLowerCase() === "pending_exception_approval")
+    }
+    if (statusFilter === "pass") return rows.filter((r) => invoiceDisplayStatus(r) === "pass")
+    if (statusFilter === "blocked") return rows.filter((r) => invoiceDisplayStatus(r) === "blocked")
+    return rows
+  }, [rows, statusFilter])
 
   return (
     <div className="space-y-4">
@@ -154,7 +160,12 @@ export function InvoicesPage() {
                   size="sm"
                   variant={statusTab === t.id ? "default" : "outline"}
                   className="h-8"
-                  onClick={() => setStatusTab(t.id)}
+                  onClick={() => {
+                    const next = new URLSearchParams(searchParams)
+                    if (t.id === "all") next.delete("status")
+                    else next.set("status", t.id)
+                    setSearchParams(next, { replace: true })
+                  }}
                 >
                   {t.label}
                   <span
@@ -170,6 +181,9 @@ export function InvoicesPage() {
               )
             })}
           </div>
+          {statusFilter === "pending_exception_approval" ? (
+            <div className="mt-2 text-xs text-muted-foreground">Showing pending approval invoices.</div>
+          ) : null}
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto border-t">
           <Table>

@@ -297,13 +297,14 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                   {isSubmitting ? "Signing in…" : "Sign in"}
                 </Button>
+
+                <div className="pt-4 text-center text-foreground">
+                  <div className="text-sm font-medium">{AUTH_POWERED_BY}</div>
+                  <div className="mt-2 text-sm">{AUTH_APP_VERSION}</div>
+                </div>
               </form>
             )}
 
-            <div className="pt-4 text-center text-foreground">
-              <div className="text-sm font-medium">{AUTH_POWERED_BY}</div>
-              <div className="mt-2 text-sm">{AUTH_APP_VERSION}</div>
-            </div>
           </CardContent>
         </Card>
       </div>

@@ -35,7 +35,7 @@ export function StatusBarChart({
     return (
       <Card className="rounded-2xl">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+          <CardTitle className="text-sm font-bold text-zinc-950">{title}</CardTitle>
           {description ? <CardDescription className="text-xs">{description}</CardDescription> : null}
         </CardHeader>
         <CardContent className="flex h-48 items-center justify-center text-sm text-muted-foreground">No data yet</CardContent>
@@ -46,7 +46,7 @@ export function StatusBarChart({
   return (
     <Card className="rounded-2xl">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <CardTitle className="text-sm font-bold text-zinc-950">{title}</CardTitle>
         {description ? <CardDescription className="text-xs">{description}</CardDescription> : null}
       </CardHeader>
       <CardContent className="h-56">

@@ -390,7 +390,7 @@ export function ContractorDocuments({
             variant={filter === "expiring" ? "default" : "outline"}
             onClick={() => setFilter("expiring")}
           >
-            Expiring soon
+            Expiring Documents
           </Button>
           <Button
             size="xs"

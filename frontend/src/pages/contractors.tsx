@@ -22,31 +22,57 @@ import {
   CONTRACTOR_TYPE_OPTIONS,
 } from "@/components/contractors/status"
 import { BriefcaseBusiness, Filter, Plus, Search, SlidersHorizontal } from "lucide-react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 
 type Plant = { id: number; name: string }
 
+function contractorStatusFromQuery(value: string | null): string | "all" {
+  return CONTRACTOR_STATUS_OPTIONS.some((option) => option.value === value) ? (value as string) : "all"
+}
+
+function contractorTypeFromQuery(value: string | null): string | "all" {
+  return CONTRACTOR_TYPE_OPTIONS.some((option) => option.value === value) ? (value as string) : "all"
+}
+
+function contractorPlantFromQuery(value: string | null): number | "all" {
+  const next = Number(value)
+  return Number.isFinite(next) && next > 0 ? next : "all"
+}
+
 export function ContractorsPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [rows, setRows] = React.useState<ContractorRow[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
-  const [q, setQ] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<string | "all">("all")
-  const [typeFilter, setTypeFilter] = React.useState<string | "all">("all")
-  const [plantFilter, setPlantFilter] = React.useState<number | "all">("all")
+  const [q, setQ] = React.useState(() => searchParams.get("q") ?? "")
+  const [statusFilter, setStatusFilter] = React.useState<string | "all">(() =>
+    contractorStatusFromQuery(searchParams.get("status")),
+  )
+  const [typeFilter, setTypeFilter] = React.useState<string | "all">(() =>
+    contractorTypeFromQuery(searchParams.get("type")),
+  )
+  const [plantFilter, setPlantFilter] = React.useState<number | "all">(() =>
+    contractorPlantFromQuery(searchParams.get("plant_id")),
+  )
+  const [expiringOnly, setExpiringOnly] = React.useState(() => searchParams.get("expiring") === "soon")
   const [plants, setPlants] = React.useState<Plant[]>([])
 
   const canCreate = hasPermission("contractor.create")
 
+  const displayRows = React.useMemo(
+    () => (rows ?? []).filter((row) => !expiringOnly || (row.compliance?.expiring_soon ?? 0) > 0),
+    [expiringOnly, rows],
+  )
+
   const stats: ContractorListStatsData = React.useMemo(() => {
-    const total = rows?.length ?? 0
-    const active = rows?.filter((r) => r.status === "active").length ?? 0
+    const total = displayRows.length
+    const active = displayRows.filter((r) => r.status === "active").length
     const nonCompliant =
-      rows?.filter((r) => r.status === "non_compliant" || r.compliance?.state === "non_compliant").length ?? 0
+      displayRows.filter((r) => r.status === "non_compliant" || r.compliance?.state === "non_compliant").length
     const expiringSoon =
-      rows?.reduce((sum, r) => sum + (r.compliance?.expiring_soon ?? 0), 0) ?? 0
+      displayRows.reduce((sum, r) => sum + (r.compliance?.expiring_soon ?? 0), 0)
     return { total, active, nonCompliant, expiringSoon }
-  }, [rows])
+  }, [displayRows])
 
   async function load() {
     setError(null)
@@ -88,8 +114,21 @@ export function ContractorsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, statusFilter, typeFilter, plantFilter])
 
+  React.useEffect(() => {
+    const next = new URLSearchParams()
+    if (q.trim()) next.set("q", q.trim())
+    if (statusFilter !== "all") next.set("status", statusFilter)
+    if (typeFilter !== "all") next.set("type", typeFilter)
+    if (plantFilter !== "all") next.set("plant_id", String(plantFilter))
+    if (expiringOnly) next.set("expiring", "soon")
+    setSearchParams(next, { replace: true })
+  }, [expiringOnly, plantFilter, q, setSearchParams, statusFilter, typeFilter])
+
   const activeFilterCount =
-    (statusFilter !== "all" ? 1 : 0) + (typeFilter !== "all" ? 1 : 0) + (plantFilter !== "all" ? 1 : 0)
+    (statusFilter !== "all" ? 1 : 0) +
+    (typeFilter !== "all" ? 1 : 0) +
+    (plantFilter !== "all" ? 1 : 0) +
+    (expiringOnly ? 1 : 0)
 
   return (
     <div className="w-full space-y-6">
@@ -97,9 +136,6 @@ export function ContractorsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">CONTRACTORS</h1>
-          <div className="text-sm text-muted-foreground">
-            Manage contractor master, plant mappings and compliance documents.
-          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -254,6 +290,7 @@ export function ContractorsPage() {
                   setStatusFilter("all")
                   setTypeFilter("all")
                   setPlantFilter("all")
+                  setExpiringOnly(false)
                 }}
               >
                 Clear
@@ -272,7 +309,7 @@ export function ContractorsPage() {
         </Card>
       ) : null}
 
-      {rows !== null && rows.length === 0 && !error ? (
+      {rows !== null && displayRows.length === 0 && !error ? (
         <DataTable>
           <EmptyState
             icon={BriefcaseBusiness}
@@ -294,7 +331,7 @@ export function ContractorsPage() {
         </DataTable>
       ) : (
         <DataTable>
-          <ContractorTable rows={rows} loading={rows === null} />
+          <ContractorTable rows={displayRows} loading={rows === null} />
         </DataTable>
       )}
     </div>

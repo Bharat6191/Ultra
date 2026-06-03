@@ -4,6 +4,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CollapsibleAuditList } from "@/components/shared/collapsible-audit-list"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -757,13 +758,15 @@ export function PartMasterDetailPage() {
             {activityEntries.length === 0 ? (
               <p className="text-sm text-muted-foreground">No audit entries yet.</p>
             ) : (
-              <ul className="space-y-5">
-                {activityEntries.map((a) => {
+              <CollapsibleAuditList
+                items={activityEntries}
+                className="space-y-5"
+                renderItem={(a) => {
                   const changes = auditChangeRows(a)
                   const { date, time } = formatAuditDateTime(a.created_at)
                   const actor = a.changed_by_name ?? (a.changed_by != null ? `User #${a.changed_by}` : "—")
                   return (
-                    <li key={a.id} className={`flex gap-4 border-l-2 pl-4 ${auditAccentBorder(a.action)}`}>
+                    <div key={a.id} className={`flex gap-4 border-l-2 pl-4 ${auditAccentBorder(a.action)}`}>
                       <div className="w-28 shrink-0 text-right text-[11px] tabular-nums leading-snug text-muted-foreground sm:w-32">
                         <time dateTime={a.created_at}>
                           <div>{date}</div>
@@ -792,10 +795,10 @@ export function PartMasterDetailPage() {
                           <p className="text-sm text-muted-foreground">No field changes recorded for this event.</p>
                         )}
                       </div>
-                    </li>
+                    </div>
                   )
-                })}
-              </ul>
+                }}
+              />
             )}
           </section>
 

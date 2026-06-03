@@ -3,7 +3,7 @@ import { toast } from "sonner"
 import { useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError, getJson } from "@/lib/api"
@@ -29,7 +29,7 @@ function InboxTable({ rows, loading, canView, emptyMessage, onOpen }: InboxTable
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Inbox</CardTitle>
-        <CardDescription>Tasks you are assigned to or that you created — open a row for details, comments, and history.</CardDescription>
+        {/* <CardDescription>Tasks you are assigned to or that you created — open a row for details, comments, and history.</CardDescription> */}
       </CardHeader>
       <CardContent>
         <Table>

@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Bell, RefreshCw } from "lucide-react"
+import { Bell, PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -18,6 +18,8 @@ export type AppNavbarProps = {
   userEmail?: string | null
   onSignOut?: () => void
   onRefreshProfile?: () => void
+  sidebarCollapsed?: boolean
+  onToggleSidebar?: () => void
 }
 
 function computeInitials(email?: string | null) {
@@ -35,13 +37,29 @@ export function AppNavbar({
   userEmail,
   onSignOut,
   onRefreshProfile,
+  sidebarCollapsed = false,
+  onToggleSidebar,
 }: AppNavbarProps) {
   const initials = React.useMemo(() => computeInitials(userEmail), [userEmail])
   const [refreshing, setRefreshing] = React.useState(false)
 
   return (
     <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-gray-200 bg-white px-6 print:hidden">
-      <h1 className="truncate text-sm font-medium text-zinc-950">{title}</h1>
+      <div className="flex min-w-0 items-center gap-2">
+        {onToggleSidebar ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="hidden rounded-lg lg:inline-flex"
+            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+            onClick={onToggleSidebar}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="size-4 opacity-70" aria-hidden /> : <PanelLeftClose className="size-4 opacity-70" aria-hidden />}
+          </Button>
+        ) : null}
+        <h1 className="truncate text-sm font-medium text-zinc-950">{title}</h1>
+      </div>
 
       <div className="flex items-center gap-2">
         <Button type="button" variant="ghost" size="icon-sm" className="rounded-lg" aria-label="Notifications">

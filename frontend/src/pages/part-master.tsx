@@ -5,7 +5,6 @@ import { Plus, Search, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission, isSuperuser } from "@/lib/permissions"
@@ -141,49 +140,45 @@ export function PartMasterPage() {
       </div>
 
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Filters</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          <div className="grid gap-1">
-            <Label>Scope</Label>
-            <select
-              className="h-9 rounded-md border bg-white px-2 text-sm"
-              value={plantFilter}
-              onChange={(e) => setPlantFilter(e.target.value)}
-            >
-              <option value="">All plants & clusters</option>
-              <optgroup label="Clusters">
-                {orgCatalog
-                  .filter((o) => String(o.type).toUpperCase() === "CLUSTER")
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((c) => (
-                    <option key={c.id} value={String(c.id)}>
-                      {c.name}
-                    </option>
-                  ))}
-              </optgroup>
-              <optgroup label="Plants">
-                {plants.map((p) => (
-                  <option key={p.id} value={String(p.id)}>
-                    {p.name}
+        <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center">
+          <select
+            aria-label="Part master scope"
+            className="h-10 rounded-md border bg-white px-3 text-sm lg:w-[280px] lg:shrink-0"
+            value={plantFilter}
+            onChange={(e) => setPlantFilter(e.target.value)}
+          >
+            <option value="">All plants & clusters</option>
+            <optgroup label="Clusters">
+              {orgCatalog
+                .filter((o) => String(o.type).toUpperCase() === "CLUSTER")
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.name}
                   </option>
                 ))}
-              </optgroup>
-            </select>
+            </optgroup>
+            <optgroup label="Plants">
+              {plants.map((p) => (
+                <option key={p.id} value={String(p.id)}>
+                  {p.name}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-2 top-3 size-4 text-muted-foreground" />
+            <Input
+              aria-label="Search part"
+              className="pl-8"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Code or name"
+            />
           </div>
-          <div className="grid min-w-[200px] flex-1 gap-1">
-            <Label>Search Part</Label>
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
-              <Input className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Code or name" />
-            </div>
-          </div>
-          <div className="flex items-end">
-            <Button variant="secondary" onClick={() => void load()}>
-              Apply
-            </Button>
-          </div>
+          <Button variant="secondary" onClick={() => void load()} className="lg:shrink-0">
+            Apply
+          </Button>
         </CardContent>
       </Card>
 

@@ -21,19 +21,17 @@ export function AppAuthMarketingLayout({ children }: AppAuthMarketingLayoutProps
         <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-28 -right-28 h-80 w-80 rounded-full bg-black/20 blur-3xl" />
 
-        <div className="relative flex justify-center lg:justify-start">
+        
+
+       
+        <div className="absolute top-64 z-10 w-full pt-10 flex flex-col items-center justify-center">
           <AppLogo className="w-[220px]" />
+          <h1 className="marketing-hero-title mt-4 text-3xl font-bold">Sub-Contractor Spend Management</h1>
         </div>
 
-        <div className="relative max-w-md">
-          <h1 className="text-3xl font-semibold">Engineering &amp; energy solutions.</h1>
-          <p className="mt-4 text-sm text-white/70">
-            Operations workspace for master data, planning, and plant performance — aligned with Ultra
-            Corpotech.
-          </p>
+        <div className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 text-center text-xs text-white/60">
+          © Ultra Corpotech Pvt. Ltd.
         </div>
-
-        <div className="relative text-xs text-white/60">© Ultra Corpotech Pvt. Ltd.</div>
       </aside>
 
       <main className="bg-gray-100 px-6 py-10" id="bg">

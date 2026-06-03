@@ -81,21 +81,19 @@ function computeHighlights(rows: PartContractorComparisonRow[], header: PartMast
     })
     .filter((n): n is number => n !== null)
 
-  const lowest =
-    num(header.lowest_negotiated_rate) ?? (negRates.length ? Math.min(...negRates) : null)
   const average =
     num(header.average_negotiated_rate) ?? (negRates.length ? negRates.reduce((a, b) => a + b, 0) / negRates.length : null)
   const highestQuote = quotes.length ? Math.max(...quotes) : null
   const highestSavings = savings.length ? Math.max(...savings) : null
 
-  return { lowest, average, highestQuote, highestSavings }
+  return { average, highestQuote, highestSavings }
 }
 
 function HighlightCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
-      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-base font-semibold tabular-nums">{value}</div>
+      <div className="text-[10px] font-bold uppercase tracking-wide text-zinc-950">{label}</div>
+      <div className="mt-0.5 text-base font-normal tabular-nums text-zinc-950">{value}</div>
     </div>
   )
 }
@@ -118,10 +116,10 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
   const [previewWo, setPreviewWo] = React.useState<PartWorkOrderRow | null>(null)
   const [previewOpen, setPreviewOpen] = React.useState(false)
 
-  const summaryLabelClass = "text-sm font-semibold text-foreground"
-  const summaryValueClass = "text-xs font-normal text-foreground"
-  const summaryValueMonoClass = "font-mono text-xs font-normal text-foreground"
-  const summaryMetricValueClass = "text-xs font-normal tabular-nums text-foreground"
+  const summaryLabelClass = "text-sm font-bold text-zinc-950"
+  const summaryValueClass = "text-xs font-normal text-zinc-950"
+  const summaryValueMonoClass = "font-mono text-xs font-normal text-zinc-950"
+  const summaryMetricValueClass = "text-xs font-normal tabular-nums text-zinc-950"
 
   const filterParams = React.useMemo<PartAnalyticsFilters>(
     () => ({
@@ -230,8 +228,8 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-base font-semibold tracking-tight">Part Intelligence</h3>
-          <p className="text-xs text-muted-foreground">Commercial rates, negotiations, and work orders for procurement decisions.</p>
+          <h3 className="text-base font-semibold tracking-tight">Part Details</h3>
+          {/* <p className="text-xs text-muted-foreground">Commercial rates, negotiations, and work orders for procurement decisions.</p> */}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -245,10 +243,6 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
             <ListFilter className="mr-1.5 size-3.5" aria-hidden />
             {filtersOpen ? "Hide" : "Filters"}
             {!filtersOpen && activeFilterCount > 0 ? ` (${activeFilterCount})` : null}
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden />
-            Refresh
           </Button>
         </div>
       </div>
@@ -296,9 +290,13 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
                 onChange={(e) => setContractorId(e.target.value.replace(/\D/g, ""))}
               />
             </div>
-            <div className="flex items-end sm:col-span-2 lg:col-span-4">
+            <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-4">
               <Button type="button" size="sm" className="h-8" onClick={() => void load()}>
                 Apply filters
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => void load()} disabled={loading}>
+                <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden />
+                Refresh
               </Button>
             </div>
           </CardContent>
@@ -327,7 +325,7 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
           </div>
           <div className="sm:col-span-2">
             <div className={summaryLabelClass}>Description</div>
-            <div className="text-xs font-normal text-muted-foreground">{h.description?.trim() || "—"}</div>
+            <div className={summaryValueClass}>{h.description?.trim() || "—"}</div>
           </div>
           <div>
             <div className={summaryLabelClass}>Category / Pricing</div>
@@ -379,11 +377,10 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
         </CardContent>
       </Card>
 
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <HighlightCard label="Lowest negotiated rate" value={highlights.lowest != null ? formatMoney(highlights.lowest) : "—"} />
-        <HighlightCard label="Highest savings" value={highlights.highestSavings != null ? formatMoney(highlights.highestSavings) : "—"} />
-        <HighlightCard label="Highest quoted rate" value={highlights.highestQuote != null ? formatMoney(highlights.highestQuote) : "—"} />
-        <HighlightCard label="Average negotiated rate" value={highlights.average != null ? formatMoney(highlights.average) : "—"} />
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <HighlightCard label="Savings" value={highlights.highestSavings != null ? formatMoney(highlights.highestSavings) : "—"} />
+        <HighlightCard label="Quoted Rate" value={highlights.highestQuote != null ? formatMoney(highlights.highestQuote) : "—"} />
+        <HighlightCard label="Negotiated Rate" value={highlights.average != null ? formatMoney(highlights.average) : "—"} />
       </div>
 
       <PartIntelligenceCharts contractors={ctr} workOrders={wo} />

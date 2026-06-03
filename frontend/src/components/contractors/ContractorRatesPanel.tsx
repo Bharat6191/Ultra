@@ -626,8 +626,8 @@ function KpiCard({
     <Card>
       <CardContent className="flex items-center justify-between gap-3 p-4">
         <div>
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">{title}</div>
-          <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
+          <div className="text-xs font-bold uppercase tracking-wide text-zinc-950">{title}</div>
+          <div className="mt-1 text-2xl font-normal tracking-tight text-zinc-950">{value}</div>
         </div>
         {icon ? (
           <span className={`grid size-9 place-items-center rounded-xl ring-2 ${cls}`}>{icon}</span>
@@ -663,14 +663,14 @@ function ActiveRateCard({
       </div>
       <div className="mt-3 flex items-end justify-between">
         <div>
-          <div className="text-xs text-muted-foreground">Negotiated</div>
-          <div className="text-2xl font-semibold tracking-tight">
+          <div className="text-xs font-bold text-zinc-950">Negotiated</div>
+          <div className="text-2xl font-normal tracking-tight text-zinc-950">
             {formatMoney(rate.negotiated_rate)}
           </div>
         </div>
         <div className="text-right">
-          <div className="text-xs text-muted-foreground">Should cost</div>
-          <div className="text-sm">{formatMoney(rate.base_rate)}</div>
+          <div className="text-xs font-bold text-zinc-950">Should cost</div>
+          <div className="text-sm font-normal text-zinc-950">{formatMoney(rate.base_rate)}</div>
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
@@ -1076,8 +1076,8 @@ function Fact({
 }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`mt-0.5 ${strong ? "text-base font-semibold text-foreground" : "text-sm"}`}>
+      <div className="text-xs font-bold uppercase tracking-wide text-zinc-950">{label}</div>
+      <div className={`mt-0.5 text-zinc-950 ${strong ? "text-base font-normal" : "text-sm font-normal"}`}>
         {value}
       </div>
     </div>

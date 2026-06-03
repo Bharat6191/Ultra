@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { CollapsibleAuditList } from "@/components/shared/collapsible-audit-list"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ApiError, getJson, postJson } from "@/lib/api"
@@ -393,11 +394,13 @@ export function InvoiceDetailPage() {
           {audit.length === 0 ? (
             <div className="text-sm text-muted-foreground">No audit entries yet.</div>
           ) : (
-            audit
-              .slice()
-              .reverse()
-              .slice(0, 30)
-              .map((a) => (
+            <CollapsibleAuditList
+              items={audit
+                .slice()
+                .reverse()
+                .slice(0, 30)}
+              className="space-y-2"
+              renderItem={(a) => (
                 <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2">
                   <div className="min-w-0">
                     <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{a.action}</div>
@@ -407,7 +410,8 @@ export function InvoiceDetailPage() {
                     {a.created_at ? new Date(a.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—"}
                   </div>
                 </div>
-              ))
+              )}
+            />
           )}
         </CardContent>
       </Card>

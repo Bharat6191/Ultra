@@ -21,9 +21,9 @@ function StatCard({ title, value }: { title: string; value: number }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <CardTitle className="text-sm font-bold text-zinc-950">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="text-2xl font-semibold tracking-tight">{value}</CardContent>
+      <CardContent className="text-2xl font-normal tracking-tight text-zinc-950">{value}</CardContent>
     </Card>
   )
 }
@@ -53,7 +53,7 @@ export function TaskDashboard({ data }: { data: TasksDashboardModule }) {
 
       <Card className="border-emerald-100">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Status breakdown</CardTitle>
+          <CardTitle className="text-sm font-bold text-zinc-950">Status breakdown</CardTitle>
           <CardDescription className="text-xs">
             Tasks assigned to you, created by you, or routed to your roles (same scope as My Tasks).
           </CardDescription>
@@ -73,4 +73,3 @@ export function TaskDashboard({ data }: { data: TasksDashboardModule }) {
     </section>
   )
 }
-

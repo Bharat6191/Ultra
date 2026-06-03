@@ -215,8 +215,10 @@ export function ApprovalWorkflowTimeline({ steps, viewerUserId, formatWhen }: Pr
               <div className="min-w-0 flex-1 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   {phaseStateBadge(step.phase)}
-                  <p className={cn("text-sm font-semibold leading-tight", rowTextStyles(step.phase))}>
-                    Step {step.step_order} of {step.total_steps} — {step.approver_role_name}
+                  <p className={cn("text-sm leading-tight", rowTextStyles(step.phase))}>
+                    <span className="font-bold text-foreground">Step {step.step_order}</span>
+                    <span className="font-semibold"> of {step.total_steps}</span>
+                    <span className="font-medium"> — {step.approver_role_name}</span>
                   </p>
                 </div>
                 {step.phase === "completed" ? (

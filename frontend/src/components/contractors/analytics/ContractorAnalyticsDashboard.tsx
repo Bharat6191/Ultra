@@ -212,8 +212,8 @@ function FactField({
 }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`mt-0.5 ${strong ? "text-base font-semibold text-foreground" : "text-sm"}`}>
+      <div className="text-xs font-bold uppercase tracking-wide text-zinc-950">{label}</div>
+      <div className={`mt-0.5 text-zinc-950 ${strong ? "text-base font-normal" : "text-sm font-normal"}`}>
         {value}
       </div>
     </div>
@@ -239,8 +239,8 @@ function InsightTile({
     <div className={`rounded-2xl border p-4 shadow-sm ${toneClasses.tile}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm font-medium text-slate-600">{label}</div>
-          <div className={`mt-3 text-2xl font-semibold tracking-tight text-slate-950 ${valueClassName}`}>{value}</div>
+          <div className="text-sm font-bold text-zinc-950">{label}</div>
+          <div className={`mt-3 text-2xl font-normal tracking-tight text-zinc-950 ${valueClassName}`}>{value}</div>
         </div>
         <div className={`flex size-11 shrink-0 items-center justify-center rounded-full ${toneClasses.iconWrap}`}>
           <Icon className={`size-5 ${toneClasses.icon}`} aria-hidden />

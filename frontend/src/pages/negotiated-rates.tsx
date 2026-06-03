@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import {
   Hourglass,
   MessagesSquare,
@@ -82,6 +82,10 @@ const RATE_STATUS_TABS: { id: RateStatusTab; label: string }[] = [
   { id: "rejected", label: "Rejected" },
 ]
 
+function rateStatusTabFromQuery(value: string | null): RateStatusTab {
+  return RATE_STATUS_TABS.some((tab) => tab.id === value) ? (value as RateStatusTab) : "all"
+}
+
 /** Client-side mirror of cluster → plant expansion for table filters. */
 function plantIdsUnderScope(rows: OrgUnitLite[], scopeId: number): number[] {
   const root = rows.find((r) => r.id === scopeId)
@@ -108,13 +112,14 @@ const SELECT_CLASS =
 
 export function NegotiatedRatesPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [rows, setRows] = React.useState<ContractorRatePublic[] | null>(null)
   const [summary, setSummary] = React.useState<Summary | null>(null)
   const [orgScopes, setOrgScopes] = React.useState<OrgUnitLite[]>([])
   const [error, setError] = React.useState<string | null>(null)
 
   const [search, setSearch] = React.useState("")
-  const [statusTab, setStatusTab] = React.useState<RateStatusTab>("all")
+  const [statusTab, setStatusTab] = React.useState<RateStatusTab>(() => rateStatusTabFromQuery(searchParams.get("status")))
   const [plantFilter, setPlantFilter] = React.useState<string>("all")
 
   const canView = canReadNegotiatedRates()
@@ -126,6 +131,12 @@ export function NegotiatedRatesPage() {
     if (canListOrgUnitsForAssignments()) void loadOrgScopes()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  React.useEffect(() => {
+    const next = new URLSearchParams()
+    if (statusTab !== "all") next.set("status", statusTab)
+    setSearchParams(next, { replace: true })
+  }, [setSearchParams, statusTab])
 
   async function load() {
     setError(null)
@@ -262,7 +273,7 @@ export function NegotiatedRatesPage() {
       {/* Refine by plant / text (lifecycle uses tabs on the table card). */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Refine List</CardTitle>
+          {/* <CardTitle className="text-sm font-medium">Refine List</CardTitle> */}
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
           <div className="relative">

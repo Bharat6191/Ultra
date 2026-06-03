@@ -29,8 +29,8 @@ export type ContractorOverviewData = {
 function FieldRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
     <div className="grid gap-1">
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`text-sm font-medium text-zinc-900 ${mono ? "font-mono" : ""}`}>{value || "—"}</div>
+      <div className="text-xs font-bold uppercase tracking-wide text-zinc-950">{label}</div>
+      <div className={`text-sm font-normal text-zinc-950 ${mono ? "font-mono" : ""}`}>{value || "—"}</div>
     </div>
   )
 }

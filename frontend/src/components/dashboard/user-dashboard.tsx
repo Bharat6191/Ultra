@@ -27,10 +27,10 @@ function StatCard({ title, value, hint }: { title: string; value: React.ReactNod
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <CardTitle className="text-sm font-bold text-zinc-950">{title}</CardTitle>
         {hint ? <CardDescription className="text-xs">{hint}</CardDescription> : null}
       </CardHeader>
-      <CardContent className="text-2xl font-semibold tracking-tight">{value}</CardContent>
+      <CardContent className="text-2xl font-normal tracking-tight text-zinc-950">{value}</CardContent>
     </Card>
   )
 }
@@ -66,7 +66,7 @@ export function UserDashboard({ data }: { data: UsersDashboardModule }) {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card className="border-emerald-100">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Users by role</CardTitle>
+            <CardTitle className="text-sm font-bold text-zinc-950">Users by role</CardTitle>
             <CardDescription className="text-xs">Distinct users assigned to each role</CardDescription>
           </CardHeader>
           <CardContent className="h-64">
@@ -84,7 +84,7 @@ export function UserDashboard({ data }: { data: UsersDashboardModule }) {
 
         <Card className="border-emerald-100">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Active vs inactive</CardTitle>
+            <CardTitle className="text-sm font-bold text-zinc-950">Active vs inactive</CardTitle>
             <CardDescription className="text-xs">Current user status distribution</CardDescription>
           </CardHeader>
           <CardContent className="h-64">
@@ -108,4 +108,3 @@ export function UserDashboard({ data }: { data: UsersDashboardModule }) {
     </section>
   )
 }
-

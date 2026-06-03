@@ -145,6 +145,10 @@ export function AppShellLayout({
 }: AppShellLayoutProps) {
   const location = useLocation()
   const mainRef = React.useRef<HTMLElement | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState<boolean>(() => {
+    if (typeof window === "undefined") return false
+    return window.localStorage.getItem("ultra-sidebar-collapsed") === "true"
+  })
   const visibleNav = shellNavItems.filter(navItemVisible)
 
   const activeItem = visibleNav.find((item) => pathMatchesNav(location.pathname, item.to))
@@ -170,9 +174,14 @@ export function AppShellLayout({
     }
   }, [])
 
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem("ultra-sidebar-collapsed", String(sidebarCollapsed))
+  }, [sidebarCollapsed])
+
   return (
     <div className="flex h-svh min-h-0 w-full overflow-hidden bg-gray-50 text-foreground print:block print:h-auto print:overflow-visible print:bg-white">
-      <AppSidebar items={sidebarItems} />
+      <AppSidebar items={sidebarItems} collapsed={sidebarCollapsed} />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden print:block print:overflow-visible">
         <AppNavbar
@@ -180,6 +189,8 @@ export function AppShellLayout({
           userEmail={userEmail}
           onSignOut={onSignOut}
           onRefreshProfile={onRefreshProfile}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
         />
 
         <main

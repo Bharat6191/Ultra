@@ -105,28 +105,10 @@ function orderedActionColumns(actions: string[]): string[] {
   return out
 }
 
-function countRolePermissionStats(
-  modules: CatalogModule[],
-  selectedPermissionIds: Set<number>
-): { total: number; enabled: number; fullModules: number } {
-  let total = 0
-  let enabled = 0
-  let fullModules = 0
-  for (const mod of modules) {
-    let moduleTotal = 0
-    let moduleEnabled = 0
-    for (const tab of mod.tabs) {
-      for (const permission of tab.permissions) {
-        if (permission.id == null) continue
-        moduleTotal += 1
-        if (selectedPermissionIds.has(permission.id)) moduleEnabled += 1
-      }
-    }
-    total += moduleTotal
-    enabled += moduleEnabled
-    if (moduleTotal > 0 && moduleEnabled === moduleTotal) fullModules += 1
-  }
-  return { total, enabled, fullModules }
+function chunkActions<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = []
+  for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size))
+  return rows
 }
 
 function countModulePermissionStats(mod: CatalogModule, selectedPermissionIds: Set<number>) {
@@ -169,7 +151,7 @@ export function RolesPage() {
   const [creating, setCreating] = React.useState(false)
   const [createOrgUnitIds, setCreateOrgUnitIds] = React.useState<Set<number>>(() => new Set())
   const [search, setSearch] = React.useState("")
-  const [expandedModuleKey, setExpandedModuleKey] = React.useState<string | null>(null)
+  const [expandedPermissionModules, setExpandedPermissionModules] = React.useState<Set<string>>(() => new Set())
 
   const canCreateRole = hasPermission("roles.create") || isSuperuser()
   /** Same as ``GET /admin/org-units`` (plant pickers for roles vs. Plants admin module). */
@@ -281,18 +263,10 @@ export function RolesPage() {
     [roles, selectedRoleId]
   )
 
-  const permissionSummary = React.useMemo(() => {
-    return countRolePermissionStats(catalog?.modules ?? [], selectedPermissionIds)
-  }, [catalog, selectedPermissionIds])
-
   function resetEditorState() {
     if (!selectedRole) return
     setSelectedPermissionIds(new Set(selectedRole.permissions.map((permission) => permission.id)))
     setLinkedOrgUnitIds(new Set(selectedRole.org_units.map((orgUnit) => orgUnit.id)))
-  }
-
-  function toggleModule(moduleKey: string) {
-    setExpandedModuleKey((current) => (current === moduleKey ? null : moduleKey))
   }
 
   function setModuleEnabled(module: CatalogModule, enabled: boolean) {
@@ -306,6 +280,15 @@ export function RolesPage() {
           else next.delete(permission.id)
         }
       }
+      return next
+    })
+  }
+
+  function togglePermissionModule(moduleKey: string) {
+    setExpandedPermissionModules((current) => {
+      const next = new Set(current)
+      if (next.has(moduleKey)) next.delete(moduleKey)
+      else next.add(moduleKey)
       return next
     })
   }
@@ -374,15 +357,6 @@ export function RolesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h2 className="text-2xl font-semibold tracking-tight text-zinc-950">Roles</h2>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Link roles to plants, assign permissions by module, and leave all plants unchecked for a
-          global role. Run <span className="font-mono text-xs">python scripts/sync_modules.py</span>{" "}
-          for missing permission rows.
-        </p>
-      </div>
-
       {error ? (
         <Alert variant="destructive">
           <AlertTitle>Something went wrong</AlertTitle>
@@ -570,24 +544,21 @@ export function RolesPage() {
         <div className="space-y-6">
           <Card className="overflow-hidden border-zinc-200 bg-white shadow-sm">
             <CardContent className="px-6 pb-6 pt-6">
-              <div className="flex flex-col gap-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">
-                        {scopeLabel(
-                          selectedRole?.org_units.length ?? selectedRoleListItem?.org_unit_ids.length ?? 0
-                        )}
-                      </Badge>
-                      <Badge variant="outline">
-                        {permissionSummary.enabled}/{permissionSummary.total} actions enabled
-                      </Badge>
-                      {!canSaveRole ? <Badge variant="secondary">Read only</Badge> : null}
-                    </div>
-                    <div>
-                      <h3 className="text-3xl font-semibold tracking-tight text-zinc-950">
-                        {selectedRole?.name ?? selectedRoleListItem?.name ?? "Permissions"}
-                      </h3>
+                <div className="flex flex-col gap-6">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-3xl font-semibold tracking-tight text-zinc-950">
+                            {selectedRole?.name ?? selectedRoleListItem?.name ?? "Permissions"}
+                          </h3>
+                          <Badge variant="outline">
+                            {scopeLabel(
+                              selectedRole?.org_units.length ?? selectedRoleListItem?.org_unit_ids.length ?? 0
+                            )}
+                          </Badge>
+                          {!canSaveRole ? <Badge variant="secondary">Read only</Badge> : null}
+                        </div>
                       {/* <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-600">
                         {selectedRole?.description ??
                           selectedRoleListItem?.description ??
@@ -609,150 +580,147 @@ export function RolesPage() {
                     </Button>
                   </div>
                 </div>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                      Coverage
-                    </div>
-                    <div className="mt-2 text-2xl font-semibold text-zinc-950">
-                      {permissionSummary.total > 0
-                        ? `${Math.round((permissionSummary.enabled / permissionSummary.total) * 100)}%`
-                        : "0%"}
-                    </div>
-                    {/* <div className="mt-1 text-sm text-muted-foreground">
-                      Enabled actions across all modules
-                    </div> */}
-                  </div>
-                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                      Module depth
-                    </div>
-                    <div className="mt-2 text-2xl font-semibold text-zinc-950">
-                      {permissionSummary.fullModules}/{catalog?.modules.length ?? 0}
-                    </div>
-                    {/* <div className="mt-1 text-sm text-muted-foreground">
-                      Modules currently at full access
-                    </div> */}
-                  </div>
-                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                      Status
-                    </div>
-                    <div className="mt-2 text-2xl font-semibold text-zinc-950">
-                      {!canSaveRole ? "Locked" : hasDirty ? "Draft" : "Saved"}
-                    </div>
-                    {/* <div className="mt-1 text-sm text-muted-foreground">
-                      {!canSaveRole
-                        ? "You need roles.update to change this role."
-                        : hasDirty
-                          ? "You have unsaved changes in this editor."
-                          : "This editor matches the latest saved state."}
-                    </div> */}
-                  </div>
-                </div>
               </div>
             </CardContent>
           </Card>
 
           <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="space-y-4">
-              {catalog === null ? (
-                <Card className="border-zinc-200 bg-white">
-                  <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            <Card className={cn("flex min-h-[420px] flex-col border-zinc-200 bg-white", ROLES_SPLIT_MAX_H)}>
+              <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-5 pt-5">
+                {catalog === null ? (
+                  <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-muted-foreground">
                     Loading permissions…
-                  </CardContent>
-                </Card>
-              ) : selectedRoleId == null ? (
-                <Card className="border-zinc-200 bg-white">
-                  <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                  </div>
+                ) : selectedRoleId == null ? (
+                  <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-muted-foreground">
                     Select a role.
-                  </CardContent>
-                </Card>
-              ) : catalog.modules.length === 0 ? (
-                <Card className="border-zinc-200 bg-white">
-                  <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                  </div>
+                ) : catalog.modules.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-muted-foreground">
                     No catalog modules defined.
-                  </CardContent>
-                </Card>
-              ) : (
-                catalog.modules.map((mod) => {
-                  const stats = countModulePermissionStats(mod, selectedPermissionIds)
-                  const isExpanded = expandedModuleKey === mod.key
-                  const coverage = stats.total > 0 ? Math.round((stats.enabled / stats.total) * 100) : 0
-                  return (
-                    <Card key={mod.key} className="border-zinc-200 bg-white">
-                      <CardContent className="px-5 pb-5 pt-5">
-                        <div className="flex flex-col gap-4">
-                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
+                  </div>
+                ) : (
+                  catalog.modules.map((mod) => {
+                    const stats = countModulePermissionStats(mod, selectedPermissionIds)
+                    const inlineTab = mod.tabs.length === 1 ? mod.tabs[0] : null
+                    const inlineTabActions =
+                      inlineTab == null
+                        ? []
+                        : orderedActionColumns(
+                          Array.isArray(inlineTab.actions) && inlineTab.actions.length
+                            ? inlineTab.actions
+                            : inlineTab.permissions.map((permission) => permission.action)
+                        )
+                    const inlineActionRows = chunkActions(inlineTabActions, 5)
+                    const inlineRowsOverflow = inlineActionRows.length > 1
+                    const inlineExpanded = expandedPermissionModules.has(mod.key)
+                    return (
+                      <Card key={mod.key} className="border-zinc-200 bg-white">
+                        <CardContent className="px-5 pb-5 pt-5">
+                          <div className="flex flex-col gap-4">
+                            <div
+                              className={cn(
+                                "grid gap-3",
+                                inlineTab
+                                  ? "xl:grid-cols-[240px_minmax(0,1fr)] xl:items-start"
+                                  : "lg:grid-cols-[minmax(220px,1fr)_auto] lg:items-start",
+                              )}
+                            >
+                              <div className="min-w-0">
                                 <h4 className="text-base font-semibold text-zinc-950">{mod.title}</h4>
-                                <Badge
-                                  variant={stats.isFull ? "secondary" : "outline"}
-                                  className={stats.isFull ? "bg-zinc-100 text-zinc-700" : undefined}
-                                >
-                                  {stats.isFull ? "Full access" : `${stats.enabled}/${stats.total} actions`}
-                                </Badge>
                               </div>
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-2">
-                              <div className="mr-1 flex items-center gap-3 rounded-full border border-zinc-200 bg-white px-3 py-2">
-                                <div className="h-2 w-24 overflow-hidden rounded-full bg-zinc-200">
-                                  <div
-                                    className="h-full rounded-full bg-zinc-900 transition-[width]"
-                                    style={{ width: `${coverage}%` }}
-                                  />
-                                </div>
-                                <span className="text-xs font-medium text-zinc-600">{coverage}%</span>
-                              </div>
-                              <Button variant="outline" size="xs" onClick={() => setModuleEnabled(mod, true)} disabled={!canSaveRole}>
-                                Select all
-                              </Button>
-                              <Button variant="outline" size="xs" onClick={() => setModuleEnabled(mod, false)} disabled={!canSaveRole}>
-                                Clear
-                              </Button>
-                              <Button variant="secondary" size="icon-xs" onClick={() => toggleModule(mod.key)}>
-                                <ChevronDown
-                                  className={cn("size-4 transition-transform", isExpanded ? "rotate-0" : "-rotate-90")}
-                                />
-                              </Button>
-                            </div>
-                          </div>
-
-                          {isExpanded ? (
-                            <div className="space-y-3">
-                              {mod.tabs.map((tab) => {
-                                const tabActions = orderedActionColumns(
-                                  Array.isArray(tab.actions) && tab.actions.length
-                                    ? tab.actions
-                                    : tab.permissions.map((permission) => permission.action)
-                                )
-                                return (
-                                  <div
-                                    key={`${mod.key}.${tab.key}`}
-                                    className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-4 lg:flex-row lg:items-center lg:justify-between"
+                              <div className="space-y-3">
+                                <div className="flex flex-nowrap items-center gap-3 overflow-x-auto pb-1">
+                                  <label
+                                    className={cn(
+                                      "inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium whitespace-nowrap transition",
+                                      !canSaveRole || stats.total === 0
+                                        ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"
+                                        : "cursor-pointer border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50",
+                                    )}
                                   >
-                                    <div className="min-w-0">
-                                      <div className="text-sm font-medium text-zinc-900">{tab.title}</div>
-                                    </div>
-                                    <div className="flex flex-wrap gap-3">
-                                      {tabActions.map((act) => {
-                                        const cell = tab.permissions.find((permission) => permission.action === act)
+                                    <Checkbox
+                                      checked={
+                                        stats.total > 0 && stats.enabled === stats.total
+                                          ? true
+                                          : stats.enabled > 0
+                                            ? "indeterminate"
+                                            : false
+                                      }
+                                      disabled={!canSaveRole || stats.total === 0}
+                                      onCheckedChange={(value) => setModuleEnabled(mod, value === true)}
+                                    />
+                                    <span>Select All</span>
+                                  </label>
+                                {inlineActionRows[0]?.map((act) => {
+                                    const cell = inlineTab?.permissions.find((permission) => permission.action === act)
+                                    if (!cell) return null
+                                    const checked = cell.id != null && selectedPermissionIds.has(cell.id)
+                                    const disabled = cell.id == null || !canSaveRole
+                                    return (
+                                      <label
+                                        key={`${mod.key}.${inlineTab?.key}.${act}`}
+                                        title={
+                                          cell.id == null
+                                            ? "Run scripts/sync_modules.py to create this permission"
+                                            : cell.code
+                                        }
+                                        className={cn(
+                                          "inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium whitespace-nowrap transition",
+                                          disabled
+                                            ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"
+                                            : checked
+                                              ? "border-zinc-300 bg-zinc-100 text-zinc-900 shadow-sm"
+                                              : "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50"
+                                        )}
+                                      >
+                                        <Checkbox
+                                          checked={checked}
+                                          disabled={disabled}
+                                          onCheckedChange={(value) => {
+                                            if (cell.id == null || !canSaveRole) return
+                                            const next = new Set(selectedPermissionIds)
+                                            if (value) next.add(cell.id)
+                                            else next.delete(cell.id)
+                                            setSelectedPermissionIds(next)
+                                          }}
+                                        />
+                                        <span>{ACTION_LABEL[act] ?? act}</span>
+                                      </label>
+                                  )
+                                })}
+                              </div>
+                              {inlineRowsOverflow ? (
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  className="h-7 px-0 text-xs font-medium normal-case text-zinc-600 hover:bg-transparent hover:text-zinc-900"
+                                  onClick={() => togglePermissionModule(mod.key)}
+                                >
+                                  <ChevronDown
+                                    className={cn("size-4 transition-transform", inlineExpanded ? "rotate-180" : "rotate-0")}
+                                  />
+                                  {inlineExpanded ? "Show Less" : `Show ${inlineActionRows.length - 1} More Row${inlineActionRows.length - 1 > 1 ? "s" : ""}`}
+                                </Button>
+                              ) : null}
+                              {inlineExpanded
+                                ? inlineActionRows.slice(1).map((row, rowIndex) => (
+                                    <div key={`${mod.key}.row.${rowIndex + 2}`} className="flex flex-nowrap items-center gap-3 overflow-x-auto pb-1">
+                                      {row.map((act) => {
+                                        const cell = inlineTab?.permissions.find((permission) => permission.action === act)
                                         if (!cell) return null
                                         const checked = cell.id != null && selectedPermissionIds.has(cell.id)
                                         const disabled = cell.id == null || !canSaveRole
                                         return (
                                           <label
-                                            key={act}
+                                            key={`${mod.key}.${inlineTab?.key}.${act}.extra`}
                                             title={
                                               cell.id == null
                                                 ? "Run scripts/sync_modules.py to create this permission"
                                                 : cell.code
                                             }
                                             className={cn(
-                                              "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition",
+                                              "inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium whitespace-nowrap transition",
                                               disabled
                                                 ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"
                                                 : checked
@@ -776,18 +744,79 @@ export function RolesPage() {
                                         )
                                       })}
                                     </div>
-                                  </div>
-                                )
-                              })}
+                                  ))
+                                : null}
                             </div>
-                          ) : null}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })
-              )}
-            </div>
+                          </div>
+
+                            <div className="space-y-3">
+                              {mod.tabs
+                                .filter((tab) => inlineTab == null || tab.key !== inlineTab.key)
+                                .map((tab) => {
+                                  const tabActions = orderedActionColumns(
+                                    Array.isArray(tab.actions) && tab.actions.length
+                                      ? tab.actions
+                                      : tab.permissions.map((permission) => permission.action)
+                                  )
+                                  return (
+                                    <div
+                                      key={`${mod.key}.${tab.key}`}
+                                      className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-4 lg:flex-row lg:items-center lg:justify-between"
+                                    >
+                                      <div className="min-w-0">
+                                        <div className="text-sm font-medium text-zinc-900">{tab.title}</div>
+                                      </div>
+                                      <div className="flex flex-wrap gap-3">
+                                        {tabActions.map((act) => {
+                                          const cell = tab.permissions.find((permission) => permission.action === act)
+                                          if (!cell) return null
+                                          const checked = cell.id != null && selectedPermissionIds.has(cell.id)
+                                          const disabled = cell.id == null || !canSaveRole
+                                          return (
+                                            <label
+                                              key={act}
+                                              title={
+                                                cell.id == null
+                                                  ? "Run scripts/sync_modules.py to create this permission"
+                                                  : cell.code
+                                              }
+                                              className={cn(
+                                                "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition",
+                                                disabled
+                                                  ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"
+                                                  : checked
+                                                    ? "border-zinc-300 bg-zinc-100 text-zinc-900 shadow-sm"
+                                                    : "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50"
+                                              )}
+                                            >
+                                              <Checkbox
+                                                checked={checked}
+                                                disabled={disabled}
+                                                onCheckedChange={(value) => {
+                                                  if (cell.id == null || !canSaveRole) return
+                                                  const next = new Set(selectedPermissionIds)
+                                                  if (value) next.add(cell.id)
+                                                  else next.delete(cell.id)
+                                                  setSelectedPermissionIds(next)
+                                                }}
+                                              />
+                                              <span>{ACTION_LABEL[act] ?? act}</span>
+                                            </label>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })
+                )}
+              </CardContent>
+            </Card>
 
             <div className="space-y-4">
               <Card className="border-zinc-200 bg-white">

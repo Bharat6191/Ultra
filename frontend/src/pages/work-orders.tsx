@@ -12,6 +12,7 @@ import { workOrderStatusBadgeVariant, workOrderStatusLabel } from "@/lib/work-or
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
 type WoTab = "all" | "draft" | "operating" | "completed" | "inactive"
+type WorkOrderStatusFilter = "draft" | "rejected" | "pending_approval" | "active" | "approved" | "closed"
 
 const WO_PAGE_SIZE = 20
 
@@ -27,12 +28,18 @@ function isWoTab(value: string | null): value is WoTab {
   return WO_TABS.some((tab) => tab.id === value)
 }
 
-function workOrdersListPath(tab: WoTab, page: number): string {
+function isWorkOrderStatusFilter(value: string | null): value is WorkOrderStatusFilter {
+  return ["draft", "rejected", "pending_approval", "active", "approved", "closed"].includes(value ?? "")
+}
+
+function workOrdersListPath(tab: WoTab, page: number, statusFilter: WorkOrderStatusFilter | null): string {
   const q = new URLSearchParams({
     limit: String(WO_PAGE_SIZE),
     offset: String(page * WO_PAGE_SIZE),
   })
-  if (tab === "draft") {
+  if (statusFilter) {
+    q.set("status", statusFilter)
+  } else if (tab === "draft") {
     q.append("statuses", "draft")
     q.append("statuses", "rejected")
     q.append("statuses", "pending_approval")
@@ -59,7 +66,9 @@ export function WorkOrdersPage() {
   const [error, setError] = React.useState<string | null>(null)
   const [plants, setPlants] = React.useState<{ id: number; name: string }[]>([])
   const rawTab = searchParams.get("tab")
+  const rawStatus = searchParams.get("status")
   const tab: WoTab = isWoTab(rawTab) ? rawTab : "all"
+  const statusFilter: WorkOrderStatusFilter | null = isWorkOrderStatusFilter(rawStatus) ? rawStatus : null
 
   const pageCount = Math.max(1, Math.ceil(total / WO_PAGE_SIZE))
   const pageSafe = Math.min(page, pageCount - 1)
@@ -70,7 +79,7 @@ export function WorkOrdersPage() {
     if (!canView) return
     setError(null)
     try {
-      const { items, total: t } = await getJsonList<any>(workOrdersListPath(tab, page))
+      const { items, total: t } = await getJsonList<any>(workOrdersListPath(tab, page, statusFilter))
       setRows(items)
       setTotal(t)
     } catch (e) {
@@ -78,7 +87,7 @@ export function WorkOrdersPage() {
       setRows([])
       setTotal(0)
     }
-  }, [canView, tab, page])
+  }, [canView, page, statusFilter, tab])
 
   React.useEffect(() => {
     void load()
@@ -91,6 +100,7 @@ export function WorkOrdersPage() {
   const onTabChange = React.useCallback(
     (nextTab: WoTab) => {
       const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete("status")
       if (nextTab === "all") nextParams.delete("tab")
       else nextParams.set("tab", nextTab)
       setSearchParams(nextParams, { replace: true })

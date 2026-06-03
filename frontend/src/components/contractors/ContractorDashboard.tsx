@@ -49,7 +49,7 @@ function StatCard({
     <Card className="rounded-2xl">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-3">
-          <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+          <CardTitle className="text-sm font-bold text-zinc-950">{title}</CardTitle>
           <div className={`flex size-9 items-center justify-center rounded-xl ${ringClass}`}>{icon}</div>
         </div>
       </CardHeader>
@@ -57,7 +57,7 @@ function StatCard({
         {loading ? (
           <Skeleton className="h-7 w-16" />
         ) : (
-          <div className="text-2xl font-semibold tracking-tight text-zinc-950">{value}</div>
+          <div className="text-2xl font-normal tracking-tight text-zinc-950">{value}</div>
         )}
         {hint ? <div className="mt-1 text-xs text-muted-foreground">{hint}</div> : null}
       </CardContent>
@@ -131,7 +131,7 @@ export function ContractorDashboard({
           icon={<ShieldAlert className="size-4" aria-hidden />}
         />
         <StatCard
-          title="Expiring soon"
+          title="Expiring Documents"
           value={expiring}
           hint="Documents within 7 days"
           tone="warning"

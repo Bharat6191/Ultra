@@ -46,7 +46,7 @@ export function InvoicesDashboard({ module }: { module: InvoicesDashboardModule 
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi
-          title={showValues ? "Total Invoices" : "Total invoices"}
+          title={showValues ? "Total Invoices" : "Total Invoices"}
           value={showValues ? (module.total_value ?? 0) : module.total}
           valueText={showValues ? formatCurrency(module.total_value ?? 0) : undefined}
           icon={<Receipt className="size-4" />}
@@ -110,8 +110,8 @@ function Kpi({
     <Card>
       <CardContent className="flex items-center justify-between gap-3 p-4">
         <div className="min-w-0">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">{title}</div>
-          <div className="mt-1 text-2xl font-semibold tracking-tight">{valueText ?? value}</div>
+          <div className="text-xs font-bold uppercase tracking-wide text-zinc-950">{title}</div>
+          <div className="mt-1 text-2xl font-normal tracking-tight text-zinc-950">{valueText ?? value}</div>
         </div>
         <span className={`grid size-9 place-items-center rounded-xl ring-2 ${cls}`}>{icon}</span>
       </CardContent>

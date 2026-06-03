@@ -15,6 +15,7 @@ import {
   TimerReset,
 } from "lucide-react"
 
+import { CollapsibleAuditList } from "@/components/shared/collapsible-audit-list"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -336,11 +337,16 @@ export function ContractorTimeline({ contractorId }: { contractorId: number }) {
             No activity yet for this view.
           </div>
         ) : (
-          <div>
-            {visible.map((ev, idx) => (
-              <TimelineRow key={`${ev.type}-${ev.action}-${idx}`} event={ev} isLast={idx === visible.length - 1} />
-            ))}
-          </div>
+          <CollapsibleAuditList
+            items={visible}
+            renderItem={(ev, idx, currentVisible) => (
+              <TimelineRow
+                key={`${ev.type}-${ev.action}-${idx}`}
+                event={ev}
+                isLast={idx === currentVisible.length - 1}
+              />
+            )}
+          />
         )}
       </CardContent>
     </Card>

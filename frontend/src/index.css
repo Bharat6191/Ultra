@@ -140,4 +140,27 @@
   html {
     @apply font-sans;
     }
+
+  h1:not(.marketing-hero-title),
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: oklch(0.145 0 0) !important;
+    font-weight: 700 !important;
+  }
+}
+
+.dashboard-metric-chart .recharts-wrapper:focus,
+.dashboard-metric-chart .recharts-wrapper:focus-visible,
+.dashboard-metric-chart .recharts-surface:focus,
+.dashboard-metric-chart .recharts-surface:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.marketing-hero-title {
+  color: white;
+  font-weight: 700;
 }

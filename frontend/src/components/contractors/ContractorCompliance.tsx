@@ -65,7 +65,7 @@ export function ContractorCompliance({ documents, warnDays }: { documents: Doc[]
           <div className="flex items-center justify-between rounded-xl border p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <FileWarning className="size-4 text-yellow-700" aria-hidden />
-              Expiring soon
+             Expiring Documents
             </div>
             <div className="text-sm font-semibold">{expiringSoon.length}</div>
           </div>
@@ -119,7 +119,7 @@ export function ContractorCompliance({ documents, warnDays }: { documents: Doc[]
                   })),
                   ...expiringSoon.map((d) => ({
                     ...d,
-                    status: <Badge variant="secondary">Expiring soon</Badge>,
+                    status: <Badge variant="secondary">Expiring Documents</Badge>,
                     expiry: d.expiry_date ?? "—",
                   })),
                   ...missingExpiry.map((d) => ({

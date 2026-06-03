@@ -245,19 +245,19 @@ export function PermissionsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {catalog.modules.map((mod) => (
-                    <React.Fragment key={mod.key}>
-                      <TableRow className="bg-muted/30">
-                        <TableCell colSpan={1 + ACTION_COLUMNS.length} className="py-2">
-                          <div className="text-sm font-semibold">{mod.title}</div>
-                        </TableCell>
-                      </TableRow>
+                  {catalog.modules.map((mod) => {
+                    const singleTab = mod.tabs.length === 1 ? mod.tabs[0] : null
 
-                      {mod.tabs.map((tab) => (
-                        <TableRow key={`${mod.key}.${tab.key}`}>
-                          <TableCell className="text-sm text-muted-foreground">{tab.title}</TableCell>
+                    if (singleTab) {
+                      return (
+                        <TableRow key={mod.key}>
+                          <TableCell className="py-3">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="text-sm font-semibold text-zinc-950">{mod.title}</span>
+                            </div>
+                          </TableCell>
                           {ACTION_COLUMNS.map((act) => {
-                            const cell = tab.permissions.find((p) => p.action === act)
+                            const cell = singleTab.permissions.find((p) => p.action === act)
                             if (!cell) {
                               return (
                                 <TableCell key={act} className="px-2 text-center align-middle">
@@ -288,9 +288,56 @@ export function PermissionsPage() {
                             )
                           })}
                         </TableRow>
-                      ))}
-                    </React.Fragment>
-                  ))}
+                      )
+                    }
+
+                    return (
+                      <React.Fragment key={mod.key}>
+                        <TableRow className="bg-muted/30">
+                          <TableCell colSpan={1 + ACTION_COLUMNS.length} className="py-2">
+                            <div className="text-sm font-semibold">{mod.title}</div>
+                          </TableCell>
+                        </TableRow>
+
+                        {mod.tabs.map((tab) => (
+                          <TableRow key={`${mod.key}.${tab.key}`}>
+                            <TableCell className="text-sm font-semibold text-zinc-950">{tab.title}</TableCell>
+                            {ACTION_COLUMNS.map((act) => {
+                              const cell = tab.permissions.find((p) => p.action === act)
+                              if (!cell) {
+                                return (
+                                  <TableCell key={act} className="px-2 text-center align-middle">
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  </TableCell>
+                                )
+                              }
+
+                              const ok = cell.id != null
+                              return (
+                                <TableCell key={act} className="px-2 py-2 text-center align-middle" title={cell.code}>
+                                  <div className="flex flex-col items-center gap-1">
+                                    <Checkbox
+                                      checked={ok}
+                                      disabled
+                                      className="pointer-events-none data-[state=checked]:border-primary data-[state=checked]:bg-primary"
+                                      aria-label={
+                                        ok
+                                          ? `Permission ${cell.code} exists in database`
+                                          : `Permission ${cell.code} missing — run scripts/sync_modules.py`
+                                      }
+                                    />
+                                    <code className="max-w-[150px] truncate font-mono text-[10px] text-muted-foreground">
+                                      {cell.code}
+                                    </code>
+                                  </div>
+                                </TableCell>
+                              )
+                            })}
+                          </TableRow>
+                        ))}
+                      </React.Fragment>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>

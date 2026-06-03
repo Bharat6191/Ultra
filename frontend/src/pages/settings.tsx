@@ -11,7 +11,6 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getJson, putJson } from "@/lib/api"
 import { hasPermission, isSuperuser } from "@/lib/permissions"
-import { cn } from "@/lib/utils"
 
 export type PasswordPolicy = {
   min_length: number
@@ -29,26 +28,11 @@ type AuthPolicy = {
   mfa_enforced: boolean
 }
 
-function isPasswordPolicy(v: unknown): v is PasswordPolicy {
-  if (!v || typeof v !== "object") return false
-  const o = v as Record<string, unknown>
-  return (
-    typeof o.min_length === "number" &&
-    typeof o.require_uppercase === "boolean" &&
-    typeof o.require_lowercase === "boolean" &&
-    typeof o.require_digit === "boolean" &&
-    typeof o.require_special === "boolean" &&
-    typeof o.max_age_days === "number"
-  )
-}
-
 export function SettingsPage() {
   const canEditSettings = hasPermission("settings.update") || isSuperuser()
 
   const [policy, setPolicy] = React.useState<PasswordPolicy | null>(null)
   const [authPolicy, setAuthPolicy] = React.useState<AuthPolicy | null>(null)
-  const [jsonText, setJsonText] = React.useState("")
-  const [jsonError, setJsonError] = React.useState<string | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [savingAuth, setSavingAuth] = React.useState(false)
@@ -62,8 +46,6 @@ export function SettingsPage() {
         getJson<AuthPolicy>("/admin/settings/auth-policy"),
       ])
       setPolicy(data)
-      setJsonText(JSON.stringify(data, null, 2))
-      setJsonError(null)
       setAuthPolicy(auth)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed to load settings")
@@ -76,33 +58,6 @@ export function SettingsPage() {
     void load()
   }, [])
 
-  React.useEffect(() => {
-    if (policy) setJsonText(JSON.stringify(policy, null, 2))
-  }, [policy])
-
-  function applyJson() {
-    setJsonError(null)
-    try {
-      const parsed: unknown = JSON.parse(jsonText)
-      if (!isPasswordPolicy(parsed)) {
-        setJsonError("JSON must include all policy fields with correct types.")
-        return
-      }
-      if (parsed.min_length < 1 || parsed.min_length > 256) {
-        setJsonError("min_length must be between 1 and 256.")
-        return
-      }
-      if (parsed.max_age_days < 0 || parsed.max_age_days > 36500) {
-        setJsonError("max_age_days must be between 0 and 36500.")
-        return
-      }
-      setPolicy(parsed)
-      toast.success("JSON applied to form")
-    } catch {
-      setJsonError("Invalid JSON.")
-    }
-  }
-
   async function save() {
     if (!policy) return
     setSaving(true)
@@ -113,7 +68,6 @@ export function SettingsPage() {
         policy as unknown as Record<string, unknown>
       )
       setPolicy(updated)
-      setJsonText(JSON.stringify(updated, null, 2))
       toast.success("Saved", { id: "settings-save" })
     } catch (e) {
       const message = e instanceof Error ? e.message : "Save failed"
@@ -328,6 +282,7 @@ export function SettingsPage() {
             </CardContent>
           </Card>
 
+          {/* Advanced JSON editor hidden to keep the password settings page simpler for users.
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Password Policy (JSON)</CardTitle>
@@ -352,6 +307,7 @@ export function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+          */}
         </TabsContent>
       </Tabs>
     </div>

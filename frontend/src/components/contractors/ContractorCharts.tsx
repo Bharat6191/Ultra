@@ -58,7 +58,7 @@ export function ContractorCharts({
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       <Card className="rounded-2xl">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Compliance distribution</CardTitle>
+          <CardTitle className="text-sm font-bold text-zinc-950">Compliance distribution</CardTitle>
           <CardDescription className="text-xs">Contractors by lifecycle status</CardDescription>
         </CardHeader>
         <CardContent className="h-72">
@@ -93,7 +93,7 @@ export function ContractorCharts({
 
       <Card className="rounded-2xl">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Contractors by plant</CardTitle>
+          <CardTitle className="text-sm font-bold text-zinc-950">Contractors by plant</CardTitle>
           <CardDescription className="text-xs">Top operating sites</CardDescription>
         </CardHeader>
         <CardContent className="h-72">

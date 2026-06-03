@@ -43,12 +43,11 @@ function Kpi({
     <Card>
       <CardContent className="flex items-center justify-between gap-3 p-4">
         <div className="min-w-0">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">{title}</div>
-          <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
+          <div className="text-xs font-bold uppercase tracking-wide text-zinc-950">{title}</div>
+          <div className="mt-1 text-2xl font-normal tracking-tight text-zinc-950">{value}</div>
         </div>
         <span className={`grid size-9 place-items-center rounded-xl ring-2 ${cls}`}>{icon}</span>
       </CardContent>
     </Card>
   )
 }
-

@@ -48,7 +48,7 @@ export function ContractorStats({
 
   const items = [
     { title: "Total documents", value: String(stats.total), icon: FileText, hint: "Uploaded & tracked" },
-    { title: "Expiring soon", value: String(stats.expiringSoon), icon: CalendarClock, hint: `≤ ${warnDays} days` },
+    { title: "Expiring Documents", value: String(stats.expiringSoon), icon: CalendarClock, hint: `≤ ${warnDays} days` },
     { title: "Expired", value: String(stats.expired), icon: AlertTriangle, hint: "Needs attention" },
     { title: "Last activity", value: fmt(stats.lastActivity), icon: History, hint: "Latest update" },
   ] as const
@@ -61,14 +61,14 @@ export function ContractorStats({
           <Card key={it.title} className="rounded-2xl shadow-sm">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between gap-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{it.title}</CardTitle>
+                <CardTitle className="text-sm font-bold text-zinc-950">{it.title}</CardTitle>
                 <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
                   <Icon className="size-4" aria-hidden />
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-semibold tracking-tight text-zinc-950">{it.value}</div>
+              <div className="text-xl font-normal tracking-tight text-zinc-950">{it.value}</div>
               <div className="mt-1 text-xs text-muted-foreground">{it.hint}</div>
             </CardContent>
           </Card>
@@ -77,4 +77,3 @@ export function ContractorStats({
     </div>
   )
 }
-

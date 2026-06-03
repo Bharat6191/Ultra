@@ -287,6 +287,11 @@ export function AppLoginPage() {
               <Button type="submit" disabled={isSubmitting} className="w-full">
                 {isSubmitting ? "Logging in…" : "Login"}
               </Button>
+
+              <div className="pt-4 text-center text-foreground">
+                <div className="text-sm font-medium">{AUTH_POWERED_BY}</div>
+                <div className="mt-2 text-sm">{AUTH_APP_VERSION}</div>
+              </div>
             </form>
           ) : (
             <form onSubmit={onSubmitOtp} className="space-y-4">
@@ -324,10 +329,6 @@ export function AppLoginPage() {
             </form>
           )}
 
-          <div className="pt-8 text-center text-foreground">
-            <div className="text-sm font-medium">{AUTH_POWERED_BY}</div>
-            <div className="mt-2 text-sm">{AUTH_APP_VERSION}</div>
-          </div>
         </CardContent>
       </Card>
     </AppAuthMarketingLayout>
