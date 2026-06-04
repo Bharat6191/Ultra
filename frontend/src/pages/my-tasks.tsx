@@ -14,6 +14,7 @@ type UnifiedTaskRow = {
   task_type: "approval" | "manual" | "rework"
   title: string | null
   status: string
+  entity_type?: string | null
 }
 
 type InboxTableProps = {
@@ -22,13 +23,14 @@ type InboxTableProps = {
   canView: boolean
   emptyMessage: string
   onOpen: (taskId: number) => void
+  title?: string
 }
 
-function InboxTable({ rows, loading, canView, emptyMessage, onOpen }: InboxTableProps) {
+function InboxTable({ rows, loading, canView, emptyMessage, onOpen, title = "Inbox" }: InboxTableProps) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Inbox</CardTitle>
+        <CardTitle className="text-base">{title}</CardTitle>
         {/* <CardDescription>Tasks you are assigned to or that you created — open a row for details, comments, and history.</CardDescription> */}
       </CardHeader>
       <CardContent>
@@ -73,10 +75,25 @@ function InboxTable({ rows, loading, canView, emptyMessage, onOpen }: InboxTable
   )
 }
 
+type TaskSectionKey = "negotiation" | "invoice" | "other"
+
+type TaskSection = {
+  key: TaskSectionKey
+  label: string
+  rows: UnifiedTaskRow[]
+}
+
+function taskSectionKey(row: UnifiedTaskRow): TaskSectionKey {
+  if (row.entity_type === "contractor_rate_approval") return "negotiation"
+  if (row.entity_type === "invoice_exception_approval") return "invoice"
+  return "other"
+}
+
 export function MyTasksPage() {
   const [rows, setRows] = React.useState<UnifiedTaskRow[] | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [inbox, setInbox] = React.useState<"active" | "done">("active")
+  const [section, setSection] = React.useState<TaskSectionKey>("negotiation")
   const navigate = useNavigate()
 
   const [, forcePermRefresh] = React.useReducer((x: number) => x + 1, 0)
@@ -120,6 +137,30 @@ export function MyTasksPage() {
     void load()
   }, [canView, load])
 
+  const sections = React.useMemo<TaskSection[]>(() => {
+    const all = rows ?? []
+    const negotiation = all.filter((row) => taskSectionKey(row) === "negotiation")
+    const invoice = all.filter((row) => taskSectionKey(row) === "invoice")
+    const other = all.filter((row) => taskSectionKey(row) === "other")
+    const grouped: TaskSection[] = [
+      { key: "negotiation", label: "Negotiation Approval", rows: negotiation },
+      { key: "invoice", label: "Invoices Approval", rows: invoice },
+      { key: "other", label: "Other Tasks", rows: other },
+    ]
+    return grouped.filter((item) => item.rows.length > 0)
+  }, [rows])
+
+  React.useEffect(() => {
+    if (sections.length === 0) return
+    if (sections.some((item) => item.key === section)) return
+    setSection(sections[0].key)
+  }, [section, sections])
+
+  const hasApprovalSections = sections.some((item) => item.key === "negotiation" || item.key === "invoice")
+  const activeSection = hasApprovalSections ? sections.find((item) => item.key === section) ?? sections[0] ?? null : null
+  const sectionedTitle = activeSection?.label ?? "Inbox"
+  const sectionedRows = activeSection?.rows ?? rows
+
   return (
     <div className="w-full space-y-6">
       <div>
@@ -136,22 +177,50 @@ export function MyTasksPage() {
           <TabsTrigger value="done">Done</TabsTrigger>
         </TabsList>
         <TabsContent value="active" className="mt-4">
-          <InboxTable
-            rows={rows}
-            loading={loading}
-            canView={canView}
-            onOpen={(id) => void navigate(`/dashboard/tasks/${id}`)}
-            emptyMessage="No active tasks. Approvals and manual items that need you appear here."
-          />
+          <div className="space-y-4">
+            {hasApprovalSections ? (
+              <Tabs value={section} onValueChange={(v) => setSection(v as TaskSectionKey)} className="w-full">
+                <TabsList className="flex h-auto flex-wrap gap-2 bg-transparent p-0">
+                  {sections.map((item) => (
+                    <TabsTrigger key={item.key} value={item.key}>
+                      {item.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            ) : null}
+            <InboxTable
+              title={sectionedTitle}
+              rows={sectionedRows}
+              loading={loading}
+              canView={canView}
+              onOpen={(id) => void navigate(`/dashboard/tasks/${id}`)}
+              emptyMessage="No active tasks. Approvals and manual items that need you appear here."
+            />
+          </div>
         </TabsContent>
         <TabsContent value="done" className="mt-4">
-          <InboxTable
-            rows={rows}
-            loading={loading}
-            canView={canView}
-            onOpen={(id) => void navigate(`/dashboard/tasks/${id}`)}
-            emptyMessage="No completed items yet. Finished approvals, rejections, and closed manual tasks show here."
-          />
+          <div className="space-y-4">
+            {hasApprovalSections ? (
+              <Tabs value={section} onValueChange={(v) => setSection(v as TaskSectionKey)} className="w-full">
+                <TabsList className="flex h-auto flex-wrap gap-2 bg-transparent p-0">
+                  {sections.map((item) => (
+                    <TabsTrigger key={item.key} value={item.key}>
+                      {item.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            ) : null}
+            <InboxTable
+              title={sectionedTitle}
+              rows={sectionedRows}
+              loading={loading}
+              canView={canView}
+              onOpen={(id) => void navigate(`/dashboard/tasks/${id}`)}
+              emptyMessage="No completed items yet. Finished approvals, rejections, and closed manual tasks show here."
+            />
+          </div>
         </TabsContent>
       </Tabs>
     </div>

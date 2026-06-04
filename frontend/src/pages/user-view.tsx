@@ -433,7 +433,6 @@ export function UserViewPage() {
         : []
     : []
   const primaryRole = roleList[0]?.name ?? "—"
-  const mfaLabel = user?.mfa_setup_completed ? "MFA Setup Complete" : mfaEnabled ? "MFA Pending" : "MFA Not Required"
   const headerFacts = user
     ? [
         { label: "Designation", value: user.designation ?? "—", icon: <BadgeCheck className="size-4" /> },
@@ -550,32 +549,6 @@ export function UserViewPage() {
                         <div className="flex flex-wrap items-center gap-3">
                           <h2 className="text-3xl font-semibold tracking-tight text-zinc-950">{user.full_name}</h2>
                           <StatusBadge active={user.is_active} />
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-600">
-                          <span>@{user.username || "—"}</span>
-                          <span className="hidden text-zinc-300 sm:inline">•</span>
-                          <span>{user.email ?? "No email address"}</span>
-                          {user.employee_code ? (
-                            <>
-                              <span className="hidden text-zinc-300 sm:inline">•</span>
-                              <span>{user.employee_code}</span>
-                            </>
-                          ) : null}
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          {user.is_superuser ? (
-                            <Badge
-                              variant="outline"
-                              className="rounded-full border-amber-300 bg-amber-50 px-3 py-1 text-amber-900"
-                            >
-                              Superuser
-                            </Badge>
-                          ) : null}
-                          <Badge variant="outline" className="rounded-full px-3 py-1">
-                            {mfaLabel}
-                          </Badge>
                         </div>
                       </div>
                     </div>

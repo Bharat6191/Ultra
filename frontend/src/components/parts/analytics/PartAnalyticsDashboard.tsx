@@ -387,8 +387,8 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
 
       <Card>
         <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-sm font-semibold">Contractor negotiation comparison</CardTitle>
-          <CardDescription className="text-xs">Rates and negotiation outcomes by contractor for this part.</CardDescription>
+          <CardTitle className="text-sm font-semibold"> Contractor Negotiation</CardTitle>
+          {/* <CardDescription className="text-xs">Rates and negotiation outcomes by contractor for this part.</CardDescription> */}
         </CardHeader>
         <CardContent className="px-0 pb-3">
           <div className="overflow-x-auto">
@@ -397,11 +397,11 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="h-8 text-xs">Contractor</TableHead>
                   <TableHead className="h-8 text-right text-xs">Should cost</TableHead>
-                  <TableHead className="h-8 text-right text-xs">Initial quote</TableHead>
-                  <TableHead className="h-8 text-right text-xs">Final negotiated</TableHead>
-                  <TableHead className="h-8 text-right text-xs">Diff vs base</TableHead>
+                  <TableHead className="h-8 text-right text-xs"> quote</TableHead>
+                  <TableHead className="h-8 text-right text-xs">negotiated</TableHead>
+                  <TableHead className="h-8 text-right text-xs">Cost Variance </TableHead>
                   <TableHead className="h-8 text-right text-xs">Savings %</TableHead>
-                  <TableHead className="h-8 text-xs">Negotiation status</TableHead>
+                  <TableHead className="h-8 text-xs"> status</TableHead>
                   <TableHead className="h-8 text-xs">Approved by</TableHead>
                   <TableHead className="h-8 text-xs">Last negotiation</TableHead>
                   <TableHead className="h-8 text-right text-xs">Active WO</TableHead>

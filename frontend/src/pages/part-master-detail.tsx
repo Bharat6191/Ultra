@@ -427,7 +427,7 @@ export function PartMasterDetailPage() {
       <Tabs value={mainTab} onValueChange={setMainTab} className="w-full min-w-0">
         <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-xl bg-muted/40 p-1">
           <TabsTrigger value="intelligence" className="rounded-lg">
-            Intelligence
+            Part Details
           </TabsTrigger>
           <TabsTrigger value="master" className="rounded-lg">
             Master data & audit

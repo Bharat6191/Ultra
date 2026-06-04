@@ -393,7 +393,7 @@ export function ExecutiveModuleRows({ data }: { data: ExecutiveOverviewData }) {
     },
     {
       key: "pending",
-      label: showInvoiceValues ? "Approval" : " Approval",
+      label: "Pending",
       shortLabel: "Pending",
       value: showInvoiceValues ? (inv.pending_exception_approval_value ?? 0) : inv.pending_exception_approval,
       valueText: showInvoiceValues ? formatCurrency(inv.pending_exception_approval_value ?? 0) : undefined,

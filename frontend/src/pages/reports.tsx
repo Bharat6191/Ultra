@@ -504,7 +504,7 @@ export function ReportsPage() {
 
       <div class="section summary-grid">
         <div>
-          <h2 class="section-title">Plant Wise Summary</h2>
+          <h2 class="section-title">Plant Wise Invoice Summary</h2>
           <table>
             <thead>
               <tr>
@@ -521,7 +521,7 @@ export function ReportsPage() {
         </div>
 
         <div>
-          <h2 class="section-title">Contractor Wise Summary</h2>
+          <h2 class="section-title">Contractor Wise Invoice Summary</h2>
           <table>
             <thead>
               <tr>
@@ -582,12 +582,12 @@ export function ReportsPage() {
   return (
     <div className="w-full space-y-6 print:space-y-4">
       <div className="border-b border-emerald-100 pb-4 text-center print:hidden">
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Invoice Report</h1>
+        {/* <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Invoice Report</h1> */}
       </div>
 
       <Card className="rounded-3xl border border-emerald-100 shadow-sm print:hidden">
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg text-zinc-950">Invoice Report Filters</CardTitle>
+          <CardTitle className="text-lg text-zinc-950">Invoice Filters</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -687,7 +687,7 @@ export function ReportsPage() {
             <div className="flex flex-wrap items-center gap-3">
               <Button type="submit" disabled={loading}>
                 <RefreshCcw className="size-4" />
-                Generate Report
+                Generate
               </Button>
               <Button
                 type="button"
@@ -716,13 +716,13 @@ export function ReportsPage() {
         <div className="border-b border-emerald-100 px-6 py-6 print:px-0 print:py-0">
           <div className="flex flex-wrap items-start justify-between gap-4 print:hidden">
             <div className="space-y-1">
-              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">
-                Reports
-              </div>
-              <h2 className="text-3xl font-semibold tracking-tight text-zinc-950">Invoice Report</h2>
-              <p className="text-sm text-zinc-600">
+              {/* <div className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">
+                Report
+              </div> */}
+              <h2 className="text-3xl font-semibold tracking-tight text-zinc-950">Invoices</h2>
+              {/* <p className="text-sm text-zinc-600">
                 Detailed invoice list with plant-wise and contractor-wise totals.
-              </p>
+              </p> */}
             </div>
 
               <Button
@@ -735,7 +735,7 @@ export function ReportsPage() {
           </div>
 
           <div className="hidden print:block print:pb-4">
-            <h2 className="text-2xl font-semibold tracking-tight text-zinc-950">INVOICE REPORT</h2>
+            <h2 className="text-2xl font-semibold tracking-tight text-zinc-950">INVOICE REPOT</h2>
           </div>
 
           <div className="mt-6 grid gap-4 border-t border-emerald-100 pt-6 md:grid-cols-2 xl:grid-cols-5 print:mt-0 print:border-t-0 print:pt-0">
@@ -776,13 +776,13 @@ export function ReportsPage() {
             </div>
           </div>
           <div className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 print:rounded-none print:border-zinc-300">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Plants Covered</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Plants</div>
             <div className="mt-2 text-3xl font-semibold tracking-tight text-zinc-950">
               {loading ? "—" : report?.by_plant.length ?? 0}
             </div>
           </div>
           <div className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 print:rounded-none print:border-zinc-300">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Contractors Covered</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Contractors</div>
             <div className="mt-2 text-3xl font-semibold tracking-tight text-zinc-950">
               {loading ? "—" : report?.by_contractor.length ?? 0}
             </div>
@@ -839,8 +839,8 @@ export function ReportsPage() {
           </div>
 
           <div className="grid gap-6 xl:grid-cols-2 print:grid-cols-1">
-            <SummaryTable title="Plant Wise Summary" nameLabel="Plant" rows={report?.by_plant ?? []} />
-            <SummaryTable title="Contractor Wise Summary" nameLabel="Contractor" rows={report?.by_contractor ?? []} />
+            <SummaryTable title="Plant Wise Invoice Summary" nameLabel="Plant" rows={report?.by_plant ?? []} />
+            <SummaryTable title="Contractor Wise Invoice Summary" nameLabel="Contractor" rows={report?.by_contractor ?? []} />
           </div>
         </div>
 

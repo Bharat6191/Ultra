@@ -38,6 +38,21 @@ export type PartMasterPublic = {
   updated_at: string
 }
 
+function formatCompactNumber(value: string | number | null, maximumFractionDigits = 4): string {
+  if (value === null || value === undefined || value === "") return "—"
+  const n = typeof value === "number" ? value : Number(value)
+  if (!Number.isFinite(n)) return String(value)
+  return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits })
+}
+
+function formatManDays(value: string | number | null): string {
+  return formatCompactNumber(value, 4)
+}
+
+function formatLabourCost(value: string | number | null): string {
+  return formatCompactNumber(value, 2)
+}
+
 export function PartMasterPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -200,7 +215,7 @@ export function PartMasterPage() {
                   <TableHead>Pricing</TableHead>
                   <TableHead>Rate unit</TableHead>
                   <TableHead className="text-right">Should cost</TableHead>
-                  <TableHead className="text-right">Cost / days</TableHead>
+                  <TableHead className="text-right">Cost / day</TableHead>
                   <TableHead>Effective</TableHead>
                   <TableHead>Status</TableHead>
                   {/* <TableHead className="w-[72px] text-right">Actions</TableHead> */}
@@ -230,8 +245,8 @@ export function PartMasterPage() {
                       <TableCell className="text-right text-xs text-muted-foreground">
                         {r.labour_cost != null || r.man_days != null ? (
                           <>
-                            {r.labour_cost != null ? String(r.labour_cost) : "—"}
-                            {r.man_days != null ? ` · ${String(r.man_days)} d` : ""}
+                            {r.labour_cost != null ? formatLabourCost(r.labour_cost) : "—"}
+                            {r.man_days != null ? `/${formatManDays(r.man_days)}d` : ""}
                           </>
                         ) : (
                           "—"
