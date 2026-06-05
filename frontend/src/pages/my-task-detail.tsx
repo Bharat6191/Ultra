@@ -6,8 +6,17 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { Textarea } from "@/components/ui/textarea"
 import { ApprovalWorkflowTimeline, type TaskApprovalStepLine } from "@/components/approval-workflow-timeline"
 import {
   WorkOrderApprovalReview,
@@ -379,6 +388,8 @@ export function MyTaskDetailPage() {
   const [commenting, setCommenting] = React.useState(false)
   const [acting, setActing] = React.useState(false)
   const [actionComment, setActionComment] = React.useState("")
+  const [decisionDialogOpen, setDecisionDialogOpen] = React.useState(false)
+  const [decisionAction, setDecisionAction] = React.useState<"approve" | "reject" | null>(null)
 
   const [, forcePermRefresh] = React.useReducer((x: number) => x + 1, 0)
   const approvalActionCodes = React.useMemo(() => {
@@ -505,6 +516,8 @@ export function MyTaskDetailPage() {
         comment: actionComment.trim() ? actionComment.trim() : null,
       })
       toast.success(action === "approve" ? "Approved." : "Rejected.")
+      setDecisionDialogOpen(false)
+      setDecisionAction(null)
       setActionComment("")
       await load(task.id)
     } catch (e) {
@@ -565,35 +578,41 @@ export function MyTaskDetailPage() {
       (task.status === "pending" || task.status === "open" || task.status === "in_progress"),
   )
 
-  function renderApprovalDecisionEditor(extraClassName?: string) {
+  function handleDecisionDialogOpenChange(open: boolean) {
+    if (acting) return
+    setDecisionDialogOpen(open)
+    if (!open) {
+      setDecisionAction(null)
+      setActionComment("")
+    }
+  }
+
+  function openDecisionDialog(action: "approve" | "reject") {
+    if (!canApprovalAct || acting) return
+    setDecisionAction(action)
+    setDecisionDialogOpen(true)
+  }
+
+  function renderApprovalDecisionActions(extraClassName?: string, compact = false) {
     if (!task || task.task_type !== "approval" || !task.approval) return null
     return (
       <div className={cn("w-full min-w-0 space-y-2.5", extraClassName)}>
-        <textarea
-          id="approval-comment"
-          className={cn(
-            "min-h-[74px] w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40",
-          )}
-          value={actionComment}
-          onChange={(e) => setActionComment(e.target.value)}
-          rows={3}
-          placeholder="Optional note for the approver record..."
-          disabled={acting}
-        />
-        <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className={cn("flex flex-wrap justify-between gap-2", compact ? "items-center" : "items-start")}>
           {!canApprovalAct ? (
             <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
               Needs <span className="font-mono">{approvalActionCodes.join(" or ")}</span> on your role.
             </p>
-          ) : (
-            <div />
+          ) : compact ? null : (
+            <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
+              Add a reason or note in the popup before you finish this decision.
+            </p>
           )}
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             <Button
               type="button"
               size="sm"
               variant="destructive"
-              onClick={() => void approveOrReject("reject")}
+              onClick={() => openDecisionDialog("reject")}
               disabled={acting || !canApprovalAct}
             >
               Reject
@@ -602,7 +621,7 @@ export function MyTaskDetailPage() {
               type="button"
               size="sm"
               variant="default"
-              onClick={() => void approveOrReject("approve")}
+              onClick={() => openDecisionDialog("approve")}
               disabled={acting || !canApprovalAct}
             >
               Approve
@@ -679,6 +698,7 @@ export function MyTaskDetailPage() {
           </p>
         </div>
         <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+          {approvalStepNeedsDecision && task?.approval ? renderApprovalDecisionActions("w-auto space-y-0", true) : null}
           {!loading && recordOpen ? (
             <Button asChild size="sm" variant="default">
               <Link to={recordOpen.href}>{recordOpen.label}</Link>
@@ -748,24 +768,59 @@ export function MyTaskDetailPage() {
         </Alert>
       ) : null}
 
-      {approvalStepNeedsDecision && task?.approval && !loading ? (
-        <Card
-          size="sm"
-          className="border-emerald-200/80 bg-emerald-50/40 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/20"
-        >
-          <CardHeader className="pb-1.5 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <div>
-              <CardTitle className="text-base">Approve or reject this step</CardTitle>
-            </div>
-            <Badge variant={taskStatusBadgeVariant(task.status)} className="w-fit shrink-0">
-              {task.status}
-            </Badge>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {renderApprovalDecisionEditor("max-w-none")}
-          </CardContent>
-        </Card>
-      ) : null}
+      <Dialog open={decisionDialogOpen} onOpenChange={handleDecisionDialogOpenChange}>
+        <DialogContent className="sm:max-w-lg" showCloseButton={!acting}>
+          <DialogHeader>
+            <DialogTitle>{decisionAction === "reject" ? "Reject this step" : "Approve this step"}</DialogTitle>
+            <DialogDescription>
+              {decisionAction === "reject"
+                ? "Add the rejection reason or any note you want stored with this action."
+                : "Add an approval note if you want it saved with this action."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="approval-comment-dialog">
+              {decisionAction === "reject" ? "Reason or note" : "Note"}
+            </Label>
+            <Textarea
+              id="approval-comment-dialog"
+              value={actionComment}
+              onChange={(e) => setActionComment(e.target.value)}
+              placeholder={
+                decisionAction === "reject"
+                  ? "Add rejection reason..."
+                  : "Optional note for the approver record..."
+              }
+              className="min-h-[140px] resize-y"
+              disabled={acting}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleDecisionDialogOpenChange(false)}
+              disabled={acting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant={decisionAction === "reject" ? "destructive" : "default"}
+              onClick={() => {
+                if (decisionAction) {
+                  void approveOrReject(decisionAction)
+                }
+              }}
+              disabled={acting || !decisionAction}
+            >
+              {acting ? "Saving…" : decisionAction === "reject" ? "Reject" : "Approve"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
