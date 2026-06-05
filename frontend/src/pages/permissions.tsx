@@ -58,6 +58,7 @@ const ACTION_LABEL: Record<string, string> = {
   update: "Edit",
   delete: "Delete",
 }
+const ALL_PERMISSIONS_PREVIEW_COUNT = 4
 
 export function PermissionsPage() {
   const [features, setFeatures] = React.useState<FeaturePublic[] | null>(null)
@@ -69,12 +70,18 @@ export function PermissionsPage() {
   const [featureId, setFeatureId] = React.useState("")
   const [action, setAction] = React.useState("")
   const [description, setDescription] = React.useState("")
+  const [showAllDatabasePermissions, setShowAllDatabasePermissions] = React.useState(false)
 
   const featureNameById = React.useMemo(() => {
     const map = new Map<number, FeaturePublic>()
     for (const f of features ?? []) map.set(f.id, f)
     return map
   }, [features])
+
+  const sortedPermissions = React.useMemo(
+    () => (permissions ?? []).slice().sort((a, b) => a.code.localeCompare(b.code)),
+    [permissions]
+  )
 
   async function load() {
     setError(null)
@@ -134,14 +141,14 @@ export function PermissionsPage() {
     <div className="space-y-4 pb-10">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-medium">Permissions</h2>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Permissions</h1>
+          {/* <p className="text-sm text-muted-foreground">
             Action-level codes use{" "}
             <span className="font-mono text-xs">module.tab.action</span> (or{" "}
             <span className="font-mono text-xs">module.action</span> when the tab matches the module).
             Run <span className="font-mono text-xs">python scripts/sync_modules.py</span> to sync from
             config.
-          </p>
+          </p> */}
         </div>
 
         {hasPermission("permissions.create") ? (
@@ -310,12 +317,14 @@ export function PermissionsPage() {
 
                       return (
                         <React.Fragment key={mod.key}>
+                          {/* Keep the grouped-module divider available for later, but hide it in the UI for now.
                           <TableRow className="bg-muted/30">
                             <TableCell />
                             <TableCell colSpan={1 + ACTION_COLUMNS.length} className="py-2">
                               <div className="text-sm font-semibold">{mod.title}</div>
                             </TableCell>
                           </TableRow>
+                          */}
 
                           {mod.tabs.map((tab) => {
                             serialNumber += 1
@@ -377,7 +386,19 @@ export function PermissionsPage() {
       </div>
 
       <div className="rounded-lg border">
-        <div className="px-3 py-2 text-sm font-medium">All permissions (database)</div>
+        <div className="flex items-center justify-between gap-3 px-3 py-2">
+          <div className="text-sm font-medium">All permissions (database)</div>
+          {permissions && permissions.length > ALL_PERMISSIONS_PREVIEW_COUNT ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs"
+              onClick={() => setShowAllDatabasePermissions((current) => !current)}
+            >
+              {showAllDatabasePermissions ? "Show less" : `Show ${ALL_PERMISSIONS_PREVIEW_COUNT} only`}
+            </Button>
+          ) : null}
+        </div>
         <Separator />
         <Table>
           <TableHeader>
@@ -401,10 +422,10 @@ export function PermissionsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              permissions
-                .slice()
-                .sort((a, b) => a.code.localeCompare(b.code))
-                .map((p) => {
+              (showAllDatabasePermissions
+                ? sortedPermissions
+                : sortedPermissions.slice(0, ALL_PERMISSIONS_PREVIEW_COUNT)
+              ).map((p) => {
                   const f = featureNameById.get(p.feature_id)
                   return (
                     <TableRow key={p.id}>
@@ -426,6 +447,15 @@ export function PermissionsPage() {
             )}
           </TableBody>
         </Table>
+        {permissions && permissions.length > ALL_PERMISSIONS_PREVIEW_COUNT ? (
+          <div className="border-t px-3 py-2 text-xs text-muted-foreground">
+            Showing{" "}
+            {showAllDatabasePermissions
+              ? permissions.length
+              : Math.min(ALL_PERMISSIONS_PREVIEW_COUNT, permissions.length)}{" "}
+            of {permissions.length} permissions.
+          </div>
+        ) : null}
       </div>
     </div>
   )

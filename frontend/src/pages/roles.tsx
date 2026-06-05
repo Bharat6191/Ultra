@@ -107,6 +107,17 @@ const ACTION_LABEL: Record<string, string> = {
   manage: "Manage",
 }
 
+function actionLabel(action: string): string {
+  return (
+    ACTION_LABEL[action] ??
+    action
+      .split(/[_-]+/g)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ")
+  )
+}
+
 function orderedActionColumns(actions: string[]): string[] {
   const uniq = new Set<string>(actions.map((a) => a.trim()).filter(Boolean))
   const out: string[] = []
@@ -214,6 +225,8 @@ function TogglePill({
 const ROLES_SPLIT_MAX_H = "max-h-[calc(100svh-7rem)]"
 
 export function RolesPage() {
+  const rightColumnRef = React.useRef<HTMLDivElement | null>(null)
+
   const [roles, setRoles] = React.useState<RoleListItem[] | null>(null)
   const [plants, setPlants] = React.useState<OrgUnitPublic[] | null>(null)
   const [catalog, setCatalog] = React.useState<PermissionCatalog | null>(null)
@@ -234,6 +247,7 @@ export function RolesPage() {
   const [createOrgUnitIds, setCreateOrgUnitIds] = React.useState<Set<number>>(() => new Set())
   const [search, setSearch] = React.useState("")
   const [expandedPermissionModules, setExpandedPermissionModules] = React.useState<Set<string>>(() => new Set())
+  const [leftPanelHeight, setLeftPanelHeight] = React.useState<number | null>(null)
 
   const canCreateRole = hasPermission("roles.create") || isSuperuser()
   /** Same as ``GET /admin/org-units`` (plant pickers for roles vs. Plants admin module). */
@@ -332,6 +346,33 @@ export function RolesPage() {
       return haystack.includes(query)
     })
   }, [roles, search])
+
+  React.useEffect(() => {
+    const target = rightColumnRef.current
+    if (!target || typeof ResizeObserver === "undefined") return
+
+    let frame = 0
+
+    const updateHeight = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const next = Math.ceil(target.getBoundingClientRect().height)
+        setLeftPanelHeight((current) => (current === next ? current : next))
+      })
+    }
+
+    updateHeight()
+
+    const observer = new ResizeObserver(() => updateHeight())
+    observer.observe(target)
+    window.addEventListener("resize", updateHeight)
+
+    return () => {
+      cancelAnimationFrame(frame)
+      observer.disconnect()
+      window.removeEventListener("resize", updateHeight)
+    }
+  }, [catalog, filteredRoles.length, plants, roles, selectedRoleId])
 
   React.useEffect(() => {
     if (filteredRoles.length === 0) return
@@ -487,9 +528,10 @@ export function RolesPage() {
         </Alert>
       ) : null}
 
-      <div className="grid items-stretch gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
         <Card
-          className="flex h-full min-h-[520px] self-stretch flex-col overflow-hidden rounded-[28px] border-zinc-200 bg-white shadow-sm"
+          className="flex min-h-[520px] min-w-0 flex-col overflow-hidden rounded-[28px] border-zinc-200 bg-white shadow-sm"
+          style={leftPanelHeight != null ? { height: leftPanelHeight } : undefined}
         >
           <CardHeader className="space-y-4 px-6 pb-4 pt-6">
             <div className="flex items-start justify-between gap-3">
@@ -676,7 +718,7 @@ export function RolesPage() {
           </div>
         </Card>
 
-        <div className="space-y-6">
+        <div ref={rightColumnRef} className="space-y-6">
           <Card className="overflow-hidden rounded-[28px] border-zinc-200 bg-white shadow-sm">
             <CardContent className="px-8 pb-7 pt-7">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
@@ -816,7 +858,7 @@ export function RolesPage() {
                                 return (
                                   <div key={`${mod.key}.${primaryTab?.key ?? "module"}.${action}`} className="flex items-center">
                                     <TogglePill
-                                      label={ACTION_LABEL[action] ?? action}
+                                      label={actionLabel(action)}
                                       checked={checked}
                                       disabled={disabled}
                                       onCheckedChange={(value) => {
@@ -843,7 +885,7 @@ export function RolesPage() {
                                       return (
                                         <TogglePill
                                           key={`${mod.key}.extra.${action}`}
-                                          label={ACTION_LABEL[action] ?? action}
+                                          label={actionLabel(action)}
                                           checked={checked}
                                           disabled={disabled}
                                           onCheckedChange={(value) => {
@@ -884,7 +926,7 @@ export function RolesPage() {
                                               return (
                                                 <TogglePill
                                                   key={`${mod.key}.${tab.key}.${action}.extra`}
-                                                  label={ACTION_LABEL[action] ?? action}
+                                                  label={actionLabel(action)}
                                                   checked={checked}
                                                   disabled={disabled}
                                                   onCheckedChange={(value) => {
@@ -922,7 +964,7 @@ export function RolesPage() {
                                         return (
                                           <div key={`${mod.key}.${tab.key}.${action}`} className="flex items-center">
                                             <TogglePill
-                                              label={ACTION_LABEL[action] ?? action}
+                                              label={actionLabel(action)}
                                               checked={checked}
                                               disabled={disabled}
                                               onCheckedChange={(value) => {
