@@ -202,20 +202,22 @@ function TogglePill({
   onCheckedChange: (value: boolean) => void
   activeTone?: "default" | "muted"
 }) {
+  const isChecked = checked === true
+
   return (
     <label
       className={cn(
         "inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-medium whitespace-nowrap transition",
         disabled
           ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"
-          : checked
+          : isChecked
             ? activeTone === "default"
               ? "border-emerald-200 bg-emerald-50 text-zinc-950 shadow-sm"
               : "border-zinc-300 bg-zinc-100 text-zinc-950 shadow-sm"
             : "cursor-pointer border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50",
       )}
     >
-      <Checkbox checked={checked} disabled={disabled} onCheckedChange={(value) => onCheckedChange(value === true)} />
+      <Checkbox checked={isChecked} disabled={disabled} onCheckedChange={(value) => onCheckedChange(value === true)} />
       <span>{label}</span>
     </label>
   )
