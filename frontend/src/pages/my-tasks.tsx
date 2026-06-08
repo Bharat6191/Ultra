@@ -165,10 +165,10 @@ export function MyTasksPage() {
     <div className="w-full space-y-6">
       <div>
         <h2 className="text-lg font-semibold tracking-tight">My Tasks</h2>
-        <p className="text-sm text-muted-foreground">
+        {/* <p className="text-sm text-muted-foreground">
           Open items that need you, and a <strong>Done</strong> list for things you or others already finished
           (approvals, rejections, completed manual work).
-        </p>
+        </p> */}
       </div>
 
       <Tabs value={inbox} onValueChange={(v) => setInbox(v as "active" | "done")} className="w-full">

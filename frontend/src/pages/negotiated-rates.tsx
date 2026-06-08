@@ -218,7 +218,7 @@ export function NegotiatedRatesPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-medium">Negotiation</h2>
-          <p className="text-sm text-muted-foreground">Filter the list, then open a row for details.</p>
+          {/* <p className="text-sm text-muted-foreground">Filter the list, then open a row for details.</p> */}
         </div>
         {canCreate ? (
           <Button asChild type="button">

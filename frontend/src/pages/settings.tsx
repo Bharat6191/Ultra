@@ -96,7 +96,7 @@ export function SettingsPage() {
     <div className="w-full min-w-0 space-y-6">
       <div className="space-y-1">
         <h2 className="text-lg font-semibold tracking-tight">Settings</h2>
-        <p className="text-sm text-muted-foreground">Security and authentication policy for the organization.</p>
+        {/* <p className="text-sm text-muted-foreground">Security and authentication policy for the organization.</p> */}
         {!canEditSettings ? (
           <p className="text-sm text-amber-800">
             You have read-only access. Saving changes requires{" "}
@@ -116,9 +116,9 @@ export function SettingsPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Authentication Policy</CardTitle>
-              <CardDescription>
+              {/* <CardDescription>
                 Org-wide controls for password login, MFA, and captcha. Superusers are not affected.
-              </CardDescription>
+              </CardDescription> */}
             </CardHeader>
             <CardContent className="space-y-4">
               {!authPolicy ? (
@@ -212,7 +212,7 @@ export function SettingsPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Password rules</CardTitle>
-              <CardDescription>These rules are enforced on password changes and resets.</CardDescription>
+              {/* <CardDescription>These rules are enforced on password changes and resets.</CardDescription> */}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">

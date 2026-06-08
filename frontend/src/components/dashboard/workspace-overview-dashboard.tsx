@@ -74,9 +74,9 @@ export function WorkspaceOverviewDashboard({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Welcome {displayName}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          {/* <p className="mt-1 text-sm text-muted-foreground">
             Here&apos;s what&apos;s happening across contractors, negotiations, work orders and invoices.
-          </p>
+          </p> */}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex h-9 items-center rounded-lg border border-zinc-200 bg-white px-3 text-xs text-muted-foreground">

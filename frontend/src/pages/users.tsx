@@ -55,10 +55,10 @@ export function UsersPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Users</CardTitle>
-          <CardDescription>
+          {/* <CardDescription>
             Pick a plant and role when creating or editing users. The Plants admin tab is separate and
             uses only Plants (org units) permissions.
-          </CardDescription>
+          </CardDescription> */}
           {canCreate ? (
             <CardAction>
               <Button asChild size="sm">
