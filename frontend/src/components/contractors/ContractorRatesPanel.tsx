@@ -939,9 +939,9 @@ export function RateDetailPanel({
             <Fact label="Should cost" value={formatMoney(rate.base_rate)} />
             <Fact label="Initial ask" value={formatMoney(rate.initial_rate)} />
             <Fact label="Agreed rate" value={formatMoney(rate.negotiated_rate)} strong />
-             {rate.vs_base_percentage != null && rate.vs_base_percentage !== "" ? (
+            {rate.vs_base_percentage != null && rate.vs_base_percentage !== "" ? (
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">VARIANCE</p>
+              <p className="text-xs font-semibold text-foreground">VARIANCE</p>
               <VsBaseToleranceBadge
                 negotiated={rate.negotiated_rate}
                 baseRate={rate.base_rate}

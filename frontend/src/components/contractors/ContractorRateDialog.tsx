@@ -337,7 +337,7 @@ export function NewNegotiationDialog({
               ) : null} */}
               {previewVsBase ? (
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Variance</p>
+                  <p className="text-xs font-semibold text-foreground">VARIANCE</p>
                   <VsBaseToleranceBadge
                     negotiated={negRate}
                     baseRate={baseRate}
