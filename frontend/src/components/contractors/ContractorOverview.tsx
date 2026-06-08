@@ -76,8 +76,8 @@ export function ContractorOverview({ contractor }: { contractor: ContractorOverv
           <FieldRow label="Title" value={contractor.contact_person_title} />
           <FieldRow label="Email" value={contractor.email} />
           <FieldRow label="Alt email" value={contractor.alternate_email} />
-          <FieldRow label="Phone" value={contractor.phone} />
-          <FieldRow label="Alt phone" value={contractor.alternate_phone} />
+          <FieldRow label="Contact no." value={contractor.phone} />
+          <FieldRow label="Alternate contact no." value={contractor.alternate_phone} />
         </CardContent>
       </Card>
 

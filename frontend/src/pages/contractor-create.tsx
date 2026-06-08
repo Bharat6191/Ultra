@@ -18,9 +18,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  contactNumberError,
   contractorFormToCreatePayload,
   emptyContractorForm,
   isContractorFormValid,
+  normalizePhoneInput,
   type ContractorFormValues,
 } from "@/components/contractors/ContractorForm"
 import { postJson } from "@/lib/api"
@@ -134,7 +136,10 @@ export function ContractorCreatePage() {
 
   const currentStep = CREATE_STEPS[stepIndex]
   const isFinalStep = stepIndex === CREATE_STEPS.length - 1
-  const canGoNext = stepIndex === 0 ? isContractorFormValid(form) : true
+  const phoneError = contactNumberError(form.phone)
+  const alternatePhoneError = contactNumberError(form.alternate_phone)
+  const canGoNext =
+    stepIndex === 0 ? isContractorFormValid(form) : stepIndex === 1 ? !phoneError && !alternatePhoneError : true
 
   async function submit() {
     setSaving(true)
@@ -229,19 +234,33 @@ export function ContractorCreatePage() {
                   placeholder="Operations Manager"
                 />
               </Field>
-              <Field label="Phone">
-                <Input
-                  value={form.phone}
-                  onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-                  placeholder="+91 98765 43210"
-                />
+              <Field label="Contact no.">
+                <div className="space-y-1.5">
+                  <Input
+                    value={form.phone}
+                    onChange={(e) => setForm((prev) => ({ ...prev, phone: normalizePhoneInput(e.target.value) }))}
+                    placeholder="9876543210"
+                    inputMode="numeric"
+                    maxLength={10}
+                    aria-invalid={Boolean(phoneError)}
+                  />
+                  {phoneError ? <p className="text-sm text-destructive">{phoneError}</p> : null}
+                </div>
               </Field>
-              <Field label="Alternate Phone">
-                <Input
-                  value={form.alternate_phone}
-                  onChange={(e) => setForm((prev) => ({ ...prev, alternate_phone: e.target.value }))}
-                  placeholder="+91 98765 00000"
-                />
+              <Field label="Alternate contact no.">
+                <div className="space-y-1.5">
+                  <Input
+                    value={form.alternate_phone}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, alternate_phone: normalizePhoneInput(e.target.value) }))
+                    }
+                    placeholder="9876543210"
+                    inputMode="numeric"
+                    maxLength={10}
+                    aria-invalid={Boolean(alternatePhoneError)}
+                  />
+                  {alternatePhoneError ? <p className="text-sm text-destructive">{alternatePhoneError}</p> : null}
+                </div>
               </Field>
               <Field label="Email">
                 <Input
@@ -382,7 +401,7 @@ export function ContractorCreatePage() {
                 <ReviewItem label="Type" value={display(form.contractor_type)} />
                 <ReviewItem label="Contact Person" value={display(form.contact_person)} />
                 <ReviewItem label="Email" value={display(form.email)} />
-                <ReviewItem label="Phone" value={display(form.phone)} />
+                <ReviewItem label="Contact no." value={display(form.phone)} />
                 <ReviewItem label="PAN" value={display(form.pan)} />
                 <ReviewItem label="GSTIN" value={display(form.gstin)} />
                 <ReviewItem label="Registration Number" value={display(form.registration_number)} />

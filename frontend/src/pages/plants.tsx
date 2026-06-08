@@ -260,11 +260,11 @@ export function PlantsPage() {
     <div className="space-y-4">
       <div className="min-w-0">
         <h2 className="truncate text-sm font-medium">Clusters & Plants</h2>
-        <p className="text-sm text-muted-foreground">
+        {/* <p className="text-sm text-muted-foreground">
           Create clusters and plants, attach plants to clusters, or edit names and parent links in the catalog
-          (edit requires <span className="font-mono text-xs">org_units.update</span>). Creating rows requires{" "}
-          <span className="font-mono text-xs">org_units.create</span>.
-        </p>
+          (edit requires <span className="font-mono text-xs"org_units.update</span>). Creating rows requires{" "}
+          <span className="font-mono text-xs">org_units.create</span>. 
+           </p> */}
       </div>
 
       {error ? (

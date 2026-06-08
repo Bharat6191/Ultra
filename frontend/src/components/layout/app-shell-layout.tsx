@@ -29,17 +29,19 @@ type ShellNavItem = {
   icon: LucideIcon
   to: string
   permission: NavPerm
+  group: "Operations" | "System Menu"
 }
 
 const shellNavItems: ShellNavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, to: "/dashboard", permission: null },
-  { id: "users", label: "Users", icon: Users, to: "/dashboard/users", permission: "users.view" },
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, to: "/dashboard", permission: null, group: "Operations" },
+  { id: "users", label: "Users", icon: Users, to: "/dashboard/users", permission: "users.view", group: "System Menu" },
   {
     id: "tasks",
     label: "My Tasks",
     icon: ClipboardList,
     to: "/dashboard/tasks",
     permission: TASK_INBOX_PERMISSION_CODES,
+    group: "Operations",
   },
   {
     id: "plants",
@@ -47,6 +49,7 @@ const shellNavItems: ShellNavItem[] = [
     icon: Factory,
     to: "/dashboard/plants",
     permission: ["org_units.view", "org_units.create", "org_units.update", "org_units.delete"],
+    group: "System Menu",
   },
   {
     id: "roles",
@@ -54,6 +57,7 @@ const shellNavItems: ShellNavItem[] = [
     icon: Shield,
     to: "/dashboard/roles",
     permission: ["roles.view", "roles.update", "roles.create"],
+    group: "System Menu",
   },
   {
     id: "permissions",
@@ -61,6 +65,7 @@ const shellNavItems: ShellNavItem[] = [
     icon: KeyRound,
     to: "/dashboard/permissions",
     permission: ["permissions.view", "permissions.create"],
+    group: "System Menu",
   },
   {
     id: "admin-settings",
@@ -68,6 +73,7 @@ const shellNavItems: ShellNavItem[] = [
     icon: Settings,
     to: "/dashboard/system-settings",
     permission: ["settings.view", "settings.update"],
+    group: "System Menu",
   },
   {
     id: "contractors",
@@ -75,6 +81,7 @@ const shellNavItems: ShellNavItem[] = [
     icon: BriefcaseBusiness,
     to: "/dashboard/contractors",
     permission: "contractor.view",
+    group: "Operations",
   },
   {
     id: "part-master",
@@ -82,6 +89,7 @@ const shellNavItems: ShellNavItem[] = [
     icon: BadgeIndianRupee,
     to: "/dashboard/part-master",
     permission: ["part_master.view", "part_master.create", "part_master.update"],
+    group: "Operations",
   },
   {
     id: "negotiated-rates",
@@ -94,6 +102,7 @@ const shellNavItems: ShellNavItem[] = [
       "contractor_rates.update",
       "contractor_rates.approve",
     ],
+    group: "Operations",
   },
   {
     id: "work-orders",
@@ -101,6 +110,7 @@ const shellNavItems: ShellNavItem[] = [
     icon: BriefcaseBusiness,
     to: "/dashboard/work-orders",
     permission: ["work_orders.view", "work_orders.create", "work_orders.update", "work_orders.approve"],
+    group: "Operations",
   },
   {
     id: "invoices",
@@ -108,6 +118,7 @@ const shellNavItems: ShellNavItem[] = [
     icon: Receipt,
     to: "/dashboard/invoices",
     permission: ["invoices.view", "invoices.create", "invoices.update", "invoices.validate"],
+    group: "Operations",
   },
   {
     id: "reports",
@@ -115,6 +126,7 @@ const shellNavItems: ShellNavItem[] = [
     icon: BarChart3,
     to: "/dashboard/reports",
     permission: "invoices.view",
+    group: "Operations",
   },
 ]
 
@@ -157,7 +169,7 @@ export function AppShellLayout({
   const sidebarItems = React.useMemo<SidebarNavItem[]>(
     () =>
       visibleNav
-        .map((i) => ({ id: i.id, label: i.label, to: i.to, icon: i.icon })),
+        .map((i) => ({ id: i.id, label: i.label, to: i.to, icon: i.icon, group: i.group })),
     [visibleNav]
   )
 

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Literal
+import re
+from typing import Any, Literal, Annotated
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, BeforeValidator, EmailStr, Field
 
 from modules.contractor.models import (
     CONTRACTOR_PLANT_ROLES,
@@ -14,6 +15,22 @@ from modules.contractor.models import (
 
 
 # ---------- Contractor ----------
+
+
+def _before_optional_contractor_phone(v: object) -> str | None:
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise TypeError("phone must be a string or null")
+    phone = v.strip()
+    if not phone:
+        return None
+    if not re.fullmatch(r"\d{10}", phone):
+        raise ValueError("Contact number must be exactly 10 digits")
+    return phone
+
+
+OptionalContractorPhone = Annotated[str | None, BeforeValidator(_before_optional_contractor_phone)]
 
 
 class ContractorCreate(BaseModel):
@@ -30,8 +47,8 @@ class ContractorCreate(BaseModel):
     contact_person_title: str | None = Field(default=None, max_length=128)
     email: EmailStr | None = None
     alternate_email: EmailStr | None = None
-    phone: str | None = Field(default=None, max_length=32)
-    alternate_phone: str | None = Field(default=None, max_length=32)
+    phone: OptionalContractorPhone = None
+    alternate_phone: OptionalContractorPhone = None
     address: str | None = None
     city: str | None = Field(default=None, max_length=128)
     state: str | None = Field(default=None, max_length=128)
@@ -61,8 +78,8 @@ class ContractorUpdate(BaseModel):
     contact_person_title: str | None = Field(default=None, max_length=128)
     email: EmailStr | None = None
     alternate_email: EmailStr | None = None
-    phone: str | None = Field(default=None, max_length=32)
-    alternate_phone: str | None = Field(default=None, max_length=32)
+    phone: OptionalContractorPhone = None
+    alternate_phone: OptionalContractorPhone = None
     address: str | None = None
     city: str | None = Field(default=None, max_length=128)
     state: str | None = Field(default=None, max_length=128)

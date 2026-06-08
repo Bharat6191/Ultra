@@ -114,6 +114,20 @@ function trimOrNull(s: string): string | null {
   return t.length ? t : null
 }
 
+export function normalizePhoneInput(s: string): string {
+  return s.replace(/\D/g, "").slice(0, 10)
+}
+
+export function contactNumberError(s: string): string | null {
+  const t = s.trim()
+  if (!t) return null
+  return /^\d{10}$/.test(t) ? null : "Contact no. must be exactly 10 digits"
+}
+
+export function isValidOptionalContactNumber(s: string): boolean {
+  return contactNumberError(s) === null
+}
+
 export function contractorFormToCreatePayload(form: ContractorFormValues) {
   const pan = trimOrNull(form.pan)
   const gstin = trimOrNull(form.gstin)
@@ -132,8 +146,8 @@ export function contractorFormToCreatePayload(form: ContractorFormValues) {
     contact_person_title: trimOrNull(form.contact_person_title),
     email: trimOrNull(form.email),
     alternate_email: trimOrNull(form.alternate_email),
-    phone: trimOrNull(form.phone),
-    alternate_phone: trimOrNull(form.alternate_phone),
+    phone: trimOrNull(normalizePhoneInput(form.phone)),
+    alternate_phone: trimOrNull(normalizePhoneInput(form.alternate_phone)),
     address: trimOrNull(form.address),
     city: trimOrNull(form.city),
     state: trimOrNull(form.state),
@@ -163,8 +177,8 @@ export function contractorFormToUpdatePayload(form: ContractorFormValues, isActi
     contact_person_title: trimOrNull(form.contact_person_title),
     email: trimOrNull(form.email),
     alternate_email: trimOrNull(form.alternate_email),
-    phone: trimOrNull(form.phone),
-    alternate_phone: trimOrNull(form.alternate_phone),
+    phone: trimOrNull(normalizePhoneInput(form.phone)),
+    alternate_phone: trimOrNull(normalizePhoneInput(form.alternate_phone)),
     address: trimOrNull(form.address),
     city: trimOrNull(form.city),
     state: trimOrNull(form.state),
@@ -178,7 +192,12 @@ export function contractorFormToUpdatePayload(form: ContractorFormValues, isActi
 }
 
 export function isContractorFormValid(form: ContractorFormValues): boolean {
-  return Boolean(form.contractor_code.trim() && form.name.trim())
+  return Boolean(
+    form.contractor_code.trim() &&
+      form.name.trim() &&
+      isValidOptionalContactNumber(form.phone) &&
+      isValidOptionalContactNumber(form.alternate_phone)
+  )
 }
 
 type Props = {
@@ -193,6 +212,9 @@ export function ContractorForm({ form, onChange, active, onActiveChange, showSta
   function set<K extends keyof ContractorFormValues>(key: K, value: ContractorFormValues[K]) {
     onChange({ ...form, [key]: value })
   }
+
+  const phoneError = contactNumberError(form.phone)
+  const alternatePhoneError = contactNumberError(form.alternate_phone)
 
   return (
     <div className="space-y-6">
@@ -309,16 +331,28 @@ export function ContractorForm({ form, onChange, active, onActiveChange, showSta
               />
             </div>
             <div className="space-y-1.5">
-              <div className="text-xs text-muted-foreground">Phone</div>
-              <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+91..." />
+              <div className="text-xs text-muted-foreground">Contact no.</div>
+              <Input
+                value={form.phone}
+                onChange={(e) => set("phone", normalizePhoneInput(e.target.value))}
+                placeholder="9876543210"
+                inputMode="numeric"
+                maxLength={10}
+                aria-invalid={Boolean(phoneError)}
+              />
+              {phoneError ? <div className="text-xs text-destructive">{phoneError}</div> : null}
             </div>
             <div className="space-y-1.5">
-              <div className="text-xs text-muted-foreground">Alternate phone</div>
+              <div className="text-xs text-muted-foreground">Alternate contact no.</div>
               <Input
                 value={form.alternate_phone}
-                onChange={(e) => set("alternate_phone", e.target.value)}
-                placeholder="+91..."
+                onChange={(e) => set("alternate_phone", normalizePhoneInput(e.target.value))}
+                placeholder="9876543210"
+                inputMode="numeric"
+                maxLength={10}
+                aria-invalid={Boolean(alternatePhoneError)}
               />
+              {alternatePhoneError ? <div className="text-xs text-destructive">{alternatePhoneError}</div> : null}
             </div>
           </CardContent>
         </Card>

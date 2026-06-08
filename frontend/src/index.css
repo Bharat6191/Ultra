@@ -150,6 +150,48 @@
     color: oklch(0.145 0 0) !important;
     font-weight: 700 !important;
   }
+
+  table {
+    font-family: var(--font-sans);
+  }
+
+  table th,
+  table td {
+    color: oklch(0.145 0 0);
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+
+  table th {
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  table :is(.text-muted-foreground, .text-zinc-500, .text-zinc-600, .text-zinc-700, .text-gray-500, .text-gray-600, .text-gray-700):not([data-slot="badge"]) {
+    color: oklch(0.145 0 0) !important;
+  }
+
+  table :is(.text-xs, .text-sm, .text-\[10px\], .text-\[11px\], .text-\[12px\]):not([data-slot="badge"]) {
+    font-size: 0.9375rem !important;
+    line-height: 1.5 !important;
+  }
+
+  table :is(.uppercase, .tracking-wide, .tracking-\[0\.18em\]):not([data-slot="badge"]) {
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+  }
+
+  table :is(.font-mono):not([data-slot="badge"]) {
+    font-family: var(--font-sans) !important;
+  }
+
+  table :is(input, select, textarea) {
+    color: oklch(0.145 0 0) !important;
+    font-family: var(--font-sans) !important;
+    font-size: 0.9375rem !important;
+  }
 }
 
 .dashboard-metric-chart .recharts-wrapper:focus,

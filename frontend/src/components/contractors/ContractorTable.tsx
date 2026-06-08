@@ -68,20 +68,20 @@ export function ContractorTable({
           <TableHead>Status</TableHead>
           {/* <TableHead>Compliance</TableHead> */}
           <TableHead>Plants</TableHead>
-          <TableHead>Statutory IDs</TableHead>
+          {/* <TableHead>Statutory IDs</TableHead> */}
           {/* <TableHead className="w-[72px] text-right">Actions</TableHead> */}
         </TableRow>
       </TableHeader>
       <TableBody>
         {loading || rows === null ? (
           <TableRow>
-            <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+            <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
               Loading…
             </TableCell>
           </TableRow>
         ) : rows.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+            <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
               No contractors match this filter.
             </TableCell>
           </TableRow>
@@ -151,6 +151,7 @@ export function ContractorTable({
                   </div>
                 </TableCell>
 
+                {/*
                 <TableCell className="text-xs text-zinc-700">
                   <div className="space-y-0.5">
                     <div>
@@ -163,6 +164,7 @@ export function ContractorTable({
                     </div>
                   </div>
                 </TableCell>
+                */}
                 {/*
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>

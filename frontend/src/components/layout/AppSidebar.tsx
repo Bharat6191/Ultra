@@ -12,11 +12,12 @@ export type SidebarNavItem = {
   label: string
   to: string
   icon: LucideIcon
+  group?: string
 }
 
 const defaultItems: SidebarNavItem[] = [
-  { id: "dashboard", label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
-  { id: "contractors", label: "Contractors", to: "/dashboard/contractors", icon: BriefcaseBusiness },
+  { id: "dashboard", label: "Dashboard", to: "/dashboard", icon: LayoutDashboard, group: "Operations" },
+  { id: "contractors", label: "Contractors", to: "/dashboard/contractors", icon: BriefcaseBusiness, group: "Operations" },
 ]
 
 function pathMatches(pathname: string, to: string) {
@@ -31,6 +32,16 @@ export type AppSidebarProps = {
 
 export function AppSidebar({ items = defaultItems, collapsed = false }: AppSidebarProps) {
   const location = useLocation()
+  const groupedItems = items.reduce<Array<{ group: string; items: SidebarNavItem[] }>>((acc, item) => {
+    const group = item.group ?? "Menu"
+    const existing = acc.find((entry) => entry.group === group)
+    if (existing) {
+      existing.items.push(item)
+    } else {
+      acc.push({ group, items: [item] })
+    }
+    return acc
+  }, [])
 
   return (
     <aside
@@ -50,34 +61,43 @@ export function AppSidebar({ items = defaultItems, collapsed = false }: AppSideb
 
       <nav
         className={cn(
-          "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain py-4",
+          "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain py-4",
           collapsed ? "px-2" : "px-3",
         )}
         aria-label="Workspace"
       >
-        {items.map((item) => {
-          const Icon = item.icon
-          const isActive = pathMatches(location.pathname, item.to)
-          return (
-            <Button
-              key={item.id}
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "h-9 w-full rounded-lg text-left font-normal text-zinc-950 hover:bg-muted",
-                collapsed ? "justify-center px-0" : "justify-start gap-2 px-3",
-                isActive && "bg-muted"
-              )}
-              title={item.label}
-              asChild
-            >
-              <Link to={item.to}>
-                <Icon className="size-4 shrink-0 opacity-70" aria-hidden />
-                {!collapsed ? <span className="truncate">{item.label}</span> : null}
-              </Link>
-            </Button>
-          )
-        })}
+        {groupedItems.map((section) => (
+          <div key={section.group} className="space-y-1">
+            {!collapsed ? (
+              <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                {section.group}
+              </div>
+            ) : null}
+            {section.items.map((item) => {
+              const Icon = item.icon
+              const isActive = pathMatches(location.pathname, item.to)
+              return (
+                <Button
+                  key={item.id}
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-9 w-full rounded-lg text-left font-normal text-zinc-950 hover:bg-muted",
+                    collapsed ? "justify-center px-0" : "justify-start gap-2 px-3",
+                    isActive && "bg-muted"
+                  )}
+                  title={item.label}
+                  asChild
+                >
+                  <Link to={item.to}>
+                    <Icon className="size-4 shrink-0 opacity-70" aria-hidden />
+                    {!collapsed ? <span className="truncate">{item.label}</span> : null}
+                  </Link>
+                </Button>
+              )
+            })}
+          </div>
+        ))}
       </nav>
     </aside>
   )

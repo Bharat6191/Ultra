@@ -3,6 +3,7 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { contactNumberError, normalizePhoneInput } from "@/components/contractors/ContractorForm"
 import { postJson } from "@/lib/api"
 
 type ContractorCreate = {
@@ -25,7 +26,13 @@ export function CreateContractorDialog({ onCreated }: { onCreated: () => void })
     address: "",
   })
 
+  const phoneError = contactNumberError(form.phone)
+
   async function submit() {
+    if (phoneError) {
+      setError(phoneError)
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -79,13 +86,17 @@ export function CreateContractorDialog({ onCreated }: { onCreated: () => void })
               />
             </div>
             <div className="grid gap-2">
-              <div className="text-xs text-muted-foreground">Phone</div>
+              <div className="text-xs text-muted-foreground">Contact no.</div>
               <Input
                 id="cc-phone"
                 value={form.phone}
-                onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))}
-                placeholder="+91..."
+                onChange={(e) => setForm((s) => ({ ...s, phone: normalizePhoneInput(e.target.value) }))}
+                placeholder="9876543210"
+                inputMode="numeric"
+                maxLength={10}
+                aria-invalid={Boolean(phoneError)}
               />
+              {phoneError ? <div className="text-xs text-destructive">{phoneError}</div> : null}
             </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -115,7 +126,7 @@ export function CreateContractorDialog({ onCreated }: { onCreated: () => void })
           <Button variant="outline" type="button" onClick={() => setOpen(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button type="button" onClick={submit} disabled={saving || !form.name.trim()}>
+          <Button type="button" onClick={submit} disabled={saving || !form.name.trim() || Boolean(phoneError)}>
             {saving ? "Creating…" : "Create"}
           </Button>
         </DialogFooter>

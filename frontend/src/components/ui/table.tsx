@@ -12,7 +12,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
+        className={cn("w-full caption-bottom text-[15px] text-zinc-950", className)}
         {...props}
       />
     </div>
@@ -44,7 +44,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     <tfoot
       data-slot="table-footer"
       className={cn(
-        "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+        "border-t bg-white font-medium text-zinc-950 [&>tr]:last:border-b-0",
         className
       )}
       {...props}
@@ -70,7 +70,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "bg-gray-50 px-6 py-3 text-left align-middle text-xs font-bold uppercase tracking-wide whitespace-nowrap text-zinc-950 [&:has([role=checkbox])]:pr-0",
+        "bg-white px-6 py-3 text-left align-middle text-[15px] font-semibold whitespace-nowrap text-zinc-950 [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -83,7 +83,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "px-6 py-4 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        "px-6 py-4 align-middle whitespace-nowrap text-[15px] text-zinc-950 [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
