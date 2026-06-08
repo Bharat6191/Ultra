@@ -476,7 +476,7 @@ export function UserViewPage() {
                 onClick={() => void resendWelcomeEmail()}
               >
                 <Mail className="size-4" />
-                {resendingWelcome ? "Resending…" : "Resend Invite"}
+                {resendingWelcome ? "Resending…" : "Resend Invite"} 
               </Button>
             ) : null}
 

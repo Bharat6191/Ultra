@@ -236,9 +236,10 @@ export function InvoiceCreatePage() {
   const [showInvoicePreview, setShowInvoicePreview] = React.useState(false)
   const invoiceNumberTouchedRef = React.useRef(false)
   const suggestReqId = React.useRef(0)
+  const skipScopeResetRef = React.useRef(false)
 
   React.useEffect(() => {
-    if (!canCreate) return
+    if (!canCreate || isEdit) return
     if (!form.contractor_id || !form.org_unit_id) {
       suggestReqId.current += 1
       setForm((f) => (f.invoice_number ? { ...f, invoice_number: "" } : f))
@@ -263,10 +264,10 @@ export function InvoiceCreatePage() {
         }
       }
     })()
-  }, [form.contractor_id, form.org_unit_id, canCreate])
+  }, [form.contractor_id, form.org_unit_id, canCreate, isEdit])
 
   React.useEffect(() => {
-    if (!canCreate) return
+    if (!canCreate && !isEdit) return
     void (async () => {
       try {
         const [clist, plist] = await Promise.all([
@@ -282,9 +283,13 @@ export function InvoiceCreatePage() {
         setPlants([])
       }
     })()
-  }, [canCreate])
+  }, [canCreate, isEdit])
 
   React.useEffect(() => {
+    if (skipScopeResetRef.current) {
+      skipScopeResetRef.current = false
+      return
+    }
     setSelectedWoId("")
     setPendingItemId("")
     setSelectedLineIds(new Set())
@@ -577,6 +582,7 @@ export function InvoiceCreatePage() {
           return
         }
         invoiceNumberTouchedRef.current = true
+        skipScopeResetRef.current = true
         setForm({
           contractor_id: String(inv.contractor_id),
           org_unit_id: String(inv.org_unit_id),
