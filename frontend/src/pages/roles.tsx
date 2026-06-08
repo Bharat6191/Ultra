@@ -538,7 +538,7 @@ export function RolesPage() {
           <CardHeader className="space-y-4 px-6 pb-4 pt-6">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <CardTitle className="text-[2rem] font-semibold tracking-tight text-zinc-950">Roles</CardTitle>
+                <CardTitle className="text-2xl font-semibold tracking-tight text-zinc-950">Roles</CardTitle>
               </div>
               {canCreateRole ? (
                 <Dialog

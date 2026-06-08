@@ -6,6 +6,7 @@ import {
   Plus,
   Search,
 } from "lucide-react"
+import { PageHeader } from "@/components/layout/PageHeader"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -215,19 +216,18 @@ export function NegotiatedRatesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-base font-medium">Negotiation</h2>
-          {/* <p className="text-sm text-muted-foreground">Filter the list, then open a row for details.</p> */}
-        </div>
-        {canCreate ? (
-          <Button asChild type="button">
-            <Link to="/dashboard/negotiated-rates/new">
-              <Plus className="size-4" /> New Negotiation
-            </Link>
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Negotiation"
+        action={
+          canCreate ? (
+            <Button asChild type="button">
+              <Link to="/dashboard/negotiated-rates/new">
+                <Plus className="size-4" /> New Negotiation
+              </Link>
+            </Button>
+          ) : null
+        }
+      />
 
       {/* KPIs — only the lifecycle counters remain. The "savings"
           aggregates (negotiation savings, avg savings %, premium vs base)

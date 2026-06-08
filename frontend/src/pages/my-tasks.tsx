@@ -2,6 +2,7 @@ import * as React from "react"
 import { toast } from "sonner"
 import { useNavigate } from "react-router-dom"
 
+import { PageHeader } from "@/components/layout/PageHeader"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -163,13 +164,7 @@ export function MyTasksPage() {
 
   return (
     <div className="w-full space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight">My Tasks</h2>
-        {/* <p className="text-sm text-muted-foreground">
-          Open items that need you, and a <strong>Done</strong> list for things you or others already finished
-          (approvals, rejections, completed manual work).
-        </p> */}
-      </div>
+      <PageHeader title="My Tasks" />
 
       <Tabs value={inbox} onValueChange={(v) => setInbox(v as "active" | "done")} className="w-full">
         <TabsList>

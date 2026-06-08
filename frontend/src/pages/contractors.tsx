@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ContractorTable, type ContractorRow } from "@/components/contractors/ContractorTable"
 import { ContractorListStats, type ContractorListStatsData } from "@/components/contractors/ContractorListStats"
+import { PageHeader } from "@/components/layout/PageHeader"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { DataTable } from "@/components/shared/DataTable"
 import { getJson } from "@/lib/api"
@@ -132,39 +133,38 @@ export function ContractorsPage() {
 
   return (
     <div className="w-full space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">CONTRACTORS</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              const blob = new Blob([JSON.stringify(rows ?? [], null, 2)], {
-                type: "application/json",
-              })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement("a")
-              a.href = url
-              a.download = "contractors.json"
-              a.click()
-              URL.revokeObjectURL(url)
-            }}
-          >
-            <SlidersHorizontal className="mr-2 size-4 opacity-70" aria-hidden />
-            Export
-          </Button>
-          <Button
-            disabled={!canCreate}
-            onClick={() => navigate("/dashboard/contractors/new")}
-            title={!canCreate ? "Missing permission: contractor.create" : undefined}
-          >
-            <Plus className="mr-2 size-4" aria-hidden />
-            Add contractor
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Contractors"
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                const blob = new Blob([JSON.stringify(rows ?? [], null, 2)], {
+                  type: "application/json",
+                })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement("a")
+                a.href = url
+                a.download = "contractors.json"
+                a.click()
+                URL.revokeObjectURL(url)
+              }}
+            >
+              <SlidersHorizontal className="mr-2 size-4 opacity-70" aria-hidden />
+              Export
+            </Button>
+            <Button
+              disabled={!canCreate}
+              onClick={() => navigate("/dashboard/contractors/new")}
+              title={!canCreate ? "Missing permission: contractor.create" : undefined}
+            >
+              <Plus className="mr-2 size-4" aria-hidden />
+              Add contractor
+            </Button>
+          </div>
+        }
+      />
 
       <ContractorListStats data={stats} loading={rows === null} />
 

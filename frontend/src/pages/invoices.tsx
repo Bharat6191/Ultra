@@ -5,6 +5,7 @@ import { Plus } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson } from "@/lib/api"
@@ -123,18 +124,18 @@ export function InvoicesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-base font-medium">Invoices</h2>
-        </div>
-        {canCreate ? (
-          <Button asChild type="button">
-            <Link to="/dashboard/invoices/new">
-              <Plus className="size-4" /> New invoice
-            </Link>
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Invoices"
+        action={
+          canCreate ? (
+            <Button asChild type="button">
+              <Link to="/dashboard/invoices/new">
+                <Plus className="size-4" /> New invoice
+              </Link>
+            </Button>
+          ) : null
+        }
+      />
 
       {error ? (
         <Alert variant="destructive">

@@ -5,7 +5,8 @@ import { Link, useNavigate } from "react-router-dom"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageHeader } from "@/components/layout/PageHeader"
+import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
@@ -52,22 +53,16 @@ export function UsersPage() {
 
   return (
     <div className="w-full space-y-6">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Users</CardTitle>
-          {/* <CardDescription>
-            Pick a plant and role when creating or editing users. The Plants admin tab is separate and
-            uses only Plants (org units) permissions.
-          </CardDescription> */}
-          {canCreate ? (
-            <CardAction>
-              <Button asChild size="sm">
-                <Link to="new">Create User</Link>
-              </Button>
-            </CardAction>
-          ) : null}
-        </CardHeader>
-      </Card>
+      <PageHeader
+        title="Users"
+        action={
+          canCreate ? (
+            <Button asChild size="sm">
+              <Link to="new">Create User</Link>
+            </Button>
+          ) : null
+        }
+      />
 
       {error ? (
         <Alert variant="destructive">

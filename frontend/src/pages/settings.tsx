@@ -3,6 +3,7 @@ import { toast } from "sonner"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -94,9 +95,8 @@ export function SettingsPage() {
 
   return (
     <div className="w-full min-w-0 space-y-6">
-      <div className="space-y-1">
-        <h2 className="text-lg font-semibold tracking-tight">Settings</h2>
-        {/* <p className="text-sm text-muted-foreground">Security and authentication policy for the organization.</p> */}
+      <div className="space-y-2">
+        <PageHeader title="Settings" />
         {!canEditSettings ? (
           <p className="text-sm text-amber-800">
             You have read-only access. Saving changes requires{" "}

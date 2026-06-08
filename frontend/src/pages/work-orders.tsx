@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson, getJsonList } from "@/lib/api"
@@ -129,18 +130,18 @@ export function WorkOrdersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-base font-medium">Work Orders</h2>
-        </div>
-        {canCreate ? (
-          <Button asChild type="button">
-            <Link to="/dashboard/work-orders/new">
-              <Plus className="size-4" /> New Work Order
-            </Link>
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Work Orders"
+        action={
+          canCreate ? (
+            <Button asChild type="button">
+              <Link to="/dashboard/work-orders/new">
+                <Plus className="size-4" /> New Work Order
+              </Link>
+            </Button>
+          ) : null
+        }
+      />
 
       {error ? (
         <Alert variant="destructive">

@@ -2,6 +2,7 @@ import * as React from "react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
+import { PageHeader } from "@/components/layout/PageHeader"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -144,12 +145,10 @@ export function EmailTemplatesPage() {
 
   return (
     <div className="w-full min-w-0 space-y-6">
-      <div className="space-y-1">
-        <h2 className="text-lg font-semibold tracking-tight">Email templates</h2>
-        <p className="text-sm text-muted-foreground">
-          Configure subjects and bodies per event. Mappings decide which template is used when an event triggers.
-        </p>
-      </div>
+      <PageHeader
+        title="Email templates"
+        subtitle="Configure subjects and bodies per event. Mappings decide which template is used when an event triggers."
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -295,4 +294,3 @@ export function EmailTemplatesPage() {
     </div>
   )
 }
-
