@@ -4,6 +4,7 @@ import { Bell, Factory, KeyRound, LayoutDashboard, Link2, Mail, Settings, Shield
 import { useLocation } from "react-router-dom"
 
 import { AppLogo } from "@/components/layout/AppLogo"
+import { SessionExpiryBadge } from "@/components/layout/session-expiry-badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -177,31 +178,34 @@ export function AdminLayout({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b px-6">
           <h1 className="truncate text-sm font-medium text-foreground">{title}</h1>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" className="rounded-full">
-                <Avatar size="sm">
-                  <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel className="font-normal">
-                <span className="text-xs text-muted-foreground">Signed in</span>
-                <div className="truncate text-sm font-medium">{email}</div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault()
-                  onSignOut?.()
-                }}
-              >
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <SessionExpiryBadge onExpired={onSignOut} className="shrink-0" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon-sm" className="rounded-full">
+                  <Avatar size="sm">
+                    <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel className="font-normal">
+                  <span className="text-xs text-muted-foreground">Signed in</span>
+                  <div className="truncate text-sm font-medium">{email}</div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Profile</DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    onSignOut?.()
+                  }}
+                >
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </header>
         <main ref={mainRef} className="min-h-0 flex-1 overflow-auto p-6">{children}</main>
       </div>

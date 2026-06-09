@@ -49,11 +49,33 @@ class SettingsService:
                 return default
             return str(row.value).strip().lower() in ("1", "true", "yes", "on")
 
+        def s(key: str, default: str) -> str:
+            row = self._db.scalar(select(Setting).where(Setting.key == key))
+            if row is None or row.value is None:
+                return default
+            return str(row.value).strip() or default
+
+        def i(key: str, default: int) -> int:
+            row = self._db.scalar(select(Setting).where(Setting.key == key))
+            if row is None or row.value is None:
+                return default
+            try:
+                value = int(str(row.value).strip())
+            except (TypeError, ValueError):
+                return default
+            return value if value >= 1 else default
+
+        mode = s("auth.session_timeout_mode", "token_expiry")
+        if mode not in {"token_expiry", "idle_timeout"}:
+            mode = "token_expiry"
+
         return AuthPolicyPublic(
             password_enabled=b("auth.password_enabled", True),
             mfa_enabled=b("auth.mfa_enabled", False),
             captcha_enabled=b("auth.captcha_enabled", False),
             mfa_enforced=b("auth.mfa_enforced", False),
+            session_timeout_mode=mode,
+            idle_timeout_minutes=i("auth.idle_timeout_minutes", 10),
         )
 
     def put_auth_policy(self, payload: AuthPolicyPublic) -> AuthPolicyPublic:
@@ -63,6 +85,8 @@ class SettingsService:
             ("auth.mfa_enabled", "true" if payload.mfa_enabled else "false"),
             ("auth.captcha_enabled", "true" if payload.captcha_enabled else "false"),
             ("auth.mfa_enforced", "true" if payload.mfa_enforced else "false"),
+            ("auth.session_timeout_mode", payload.session_timeout_mode),
+            ("auth.idle_timeout_minutes", str(payload.idle_timeout_minutes)),
         ]
         for key, value in mapping:
             self._upsert(key, value)

@@ -2,6 +2,7 @@ import * as React from "react"
 import { Bell, PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
+import { SessionExpiryBadge } from "@/components/layout/session-expiry-badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -62,6 +63,7 @@ export function AppNavbar({
       </div>
 
       <div className="flex items-center gap-2">
+        <SessionExpiryBadge onExpired={onSignOut} className="shrink-0" />
         <Button type="button" variant="ghost" size="icon-sm" className="rounded-lg" aria-label="Notifications">
           <Bell className="size-4 opacity-70" aria-hidden />
         </Button>

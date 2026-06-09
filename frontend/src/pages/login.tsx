@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getJson, postJson } from "@/lib/api"
 import { persistAuthFromMe } from "@/lib/permissions"
+import { resetSessionLastActivity } from "@/lib/session-timeout"
 
 const loginSchema = z.object({
   email: z.string().min(1, "Email or username is required"),
@@ -38,6 +39,8 @@ type PublicAuthPolicy = {
   mfa_enabled: boolean
   captcha_enabled: boolean
   mfa_enforced: boolean
+  session_timeout_mode?: "token_expiry" | "idle_timeout"
+  idle_timeout_minutes?: number
 }
 
 const AUTH_POWERED_BY = "Powered by TiMAD"
@@ -117,6 +120,7 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
 
       localStorage.setItem("access_token", accessToken)
       if (refreshToken) localStorage.setItem("refresh_token", refreshToken)
+      resetSessionLastActivity()
 
       const me = await getJson<{
         is_superuser?: boolean
@@ -148,6 +152,7 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
       if (!accessToken) throw new Error("No access token")
       localStorage.setItem("access_token", accessToken)
       if (refreshToken) localStorage.setItem("refresh_token", refreshToken)
+      resetSessionLastActivity()
       const me = await getJson<{ is_superuser?: boolean; permissions?: string[] }>("/me")
       persistAuthFromMe(me)
       toast.success("Signed in", { id: "mfa" })

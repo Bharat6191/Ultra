@@ -18,6 +18,7 @@ from modules.invoices.validation import (
     prior_passed_invoiced_ex_vat_for_work_order,
     work_order_ex_vat_cap,
 )
+from modules.work_orders import audit as audit_helpers
 from modules.work_orders.models import WORK_ORDER_STATUSES, WorkOrder
 from modules.work_orders.schema import (
     WorkOrderCreate,
@@ -280,7 +281,16 @@ def work_order_audit_logs(
     work_order_id: int,
     svc: Annotated[WorkOrderService, Depends(_svc)],
 ) -> list[WorkOrderAuditEntry]:
-    rows = svc.get(work_order_id).audit_logs or []
+    rows = [
+        a
+        for a in (svc.get(work_order_id).audit_logs or [])
+        if audit_helpers.should_display_audit_entry(
+            action=str(a.action),
+            old_value=a.old_value,
+            new_value=a.new_value,
+            metadata=a.metadata_json,
+        )
+    ]
     out: list[WorkOrderAuditEntry] = []
     for a in rows:
         out.append(

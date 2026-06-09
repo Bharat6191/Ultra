@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ApiError, getJson, postJson } from "@/lib/api"
 import { clearAuthProfile, persistAuthFromMe } from "@/lib/permissions"
+import { clearSessionLastActivity, resetSessionLastActivity } from "@/lib/session-timeout"
 
 type LoginResponse = {
   access_token?: string
@@ -35,6 +36,8 @@ type PublicAuthPolicy = {
   mfa_enabled: boolean
   captcha_enabled: boolean
   mfa_enforced: boolean
+  session_timeout_mode?: "token_expiry" | "idle_timeout"
+  idle_timeout_minutes?: number
 }
 
 const AUTH_POWERED_BY = "Powered by TiMAD"
@@ -78,12 +81,14 @@ export function AppLoginPage() {
   function clearTokens() {
     localStorage.removeItem("access_token")
     localStorage.removeItem("refresh_token")
+    clearSessionLastActivity()
     clearAuthProfile()
   }
 
   async function completeSession(accessToken: string, refreshToken: string) {
     localStorage.setItem("access_token", accessToken)
     localStorage.setItem("refresh_token", refreshToken)
+    resetSessionLastActivity()
     const me = await getJson<MeResponse>("/me")
     const isSuper = me?.is_superuser === true
     if (isSuper) {

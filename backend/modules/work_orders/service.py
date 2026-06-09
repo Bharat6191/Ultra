@@ -875,25 +875,20 @@ class WorkOrderService:
 
         wf = get_workflow_for_action(self._db, ACTION_CODE_CREATE)
         if wf is None:
-            # No workflow configured: auto-approve and activate.
+            # No workflow configured: activate directly and keep approval metadata for
+            # commercial caps / timestamps, without emitting a fake approval action.
             wo.approved_value_total = WorkOrderService.approved_total_from_items(wo)
-            wo.status = "approved"
             wo.approved_by = actor_user_id
             wo.approved_at = _now_utc()
-            audit_helpers.write_audit(
-                self._db,
-                work_order_id=int(wo.id),
-                action=audit_helpers.ACTION_APPROVED,
-                actor_user_id=actor_user_id,
-                new_value={"status": "approved", "via": "auto"},
-            )
             wo.status = "active"
             audit_helpers.write_audit(
                 self._db,
                 work_order_id=int(wo.id),
                 action=audit_helpers.ACTION_ACTIVATED,
                 actor_user_id=actor_user_id,
+                old_value={"status": prior_status},
                 new_value={"status": "active"},
+                metadata={"via": "auto", "approval_required": False},
             )
             self._db.commit()
             return self.get(int(wo.id))

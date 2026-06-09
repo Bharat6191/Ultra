@@ -9,8 +9,12 @@ from sqlalchemy import select
 
 import db.models  # noqa: F401
 from db.session import SessionLocal
-from modules.approvals.assignment_service import WorkflowMappingService, resolve_registered_action_code
-from modules.approvals.model import ApprovalRequest, ApprovalTask
+from modules.approvals.assignment_service import (
+    WorkflowMappingService,
+    get_workflow_for_action,
+    resolve_registered_action_code,
+)
+from modules.approvals.model import ApprovalRequest, ApprovalTask, ApprovalWorkflowMapping
 from modules.approvals.service import ApprovalEngineService, ApprovalWorkflowService
 from modules.contractor.models import Contractor
 from modules.contractor_rates.models import ContractorRate
@@ -20,6 +24,8 @@ from modules.org_units.model import OrgUnit
 from modules.permissions.model import Permission
 from modules.roles.model import Role
 from modules.users.model import User
+from modules.work_orders import audit as work_order_audit
+from modules.work_orders.models import WorkOrderAuditLog
 from modules.work_orders.models import WorkOrder
 from modules.work_orders.schema import (
     WorkOrderCreate,
@@ -151,6 +157,32 @@ def _setup_invoice_exception_two_step_workflow(db, *, actor_id: int) -> tuple[Ro
     return role_l1, role_l2, user_l1, user_l2
 
 
+def test_work_order_auto_approved_audit_entry_is_hidden_from_timeline():
+    assert (
+        work_order_audit.should_display_audit_entry(
+            action=work_order_audit.ACTION_APPROVED,
+            new_value={"status": "approved", "via": "auto"},
+        )
+        is False
+    )
+    assert (
+        work_order_audit.should_display_audit_entry(
+            action=work_order_audit.ACTION_APPROVED,
+            old_value={"status": "pending_approval"},
+            new_value={"status": "approved"},
+            metadata={"approval_request_id": 123, "via": "approval_finalized"},
+        )
+        is True
+    )
+    assert (
+        work_order_audit.should_display_audit_entry(
+            action=work_order_audit.ACTION_ACTIVATED,
+            metadata={"via": "auto"},
+        )
+        is True
+    )
+
+
 def test_work_order_create_and_invoice_validate(db):
     actor = _first_user(db)
     org = _first_plant(db)
@@ -210,6 +242,87 @@ def test_work_order_create_and_invoice_validate(db):
     assert str(inv.status) == "submitted"
     assert inv.validation_status in ("pass", "warn")
     assert inv.approved_at is None
+
+
+def test_work_order_auto_activation_audit_hides_synthetic_approved(db):
+    actor = _first_user(db)
+    org = _first_plant(db)
+    contractor = _first_contractor(db)
+    pm = _first_part_master_for_org(db, int(org.id))
+
+    canonical = resolve_registered_action_code(db, "work_orders.create")
+    touched_mapping_ids: list[int] = []
+    if canonical is not None:
+        touched_mapping_ids = [
+            int(x)
+            for x in db.scalars(
+                select(ApprovalWorkflowMapping.id).where(
+                    ApprovalWorkflowMapping.action_code == canonical,
+                    ApprovalWorkflowMapping.is_active.is_(True),
+                )
+            ).all()
+        ]
+        if touched_mapping_ids:
+            db.execute(
+                ApprovalWorkflowMapping.__table__.update()
+                .where(ApprovalWorkflowMapping.id.in_(touched_mapping_ids))
+                .values(is_active=False)
+            )
+            db.commit()
+
+    try:
+        assert get_workflow_for_action(db, "work_orders.create") is None
+
+        wo = WorkOrderService(db).create(
+            WorkOrderCreate(
+                org_unit_id=int(org.id),
+                contractor_id=int(contractor.id),
+                title="WO audit activation only",
+                description=None,
+                items=[
+                    WorkOrderItemCreate(
+                        part_master_id=int(pm.id),
+                        progress_type="quantity",
+                        planned_quantity=Decimal("10"),
+                        planned_percentage=None,
+                        weight_per_piece=Decimal("1"),
+                        notes=None,
+                    )
+                ],
+            ),
+            actor_user_id=actor,
+        )
+
+        active = WorkOrderService(db).submit_for_approval(int(wo.id), actor_user_id=actor)
+        assert str(active.status) == "active"
+
+        logs = db.scalars(
+            select(WorkOrderAuditLog)
+            .where(WorkOrderAuditLog.work_order_id == int(active.id))
+            .order_by(WorkOrderAuditLog.id.asc())
+        ).all()
+        actions = [str(log.action) for log in logs]
+        assert actions == [work_order_audit.ACTION_CREATED, work_order_audit.ACTION_ACTIVATED]
+
+        visible_actions = [
+            str(log.action)
+            for log in logs
+            if work_order_audit.should_display_audit_entry(
+                action=str(log.action),
+                old_value=log.old_value,
+                new_value=log.new_value,
+                metadata=log.metadata_json,
+            )
+        ]
+        assert visible_actions == [work_order_audit.ACTION_CREATED, work_order_audit.ACTION_ACTIVATED]
+    finally:
+        if touched_mapping_ids:
+            db.execute(
+                ApprovalWorkflowMapping.__table__.update()
+                .where(ApprovalWorkflowMapping.id.in_(touched_mapping_ids))
+                .values(is_active=True)
+            )
+            db.commit()
 
 
 def test_work_order_draft_update_replaces_lines(db):

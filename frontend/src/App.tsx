@@ -53,6 +53,7 @@ import {
   persistAuthFromMe,
   TASK_INBOX_PERMISSION_CODES,
 } from "@/lib/permissions"
+import { clearSessionLastActivity } from "@/lib/session-timeout"
 
 /** Compare /me outcomes so we only remount dashboard routes when RBAC identity actually changes.
  *  Otherwise focus/visibility events (e.g. closing the native file picker) would bump the outlet key
@@ -378,6 +379,7 @@ function hasToken() {
 function clearTokens() {
   localStorage.removeItem("access_token")
   localStorage.removeItem("refresh_token")
+  clearSessionLastActivity()
   clearAuthProfile()
 }
 

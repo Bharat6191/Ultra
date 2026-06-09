@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -20,3 +22,5 @@ class AuthPolicyPublic(BaseModel):
     mfa_enabled: bool = False
     captcha_enabled: bool = False
     mfa_enforced: bool = False
+    session_timeout_mode: Literal["token_expiry", "idle_timeout"] = "token_expiry"
+    idle_timeout_minutes: int = Field(default=10, ge=1, le=1440)

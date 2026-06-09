@@ -20,6 +20,8 @@ class EffectiveAuthPolicy:
     mfa_enabled: bool
     captcha_enabled: bool
     mfa_enforced: bool
+    session_timeout_mode: str
+    idle_timeout_minutes: int
 
 
 _DEFAULT = EffectiveAuthPolicy(
@@ -28,12 +30,24 @@ _DEFAULT = EffectiveAuthPolicy(
     mfa_enabled=False,
     captcha_enabled=False,
     mfa_enforced=False,
+    session_timeout_mode="token_expiry",
+    idle_timeout_minutes=10,
 )
 
 def _b(v: str | None, default: bool) -> bool:
     if v is None:
         return default
     return v.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _i(v: str | None, default: int) -> int:
+    if v is None:
+        return default
+    try:
+        parsed = int(v.strip())
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed >= 1 else default
 
 
 def get_global_policy(db: Session) -> EffectiveAuthPolicy:
@@ -52,6 +66,12 @@ def get_global_policy(db: Session) -> EffectiveAuthPolicy:
         mfa_enabled=_b(get_setting("auth.mfa_enabled"), False),
         captcha_enabled=_b(get_setting("auth.captcha_enabled"), False),
         mfa_enforced=_b(get_setting("auth.mfa_enforced"), False),
+        session_timeout_mode=(
+            get_setting("auth.session_timeout_mode")
+            if get_setting("auth.session_timeout_mode") in ("token_expiry", "idle_timeout")
+            else "token_expiry"
+        ),
+        idle_timeout_minutes=_i(get_setting("auth.idle_timeout_minutes"), 10),
     )
 
 
@@ -103,6 +123,8 @@ def get_effective_policy(db: Session, company_id: int | None) -> EffectiveAuthPo
             mfa_enabled=False,
             captcha_enabled=False,
             mfa_enforced=False,
+            session_timeout_mode="token_expiry",
+            idle_timeout_minutes=10,
         )
     return EffectiveAuthPolicy(
         company_id=int(row.company_id),
@@ -110,6 +132,8 @@ def get_effective_policy(db: Session, company_id: int | None) -> EffectiveAuthPo
         mfa_enabled=bool(row.mfa_enabled),
         captcha_enabled=bool(row.captcha_enabled),
         mfa_enforced=bool(row.mfa_enforced),
+        session_timeout_mode="token_expiry",
+        idle_timeout_minutes=10,
     )
 
 

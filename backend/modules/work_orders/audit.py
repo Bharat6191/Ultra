@@ -93,3 +93,27 @@ def write_audit(
     db.add(row)
     db.flush()
     return row
+
+
+def should_display_audit_entry(
+    *,
+    action: str,
+    old_value: dict[str, Any] | None = None,
+    new_value: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> bool:
+    """Hide synthetic lifecycle rows that were never user-visible actions.
+
+    Work orders can bypass approval entirely when no workflow is configured. Older
+    code still wrote an ``APPROVED`` audit row in that branch even though nobody
+    actually performed an approval action. Keep real approval rows, suppress only
+    the synthetic auto-approval records.
+    """
+
+    if str(action or "").upper() != ACTION_APPROVED:
+        return True
+
+    new_map = new_value if isinstance(new_value, dict) else {}
+    metadata_map = metadata if isinstance(metadata, dict) else {}
+    via = str(metadata_map.get("via") or new_map.get("via") or "").strip().lower()
+    return via != "auto"

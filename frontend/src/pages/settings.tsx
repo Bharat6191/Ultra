@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getJson, putJson } from "@/lib/api"
 import { hasPermission, isSuperuser } from "@/lib/permissions"
+import { cn } from "@/lib/utils"
 
 export type PasswordPolicy = {
   min_length: number
@@ -22,11 +23,15 @@ export type PasswordPolicy = {
   max_age_days: number
 }
 
+type SessionTimeoutMode = "token_expiry" | "idle_timeout"
+
 type AuthPolicy = {
   password_enabled: boolean
   mfa_enabled: boolean
   captcha_enabled: boolean
   mfa_enforced: boolean
+  session_timeout_mode: SessionTimeoutMode
+  idle_timeout_minutes: number
 }
 
 export function SettingsPage() {
@@ -175,6 +180,96 @@ export function SettingsPage() {
                     </div>
                   </div>
 
+                  <div className="space-y-4 rounded-lg border p-4">
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">Session timeout mode</div>
+                      <p className="text-xs text-muted-foreground">
+                        Choose whether logout is controlled by backend access-token expiry or by true user inactivity.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <button
+                        type="button"
+                        disabled={!canEditSettings}
+                        className={cn(
+                          "rounded-lg border p-3 text-left transition-colors",
+                          authPolicy.session_timeout_mode === "token_expiry"
+                            ? "border-emerald-500 bg-emerald-50"
+                            : "border-border hover:border-emerald-200",
+                          !canEditSettings && "cursor-not-allowed opacity-60",
+                        )}
+                        onClick={() =>
+                          setAuthPolicy((p) =>
+                            p
+                              ? {
+                                  ...p,
+                                  session_timeout_mode: "token_expiry",
+                                }
+                              : p
+                          )
+                        }
+                      >
+                        <div className="text-sm font-medium">Use access token expiry</div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Users stay signed in until the current access token lifetime ends.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={!canEditSettings}
+                        className={cn(
+                          "rounded-lg border p-3 text-left transition-colors",
+                          authPolicy.session_timeout_mode === "idle_timeout"
+                            ? "border-emerald-500 bg-emerald-50"
+                            : "border-border hover:border-emerald-200",
+                          !canEditSettings && "cursor-not-allowed opacity-60",
+                        )}
+                        onClick={() =>
+                          setAuthPolicy((p) =>
+                            p
+                              ? {
+                                  ...p,
+                                  session_timeout_mode: "idle_timeout",
+                                }
+                              : p
+                          )
+                        }
+                      >
+                        <div className="text-sm font-medium">Use true idle logout</div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Users are logged out only after the configured minutes with no mouse, keyboard, click, scroll,
+                          or touch activity.
+                        </p>
+                      </button>
+                    </div>
+
+                    <div className="grid gap-1.5 sm:max-w-xs">
+                      <Label htmlFor="idle_timeout_minutes">Minutes of no activity to logout</Label>
+                      <Input
+                        id="idle_timeout_minutes"
+                        type="number"
+                        min={1}
+                        max={1440}
+                        step={1}
+                        disabled={!canEditSettings || authPolicy.session_timeout_mode !== "idle_timeout"}
+                        value={authPolicy.idle_timeout_minutes}
+                        onChange={(e) => {
+                          const value = Number(e.target.value)
+                          if (!Number.isFinite(value)) return
+                          const next = Math.min(1440, Math.max(1, Math.trunc(value)))
+                          setAuthPolicy((p) => (p ? { ...p, idle_timeout_minutes: next } : p))
+                        }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {authPolicy.session_timeout_mode === "idle_timeout"
+                          ? "The header timer shows a live MM:SS countdown and resets on user activity."
+                          : "Token-expiry mode uses the backend access-token lifetime. Idle minutes are ignored until idle logout is selected."}
+                      </p>
+                    </div>
+                  </div>
+
                   <div className="flex justify-end">
                     <Button
                       type="button"
@@ -190,6 +285,7 @@ export function SettingsPage() {
                             authPolicy as unknown as Record<string, unknown>
                           )
                           setAuthPolicy(updated)
+                          window.dispatchEvent(new Event("auth-policy-updated"))
                           toast.success("Saved", { id: "auth-policy-save" })
                         } catch (e) {
                           const message = e instanceof Error ? e.message : "Save failed"
