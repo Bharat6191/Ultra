@@ -544,7 +544,7 @@ export function WorkOrderDetailPage() {
   const backTab = row.is_active === false ? "inactive" : workOrderListTabForStatus(row.status)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 [&_.text-gray-500]:text-foreground [&_.text-gray-600]:text-foreground [&_.text-gray-700]:text-foreground [&_.text-gray-800]:text-foreground [&_.text-muted-foreground]:text-foreground [&_input:disabled]:bg-background [&_input:disabled]:text-foreground [&_input:disabled]:opacity-100 [&_select:disabled]:bg-background [&_select:disabled]:text-foreground [&_select:disabled]:opacity-100 [&_textarea:disabled]:bg-background [&_textarea:disabled]:text-foreground [&_textarea:disabled]:opacity-100">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{row.work_order_number}</p>
@@ -647,21 +647,21 @@ export function WorkOrderDetailPage() {
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="rounded-md border bg-muted/30 px-3 py-2">
                   <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Approved work order value (ex. tax)
+                    Approved Value 
                   </div>
                   <div className="mt-1 font-medium tabular-nums">{fmtMoney(parseNum(row.approved_value_total))}</div>
                   {/* <p className="mt-1 text-xs text-muted-foreground">Set when the work order was approved; not editable here.</p> */}
                 </div>
                 <div className="rounded-md border px-3 py-2">
                   <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Passed validation (ex. tax)
+                    Passed Value 
                   </div>
                   <div className="mt-1 font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
                     {fmtMoney(parseNum(row.invoiced_ex_tax_total ?? 0))}
                   </div>
                 </div>
                 <div className="rounded-md border px-3 py-2">
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Remaining (ex. tax)</div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground"> Remaining Value</div>
                   <div className="mt-1 font-medium tabular-nums">
                     {fmtMoney(parseNum(row.remaining_invoiceable_value ?? 0))}
                   </div>

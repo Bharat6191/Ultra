@@ -18,11 +18,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  combineAddressLines,
   contactNumberError,
   contractorFormToCreatePayload,
   emptyContractorForm,
   isContractorFormValid,
   normalizePhoneInput,
+  splitAddressLines,
   type ContractorFormValues,
 } from "@/components/contractors/ContractorForm"
 import { postJson } from "@/lib/api"
@@ -138,6 +140,7 @@ export function ContractorCreatePage() {
   const isFinalStep = stepIndex === CREATE_STEPS.length - 1
   const phoneError = contactNumberError(form.phone)
   const alternatePhoneError = contactNumberError(form.alternate_phone)
+  const [addressLine1, addressLine2] = splitAddressLines(form.address)
   const canGoNext =
     stepIndex === 0 ? isContractorFormValid(form) : stepIndex === 1 ? !phoneError && !alternatePhoneError : true
 
@@ -321,14 +324,32 @@ export function ContractorCreatePage() {
           <StepCard title="Additional Information">
             <div className="space-y-4">
               <div className="grid gap-6 lg:grid-cols-2">
-                <Field label="Address" required>
-                  <Textarea
-                    value={form.address}
-                    onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
-                    placeholder="Street, area, landmark"
-                    className="min-h-28"
-                  />
-                </Field>
+                <div className="grid content-start gap-6">
+                  <Field label="Address line 1" required>
+                    <Input
+                      value={addressLine1}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          address: combineAddressLines(e.target.value, addressLine2),
+                        }))
+                      }
+                      placeholder="Street, area, landmark"
+                    />
+                  </Field>
+                  <Field label="Address line 2">
+                    <Input
+                      value={addressLine2}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          address: combineAddressLines(addressLine1, e.target.value),
+                        }))
+                      }
+                      placeholder="Building, suite, floor"
+                    />
+                  </Field>
+                </div>
                 <div className="grid content-start gap-6">
                   <Field label="City" required>
                     <Input

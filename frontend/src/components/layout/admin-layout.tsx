@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { APP_PAGE_BACKGROUND_STYLE } from "@/lib/appearance"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
@@ -134,7 +135,7 @@ export function AdminLayout({
   }, [])
 
   return (
-    <div className="flex h-svh min-h-0 w-full overflow-hidden bg-background text-foreground">
+    <div className="flex h-svh min-h-0 w-full overflow-hidden text-foreground" style={APP_PAGE_BACKGROUND_STYLE}>
       <aside className="flex w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
         <div className="space-y-3 px-4 py-5">
           <AppLogo className="mx-auto w-[164px]" />
@@ -207,7 +208,7 @@ export function AdminLayout({
             </DropdownMenu>
           </div>
         </header>
-        <main ref={mainRef} className="min-h-0 flex-1 overflow-auto p-6">{children}</main>
+        <main ref={mainRef} className="min-h-0 flex-1 overflow-auto p-6" style={APP_PAGE_BACKGROUND_STYLE}>{children}</main>
       </div>
     </div>
   )

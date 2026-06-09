@@ -16,10 +16,11 @@ import {
 } from "@/lib/invoice-validation-display"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
-type InvoiceStatusTab = "all" | "pass" | "blocked"
+type InvoiceStatusTab = "all" | "draft" | "pass" | "blocked"
 
 const INVOICE_STATUS_TABS: { id: InvoiceStatusTab; label: string }[] = [
   { id: "all", label: "All" },
+  { id: "draft", label: "Draft" },
   { id: "pass", label: "Pass" },
   { id: "blocked", label: "Blocked" },
 ]
@@ -36,7 +37,13 @@ export function InvoicesPage() {
   const [plants, setPlants] = React.useState<{ id: number; name: string }[]>([])
   const statusFilter = (searchParams.get("status") ?? "all").trim().toLowerCase()
   const statusTab: InvoiceStatusTab =
-    statusFilter === "pass" ? "pass" : statusFilter === "blocked" ? "blocked" : "all"
+    statusFilter === "draft"
+      ? "draft"
+      : statusFilter === "pass"
+        ? "pass"
+        : statusFilter === "blocked"
+          ? "blocked"
+          : "all"
 
   const contractorLabel = React.useCallback(
     (id: number) => contractors.find((c) => c.id === id)?.name ?? `#${id}`,
@@ -101,15 +108,17 @@ export function InvoicesPage() {
   }, [canView, canCreate])
 
   const statusCounts = React.useMemo(() => {
+    let draft = 0
     let pass = 0
     let blocked = 0
-    if (!rows) return { pass, blocked }
+    if (!rows) return { draft, pass, blocked }
     for (const r of rows) {
       const d = invoiceDisplayStatus(r)
-      if (d === "pass") pass += 1
+      if (d === "draft") draft += 1
+      else if (d === "pass") pass += 1
       else if (d === "blocked") blocked += 1
     }
-    return { pass, blocked }
+    return { draft, pass, blocked }
   }, [rows])
 
   const filtered = React.useMemo(() => {
@@ -117,6 +126,7 @@ export function InvoicesPage() {
     if (statusFilter === "pending_exception_approval") {
       return rows.filter((r) => String(r.status ?? "").toLowerCase() === "pending_exception_approval")
     }
+    if (statusFilter === "draft") return rows.filter((r) => invoiceDisplayStatus(r) === "draft")
     if (statusFilter === "pass") return rows.filter((r) => invoiceDisplayStatus(r) === "pass")
     if (statusFilter === "blocked") return rows.filter((r) => invoiceDisplayStatus(r) === "blocked")
     return rows
@@ -151,6 +161,8 @@ export function InvoicesPage() {
               const n =
                 t.id === "all"
                   ? (rows?.length ?? 0)
+                  : t.id === "draft"
+                    ? statusCounts.draft
                   : t.id === "pass"
                     ? statusCounts.pass
                     : statusCounts.blocked

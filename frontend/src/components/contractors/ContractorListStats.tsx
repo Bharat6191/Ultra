@@ -38,7 +38,7 @@ function StatCard({
     <Card className="rounded-2xl">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-3">
-          <CardTitle className="text-sm font-bold uppercase tracking-wide text-zinc-950">{title}</CardTitle>
+          <CardTitle className="text-lg font-bold uppercase tracking-wide text-zinc-950">{title}</CardTitle>
           <div className={`flex size-9 items-center justify-center rounded-xl ${ringClass}`}>{icon}</div>
         </div>
       </CardHeader>
@@ -66,7 +66,7 @@ export function ContractorListStats({
       <StatCard
         title="TOTAL"
         value={data.total}
-        hint="Records on this page"
+        // hint="Records on this page"
         tone="neutral"
         loading={loading}
         icon={<BriefcaseBusiness className="size-4" aria-hidden />}
@@ -74,7 +74,7 @@ export function ContractorListStats({
       <StatCard
         title="ACTIVE"
         value={data.active}
-        hint="Operational"
+        // hint="Operational"
         tone="success"
         loading={loading}
         icon={<CheckCircle2 className="size-4" aria-hidden />}
@@ -90,7 +90,7 @@ export function ContractorListStats({
       <StatCard
         title="EXPIRING DOCUMENTS"
         value={data.expiringSoon}
-        hint="Documents within 7 days"
+        // hint="Documents within 7 days"
         tone="warning"
         loading={loading}
         icon={<CalendarClock className="size-4" aria-hidden />}

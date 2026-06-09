@@ -128,7 +128,7 @@ export function NegotiatedRateDetailPage() {
     canUpdate && (rate.status === "draft" || rate.status === "pending_approval")
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 [&_.text-gray-500]:text-foreground [&_.text-gray-600]:text-foreground [&_.text-gray-700]:text-foreground [&_.text-gray-800]:text-foreground [&_.text-muted-foreground]:text-foreground">
       {/* Header / breadcrumb */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

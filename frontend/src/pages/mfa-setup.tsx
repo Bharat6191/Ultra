@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ApiError, postJson } from "@/lib/api"
+import { APP_PAGE_BACKGROUND_STYLE } from "@/lib/appearance"
 
 export function MfaSetupPage() {
   const [searchParams] = useSearchParams()
@@ -58,7 +59,7 @@ export function MfaSetupPage() {
 
   if (!token) {
     return (
-      <div className="flex min-h-svh items-center justify-center bg-background px-4">
+      <div className="flex min-h-svh items-center justify-center px-4" style={APP_PAGE_BACKGROUND_STYLE}>
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Invalid link</CardTitle>
@@ -75,7 +76,7 @@ export function MfaSetupPage() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-background px-4 py-10">
+    <div className="flex min-h-svh items-center justify-center px-4 py-10" style={APP_PAGE_BACKGROUND_STYLE}>
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>Set up authenticator</CardTitle>

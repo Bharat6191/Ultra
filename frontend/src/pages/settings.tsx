@@ -11,6 +11,12 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getJson, putJson } from "@/lib/api"
+import {
+  applyAppearanceSettings,
+  DEFAULT_PAGE_BACKGROUND_COLOR,
+  normalizePageBackgroundColor,
+  type AppearanceSettings,
+} from "@/lib/appearance"
 import { hasPermission, isSuperuser } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
@@ -39,24 +45,39 @@ export function SettingsPage() {
 
   const [policy, setPolicy] = React.useState<PasswordPolicy | null>(null)
   const [authPolicy, setAuthPolicy] = React.useState<AuthPolicy | null>(null)
+  const [appearance, setAppearance] = React.useState<AppearanceSettings | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [savingAuth, setSavingAuth] = React.useState(false)
-  const [tab, setTab] = React.useState<"auth" | "password">("auth")
+  const [savingAppearance, setSavingAppearance] = React.useState(false)
+  const [tab, setTab] = React.useState<"auth" | "password" | "appearance">("auth")
 
   async function load() {
     setLoadError(null)
-    try {
-      const [data, auth] = await Promise.all([
+    const [passwordResult, authResult, appearanceResult] = await Promise.allSettled([
         getJson<PasswordPolicy>("/admin/settings/password-policy"),
         getJson<AuthPolicy>("/admin/settings/auth-policy"),
+        getJson<AppearanceSettings>("/admin/settings/appearance"),
       ])
-      setPolicy(data)
-      setAuthPolicy(auth)
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Failed to load settings")
+
+    if (passwordResult.status === "fulfilled") {
+      setPolicy(passwordResult.value)
+    } else {
+      setLoadError(passwordResult.reason instanceof Error ? passwordResult.reason.message : "Failed to load settings")
       setPolicy(null)
+    }
+
+    if (authResult.status === "fulfilled") {
+      setAuthPolicy(authResult.value)
+    } else {
       setAuthPolicy(null)
+    }
+
+    if (appearanceResult.status === "fulfilled") {
+      const normalized = applyAppearanceSettings(appearanceResult.value)
+      setAppearance(normalized)
+    } else {
+      setAppearance({ page_background_color: DEFAULT_PAGE_BACKGROUND_COLOR })
     }
   }
 
@@ -83,6 +104,31 @@ export function SettingsPage() {
     }
   }
 
+  async function saveAppearance() {
+    if (!appearance) return
+    const normalized = normalizePageBackgroundColor(appearance.page_background_color)
+    if (!normalized) {
+      toast.error("Use a valid hex color like #f9fafb.")
+      return
+    }
+
+    setSavingAppearance(true)
+    toast.loading("Saving appearance…", { id: "appearance-save" })
+    try {
+      const updated = await putJson<AppearanceSettings>("/admin/settings/appearance", {
+        page_background_color: normalized,
+      })
+      const applied = applyAppearanceSettings(updated)
+      setAppearance(applied)
+      toast.success("Saved", { id: "appearance-save" })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Save failed"
+      toast.error(message, { id: "appearance-save" })
+    } finally {
+      setSavingAppearance(false)
+    }
+  }
+
   if (!policy && loadError) {
     return (
       <Alert variant="destructive">
@@ -97,6 +143,9 @@ export function SettingsPage() {
       <p className="text-sm text-muted-foreground">Loading settings…</p>
     )
   }
+
+  const previewBackgroundColor =
+    normalizePageBackgroundColor(appearance?.page_background_color) ?? DEFAULT_PAGE_BACKGROUND_COLOR
 
   return (
     <div className="w-full min-w-0 space-y-6">
@@ -114,6 +163,7 @@ export function SettingsPage() {
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="w-full">
         <TabsList>
           <TabsTrigger value="auth">Authentication</TabsTrigger>
+          <TabsTrigger value="appearance">Appearance</TabsTrigger>
           <TabsTrigger value="password">Password Policy</TabsTrigger>
         </TabsList>
 
@@ -296,6 +346,85 @@ export function SettingsPage() {
                       }}
                     >
                       {savingAuth ? "Saving…" : "Save auth policy"}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="appearance" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Workspace Appearance</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {!appearance ? (
+                <Alert variant="destructive">
+                  <AlertTitle>Appearance settings unavailable</AlertTitle>
+                  <AlertDescription>Could not load the workspace background color.</AlertDescription>
+                </Alert>
+              ) : (
+                <>
+                  <div className="grid gap-5 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="page_background_color">Page background color</Label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            id="page_background_color_picker"
+                            type="color"
+                            value={previewBackgroundColor}
+                            disabled={!canEditSettings}
+                            onChange={(e) => setAppearance((p) => (p ? { ...p, page_background_color: e.target.value } : p))}
+                            className="h-10 w-14 cursor-pointer rounded-lg border border-gray-200 bg-white p-1 disabled:cursor-not-allowed disabled:opacity-50"
+                          />
+                          <Input
+                            id="page_background_color"
+                            disabled={!canEditSettings}
+                            value={appearance.page_background_color}
+                            onChange={(e) => setAppearance((p) => (p ? { ...p, page_background_color: e.target.value } : p))}
+                            placeholder="#f9fafb"
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Admin-controlled background for dashboard, admin, login, and workspace screens.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Preview</div>
+                      <div className="rounded-2xl border border-zinc-200 p-4" style={{ backgroundColor: previewBackgroundColor }}>
+                        <div className="rounded-2xl border border-zinc-200/80 bg-white/88 p-5 shadow-sm backdrop-blur-sm">
+                          <div className="text-lg font-semibold text-zinc-950">Ultra workspace</div>
+                          <div className="mt-1 text-sm text-muted-foreground">
+                            Main page background preview using <span className="font-medium text-zinc-900">{previewBackgroundColor}</span>.
+                          </div>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Card</div>
+                              <div className="mt-1 text-sm font-medium text-zinc-950">Content stays readable</div>
+                            </div>
+                            <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Usage</div>
+                              <div className="mt-1 text-sm font-medium text-zinc-950">Applied from a DB setting</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!canEditSettings || savingAppearance}
+                      onClick={() => void saveAppearance()}
+                    >
+                      {savingAppearance ? "Saving…" : "Save appearance"}
                     </Button>
                   </div>
                 </>

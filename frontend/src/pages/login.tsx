@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getJson, postJson } from "@/lib/api"
+import { APP_PAGE_BACKGROUND_STYLE } from "@/lib/appearance"
 import { persistAuthFromMe } from "@/lib/permissions"
 import { resetSessionLastActivity } from "@/lib/session-timeout"
 
@@ -173,7 +174,7 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-background px-4 py-10">
+    <div className="flex min-h-svh items-center justify-center px-4 py-10" style={APP_PAGE_BACKGROUND_STYLE}>
       <div className="w-full max-w-sm space-y-5">
         <div className="flex justify-center">
           <AppLogo className="w-[200px]" />

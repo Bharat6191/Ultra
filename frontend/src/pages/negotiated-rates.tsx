@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson } from "@/lib/api"
@@ -290,7 +290,7 @@ export function NegotiatedRatesPage() {
             value={plantFilter}
             onChange={(e) => setPlantFilter(e.target.value)}
           >
-            <option value="all">All plants & clusters</option>
+            <option value="all">All Plants & Clusters</option>
             <optgroup label="Clusters">
               {orgScopes
                 .filter((o) => String(o.type).toUpperCase() === "CLUSTER")
@@ -319,9 +319,9 @@ export function NegotiatedRatesPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Negotiations</CardTitle>
-          <CardDescription>
+          {/* <CardDescription>
             Pick a lifecycle tab to focus the table; search and plant filters still apply on top of the tab.
-          </CardDescription>
+          </CardDescription> */}
           <div className="mt-3 flex flex-wrap gap-2">
             {RATE_STATUS_TABS.map((t) => {
               const n = t.id === "all" ? (rows?.length ?? 0) : (statusCounts.get(t.id) ?? 0)

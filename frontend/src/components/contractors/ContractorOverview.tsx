@@ -86,7 +86,7 @@ export function ContractorOverview({ contractor }: { contractor: ContractorOverv
           <CardTitle className="text-base">Address</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <FieldRow label="Address" value={contractor.address} />
+          <FieldRow label="Address" value={contractor.address ? <div className="whitespace-pre-wrap">{contractor.address}</div> : null} />
           <FieldRow label="Location" value={location} />
           <FieldRow label="Website" value={contractor.website} />
         </CardContent>

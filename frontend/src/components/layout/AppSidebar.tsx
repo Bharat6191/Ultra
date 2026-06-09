@@ -5,6 +5,7 @@ import { Link, useLocation } from "react-router-dom"
 import { AppLogo } from "@/components/layout/AppLogo"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { APP_PAGE_BACKGROUND_STYLE } from "@/lib/appearance"
 import { cn } from "@/lib/utils"
 
 export type SidebarNavItem = {
@@ -46,9 +47,10 @@ export function AppSidebar({ items = defaultItems, collapsed = false }: AppSideb
   return (
     <aside
       className={cn(
-        "hidden h-svh min-h-0 shrink-0 flex-col border-r border-gray-200 bg-gray-50 transition-[width] duration-200 lg:flex print:hidden",
+        "hidden h-svh min-h-0 shrink-0 flex-col border-r border-gray-200 transition-[width] duration-200 lg:flex print:hidden",
         collapsed ? "w-20" : "w-64",
       )}
+      style={APP_PAGE_BACKGROUND_STYLE}
     >
       <div className={cn("shrink-0 py-5", collapsed ? "px-3" : "px-4")}>
         <AppLogo

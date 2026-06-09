@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { ApprovalWorkflowTimeline, type TaskApprovalStepLine } from "@/components/approval-workflow-timeline"
+import { formatMoney, formatPercent, rateStatusLabel } from "@/components/contractors/rateStatus"
 import {
   WorkOrderApprovalReview,
   WorkOrderRateOverrideApprovalReview,
@@ -95,12 +96,6 @@ function formatDateTime(iso: string | null | undefined): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
-}
-
-function timeMs(iso: string | null | undefined): number {
-  if (!iso) return Number.NEGATIVE_INFINITY
-  const t = new Date(iso).getTime()
-  return Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t
 }
 
 type FormField =
@@ -253,95 +248,11 @@ function openRecordAction(task: UnifiedTaskDetail): { href: string; label: strin
   return null
 }
 
-type TaskCommentsCardProps = {
-  comment: string
-  onCommentChange: (v: string) => void
-  sortedComments: TaskComment[]
-  onAddComment: () => void
-  commenting: boolean
-}
-
-function TaskCommentsCard({ comment, onCommentChange, sortedComments, onAddComment, commenting }: TaskCommentsCardProps) {
-  return (
-    <Card className="min-h-0">
-      <CardHeader className="space-y-1 pb-2">
-        <CardTitle className="text-base">Comments</CardTitle>
-        <CardDescription className="text-xs">Add a note and review history.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="task-comment" className="text-xs">
-            Comment
-          </Label>
-          <textarea
-            id="task-comment"
-            className={cn(
-              "min-h-[72px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40",
-            )}
-            value={comment}
-            onChange={(e) => onCommentChange(e.target.value)}
-            rows={3}
-            placeholder="Write a comment…"
-          />
-        </div>
-        <div className="flex justify-end">
-          <Button type="button" size="sm" variant="secondary" onClick={onAddComment} disabled={commenting || !comment.trim()}>
-            {commenting ? "Adding…" : "Add comment"}
-          </Button>
-        </div>
-        <Separator />
-        {sortedComments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No comments yet.</p>
-        ) : (
-          <ul className="max-h-[min(40vh,20rem)] space-y-2 overflow-y-auto pr-0.5">
-            {sortedComments.map((c) => (
-              <li key={c.id} className="rounded-md border bg-muted/30 px-2.5 py-1.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    {c.user_display_name ?? (c.user_id != null ? `User #${c.user_id}` : "—")}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{c.created_at ? formatDateTime(c.created_at) : "—"}</span>
-                </div>
-                <div className="mt-0.5 text-sm whitespace-pre-wrap leading-snug">{c.comment}</div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function taskAuditTitle(ev: TaskAuditLog): string {
-  const a = ev.action.toLowerCase()
-  if (a === "created") return "Task created for this approval step"
-  if (a === "approved" || a === "approve") return "Approved on this task"
-  if (a === "rejected" || a === "reject") return "Rejected on this task"
-  if (a === "commented") return "Comment on task thread"
-  if (a === "resubmitted") return "Resubmitted for approval after changes"
-  if (a === "started") return "Task started"
-  if (a === "completed") return "Task completed"
-  if (a === "closed") return "Task closed"
-  if (a === "assigned") return "Task reassigned"
-  return ev.action.replace(/_/g, " ")
-}
-
-function actorLine(ev: TaskAuditLog): string {
-  if (ev.actor_display_name) return ev.actor_display_name
-  if (ev.actor_user_id != null) return `User #${ev.actor_user_id}`
-  return "—"
-}
-
-function auditCommentText(ev: TaskAuditLog, comments: TaskComment[]): string {
-  const newValue = ev.new_value as { comment?: unknown; comment_id?: unknown } | null
-  if (newValue && typeof newValue.comment === "string" && newValue.comment.trim() !== "") {
-    return newValue.comment
-  }
-  if (newValue && typeof newValue.comment_id === "number") {
-    const row = comments.find((comment) => comment.id === newValue.comment_id)
-    if (row && row.comment.trim() !== "") return row.comment
-  }
-  return "—"
+function payloadPrimitive(payload: Record<string, unknown>, key: string): string | number | boolean | null {
+  const value = payload[key]
+  if (typeof value === "string") return value.trim() !== "" ? value : null
+  if (typeof value === "number" || typeof value === "boolean") return value
+  return null
 }
 
 function approvalPayloadEntries(payload: Record<string, unknown>, entityType: string): { key: string; label: string; value: string }[] {
@@ -376,6 +287,111 @@ function approvalPayloadEntries(payload: Record<string, unknown>, entityType: st
     .map((k) => ({ key: k, label: k.replace(/_/g, " "), value: formatPayloadValue(p[k]) }))
 }
 
+function ApprovalSummaryCard({ task }: { task: UnifiedTaskDetail }) {
+  const approval = task.approval
+  if (!approval) return null
+
+  const payload = approval.payload ?? {}
+  const approvalStatus =
+    approval.entity_type === "contractor_rate_approval" ? rateStatusLabel(approval.status) : (approval.status ?? "—")
+  const effectiveFrom = payloadPrimitive(payload, "effective_from")
+  const effectiveTo = payloadPrimitive(payload, "effective_to")
+  const workflowStep =
+    approval.step_order != null
+      ? `Step ${approval.step_order}`
+      : approval.current_step != null
+        ? `Step ${approval.current_step}`
+        : "—"
+
+  const metrics =
+    approval.entity_type === "contractor_rate_approval"
+      ? [
+          { label: "Negotiated Rate", value: formatMoney(payloadPrimitive(payload, "negotiated_rate") as number | string | null), strong: true },
+          { label: "Savings Amount", value: formatMoney(payloadPrimitive(payload, "savings_amount") as number | string | null) },
+          { label: "Savings %", value: formatPercent(payloadPrimitive(payload, "savings_percentage") as number | string | null) },
+          {
+            label: "Effective Window",
+            value:
+              effectiveFrom != null
+                ? `${String(effectiveFrom)}${effectiveTo != null ? ` → ${String(effectiveTo)}` : " → Open"}`
+                : "—",
+          },
+        ]
+      : []
+
+  const rows: Array<{ label: string; value: string }> = [
+    { label: "Entity", value: entityLabel(task) },
+    { label: "Request #", value: `#${approval.request_id}` },
+    { label: "Approval status", value: approvalStatus },
+    { label: "Task status", value: task.status ?? "—" },
+    { label: "Workflow step", value: workflowStep },
+    { label: "Approver role", value: approval.approver_role_name ?? "—" },
+    {
+      label: "Required approvals",
+      value: approval.required_approvals != null ? String(approval.required_approvals) : "—",
+    },
+    {
+      label: "Submitted by",
+      value: approval.created_by_display_name ?? (approval.created_by != null ? `User #${approval.created_by}` : "—"),
+    },
+    { label: "Due date", value: task.due_date ? formatDateTime(task.due_date) : "—" },
+  ]
+
+  if (approval.entity_type === "contractor_rate_approval") {
+    rows.splice(
+      1,
+      0,
+      { label: "Action code", value: String(payloadPrimitive(payload, "action_code") ?? "—") },
+      { label: "Contractor ID", value: String(payloadPrimitive(payload, "contractor_id") ?? "—") },
+      { label: "Part master ID", value: String(payloadPrimitive(payload, "part_master_id") ?? "—") },
+      { label: "Rate record", value: `#${approval.entity_id}` },
+    )
+  }
+
+  return (
+    <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
+      <CardHeader className="space-y-1 border-b border-border/60 bg-muted/20 py-3">
+        <CardTitle className="text-base">
+          {approval.entity_type === "contractor_rate_approval" ? "Negotiation summary" : "Request summary"}
+        </CardTitle>
+        <CardDescription className="text-xs">
+          {approval.entity_type === "contractor_rate_approval"
+            ? "Commercial snapshot and approval context."
+            : "Workflow context for this approval request."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-4">
+        <div className="flex flex-wrap gap-2">
+          <Badge variant={taskStatusBadgeVariant(task.status)}>{task.status}</Badge>
+          <Badge variant="outline">{approvalStatus}</Badge>
+        </div>
+
+        {metrics.length > 0 ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+            {metrics.map((metric) => (
+              <div key={metric.label} className="rounded-xl border border-border/70 bg-muted/15 px-3 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{metric.label}</div>
+                <div className={cn("mt-1 text-sm font-semibold text-foreground", metric.strong && "text-xl tracking-tight")}>
+                  {metric.value}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <dl className="divide-y divide-border/60">
+          {rows.map((row) => (
+            <div key={row.label} className="grid grid-cols-1 gap-0.5 py-2 first:pt-0 sm:grid-cols-3 sm:gap-3">
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:col-span-1">{row.label}</dt>
+              <dd className="text-sm text-foreground sm:col-span-2">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function MyTaskDetailPage() {
   const { taskId } = useParams()
   const navigate = useNavigate()
@@ -384,8 +400,6 @@ export function MyTaskDetailPage() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
-  const [comment, setComment] = React.useState("")
-  const [commenting, setCommenting] = React.useState(false)
   const [acting, setActing] = React.useState(false)
   const [actionComment, setActionComment] = React.useState("")
   const [decisionDialogOpen, setDecisionDialogOpen] = React.useState(false)
@@ -410,16 +424,6 @@ export function MyTaskDetailPage() {
   const canTaskClose = hasPermission("task.close")
 
   const [viewerUserId, setViewerUserId] = React.useState<number | null>(null)
-
-  const sortedAudit = React.useMemo(() => {
-    const logs = task?.audit_logs ?? []
-    return [...logs].sort((a, b) => timeMs(b.created_at) - timeMs(a.created_at))
-  }, [task])
-
-  const sortedComments = React.useMemo(() => {
-    const rows = task?.comments ?? []
-    return [...rows].sort((a, b) => timeMs(b.created_at) - timeMs(a.created_at))
-  }, [task])
 
   const syncMe = React.useCallback(async () => {
     try {
@@ -528,24 +532,6 @@ export function MyTaskDetailPage() {
     }
   }
 
-  async function addComment() {
-    if (!task) return
-    const trimmed = comment.trim()
-    if (!trimmed) return
-    setCommenting(true)
-    try {
-      await postJson(`/tasks/${task.id}/comments`, { comment: trimmed })
-      toast.success("Comment added.")
-      setComment("")
-      await load(task.id)
-    } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "Could not add comment."
-      toast.error(msg)
-    } finally {
-      setCommenting(false)
-    }
-  }
-
   const isSubmitterRejectionView = Boolean(
     task &&
       task.task_type === "approval" &&
@@ -570,6 +556,12 @@ export function MyTaskDetailPage() {
       : null
 
   const isApprovalLike = Boolean(task && (task.task_type === "approval" || task.task_type === "rework") && task.approval)
+  const showApprovalSummaryAside = Boolean(
+    task?.approval &&
+      task.approval.entity_type !== "work_order_approval" &&
+      task.approval.entity_type !== "work_order_rate_override" &&
+      task.approval.entity_type !== "invoice_exception_approval",
+  )
   const approvalStepNeedsDecision = Boolean(
     task &&
       task.task_type === "approval" &&
@@ -836,11 +828,7 @@ export function MyTaskDetailPage() {
               <div
                 className={cn(
                   "grid grid-cols-1 gap-4 lg:items-start",
-                  task.approval.entity_type === "work_order_approval" ||
-                    task.approval.entity_type === "work_order_rate_override" ||
-                    task.approval.entity_type === "invoice_exception_approval"
-                    ? ""
-                    : "lg:grid-cols-2",
+                  showApprovalSummaryAside ? "lg:grid-cols-2" : "",
                 )}
               >
                 <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
@@ -901,15 +889,7 @@ export function MyTaskDetailPage() {
                     </p>
                   </CardContent>
                 </Card>
-                {task.approval.entity_type === "invoice_exception_approval" ? null : (
-                  <TaskCommentsCard
-                    comment={comment}
-                    onCommentChange={setComment}
-                    sortedComments={sortedComments}
-                    onAddComment={() => void addComment()}
-                    commenting={commenting}
-                  />
-                )}
+                {showApprovalSummaryAside ? <ApprovalSummaryCard task={task} /> : null}
               </div>
               {task.approval.workflow_steps && task.approval.workflow_steps.length > 0 ? (
                 <ApprovalWorkflowTimeline
@@ -1025,56 +1005,6 @@ export function MyTaskDetailPage() {
               </CardContent>
             </Card>
           ) : null} */}
-
-          {task.task_type === "manual" ? (
-            <TaskCommentsCard
-              comment={comment}
-              onCommentChange={setComment}
-              sortedComments={sortedComments}
-              onAddComment={() => void addComment()}
-              commenting={commenting}
-            />
-          ) : null}
-
-          <Card>
-            <CardHeader className="space-y-1 pb-2">
-              <CardTitle className="text-base">History</CardTitle>
-              <CardDescription className="text-xs">Task activity · newest first</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                {sortedAudit.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No task-level events yet.</p>
-                ) : (
-                  <ul className="space-y-2 text-sm">
-                    {sortedAudit.map((ev) => (
-                      <li key={ev.id} className="rounded-md border bg-muted/30 px-2.5 py-1.5">
-                        <div className="space-y-1.5">
-                          <div className="min-w-0">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0 text-xs font-medium leading-snug sm:text-sm">{taskAuditTitle(ev)}</div>
-                              <span className="shrink-0 text-right text-xs text-muted-foreground">
-                                {ev.created_at ? formatDateTime(ev.created_at) : "—"}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-xs leading-snug sm:text-sm">{actorLine(ev)}</div>
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-xs whitespace-pre-wrap leading-snug sm:text-sm">
-                              {auditCommentText(ev, task.comments ?? [])}
-                            </div>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
           {(() => {
             const parsed = readFormSchema(task.form_schema)
             if (!parsed || parsed.sections.length === 0) return null

@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
+import { APP_PAGE_BACKGROUND_STYLE } from "@/lib/appearance"
 
 export type AppLayoutProps = {
   children: React.ReactNode
@@ -33,7 +34,7 @@ export function AppLayout({ children, pageTitle, userEmail, onSignOut }: AppLayo
   }, [userEmail])
 
   return (
-    <div className="min-h-svh bg-gray-50 text-foreground">
+    <div className="min-h-svh text-foreground" style={APP_PAGE_BACKGROUND_STYLE}>
       <header className="sticky top-0 z-20 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <div className="flex items-center">

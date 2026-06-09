@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session, selectinload
 from core.password_policy import password_policy_admin_view
 from modules.settings.lookup import clear_setting_cache
 from modules.settings.model import Setting
-from modules.settings.schema import AuthPolicyPublic, PasswordPolicyPublic
+from modules.settings.schema import (
+    AppearanceSettingsPublic,
+    AuthPolicyPublic,
+    DEFAULT_PAGE_BACKGROUND_COLOR,
+    PasswordPolicyPublic,
+)
 from modules.users.model import User
 from modules.mfa.policy_hooks import maybe_send_mfa_setup_for_user
 
@@ -14,6 +19,28 @@ from modules.mfa.policy_hooks import maybe_send_mfa_setup_for_user
 class SettingsService:
     def __init__(self, db: Session) -> None:
         self._db = db
+
+    @staticmethod
+    def _bool_from_row(row: Setting | None, default: bool) -> bool:
+        if row is None or row.value is None:
+            return default
+        return str(row.value).strip().lower() in ("1", "true", "yes", "on")
+
+    @staticmethod
+    def _str_from_row(row: Setting | None, default: str) -> str:
+        if row is None or row.value is None:
+            return default
+        return str(row.value).strip() or default
+
+    @staticmethod
+    def _int_from_row(row: Setting | None, default: int) -> int:
+        if row is None or row.value is None:
+            return default
+        try:
+            value = int(str(row.value).strip())
+        except (TypeError, ValueError):
+            return default
+        return value if value >= 1 else default
 
     def get_password_policy(self) -> PasswordPolicyPublic:
         return PasswordPolicyPublic.model_validate(password_policy_admin_view())
@@ -43,39 +70,20 @@ class SettingsService:
         return self.get_password_policy()
 
     def get_auth_policy(self) -> AuthPolicyPublic:
-        def b(key: str, default: bool) -> bool:
-            row = self._db.scalar(select(Setting).where(Setting.key == key))
-            if row is None or row.value is None:
-                return default
-            return str(row.value).strip().lower() in ("1", "true", "yes", "on")
+        def row(key: str) -> Setting | None:
+            return self._db.scalar(select(Setting).where(Setting.key == key))
 
-        def s(key: str, default: str) -> str:
-            row = self._db.scalar(select(Setting).where(Setting.key == key))
-            if row is None or row.value is None:
-                return default
-            return str(row.value).strip() or default
-
-        def i(key: str, default: int) -> int:
-            row = self._db.scalar(select(Setting).where(Setting.key == key))
-            if row is None or row.value is None:
-                return default
-            try:
-                value = int(str(row.value).strip())
-            except (TypeError, ValueError):
-                return default
-            return value if value >= 1 else default
-
-        mode = s("auth.session_timeout_mode", "token_expiry")
+        mode = self._str_from_row(row("auth.session_timeout_mode"), "token_expiry")
         if mode not in {"token_expiry", "idle_timeout"}:
             mode = "token_expiry"
 
         return AuthPolicyPublic(
-            password_enabled=b("auth.password_enabled", True),
-            mfa_enabled=b("auth.mfa_enabled", False),
-            captcha_enabled=b("auth.captcha_enabled", False),
-            mfa_enforced=b("auth.mfa_enforced", False),
+            password_enabled=self._bool_from_row(row("auth.password_enabled"), True),
+            mfa_enabled=self._bool_from_row(row("auth.mfa_enabled"), False),
+            captcha_enabled=self._bool_from_row(row("auth.captcha_enabled"), False),
+            mfa_enforced=self._bool_from_row(row("auth.mfa_enforced"), False),
             session_timeout_mode=mode,
-            idle_timeout_minutes=i("auth.idle_timeout_minutes", 10),
+            idle_timeout_minutes=self._int_from_row(row("auth.idle_timeout_minutes"), 10),
         )
 
     def put_auth_policy(self, payload: AuthPolicyPublic) -> AuthPolicyPublic:
@@ -104,6 +112,21 @@ class SettingsService:
                 maybe_send_mfa_setup_for_user(self._db, u, event_code="MFA_SETUP_REQUIRED")
 
         return self.get_auth_policy()
+
+    def get_appearance_settings(self) -> AppearanceSettingsPublic:
+        row = self._db.scalar(select(Setting).where(Setting.key == "appearance.page_background_color"))
+        color = self._str_from_row(row, DEFAULT_PAGE_BACKGROUND_COLOR)
+        return AppearanceSettingsPublic(page_background_color=color)
+
+    def put_appearance_settings(self, payload: AppearanceSettingsPublic) -> AppearanceSettingsPublic:
+        mapping: list[tuple[str, str]] = [
+            ("appearance.page_background_color", payload.page_background_color),
+        ]
+        for key, value in mapping:
+            self._upsert(key, value)
+        self._db.commit()
+        clear_setting_cache(*[k for k, _ in mapping])
+        return self.get_appearance_settings()
 
     def _upsert(self, key: str, value: str) -> None:
         row = self._db.scalar(select(Setting).where(Setting.key == key))

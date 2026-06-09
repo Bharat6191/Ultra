@@ -198,9 +198,9 @@ function SummaryTable({
 
 export function ReportsPage() {
   const [filters, setFilters] = React.useState<ReportFilters>(EMPTY_FILTERS)
-  const [appliedFilters, setAppliedFilters] = React.useState<ReportFilters>(EMPTY_FILTERS)
+  const [appliedFilters, setAppliedFilters] = React.useState<ReportFilters | null>(null)
   const [report, setReport] = React.useState<InvoiceReportSummary | null>(null)
-  const [loading, setLoading] = React.useState(true)
+  const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [loadedAt, setLoadedAt] = React.useState<Date | null>(null)
   const [contractors, setContractors] = React.useState<LookupOption[]>([])
@@ -225,6 +225,10 @@ export function ReportsPage() {
   }, [])
 
   const loadReport = React.useCallback(async () => {
+    if (!appliedFilters) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -248,19 +252,24 @@ export function ReportsPage() {
   }, [appliedFilters])
 
   React.useEffect(() => {
+    if (!appliedFilters) return
     void loadReport()
-  }, [loadReport])
+  }, [appliedFilters, loadReport])
+
+  const effectiveFilters = appliedFilters ?? EMPTY_FILTERS
+  const hasGenerated = appliedFilters !== null
 
   const selectedStatusLabel =
-    STATUS_OPTIONS.find((option) => option.value === appliedFilters.status)?.label ?? "All Status"
-  const selectedPlantLabel = findName(plants, appliedFilters.orgUnitId, "All Plants")
-  const selectedContractorLabel = findName(contractors, appliedFilters.contractorId, "All Contractors")
+    STATUS_OPTIONS.find((option) => option.value === effectiveFilters.status)?.label ?? "All Status"
+  const selectedPlantLabel = findName(plants, effectiveFilters.orgUnitId, "All Plants")
+  const selectedContractorLabel = findName(contractors, effectiveFilters.contractorId, "All Contractors")
 
   function printReport() {
     if (typeof window === "undefined" || !report) return
 
     const issuedAt = formatDateTimeLabel(loadedAt)
     const logoSrc = escapeHtml(`${window.location.origin}/logo/logo.png`)
+    const printFilters = appliedFilters ?? EMPTY_FILTERS
     const invoiceRows = report.rows
       .map(
         (row, index) => `
@@ -468,8 +477,8 @@ export function ReportsPage() {
       </div>
 
       <div class="filter-grid">
-        <div><div class="label">From Date</div><div class="value">${escapeHtml(formatDateLabel(appliedFilters.dateFrom))}</div></div>
-        <div><div class="label">To Date</div><div class="value">${escapeHtml(formatDateLabel(appliedFilters.dateTo))}</div></div>
+        <div><div class="label">From Date</div><div class="value">${escapeHtml(formatDateLabel(printFilters.dateFrom))}</div></div>
+        <div><div class="label">To Date</div><div class="value">${escapeHtml(formatDateLabel(printFilters.dateTo))}</div></div>
         <div><div class="label">Plant</div><div class="value">${escapeHtml(selectedPlantLabel)}</div></div>
         <div><div class="label">Contractor</div><div class="value">${escapeHtml(selectedContractorLabel)}</div></div>
         <div><div class="label">Status</div><div class="value">${escapeHtml(selectedStatusLabel)}</div></div>
@@ -581,8 +590,8 @@ export function ReportsPage() {
 
   return (
     <div className="w-full space-y-6 print:space-y-4">
-      <div className="border-b border-emerald-100 pb-4 text-center print:hidden">
-        {/* <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Invoice Report</h1> */}
+      <div className="border-b border-emerald-100 pb-4 text-left print:hidden">
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Invoice Details</h1>
       </div>
 
       <Card className="rounded-3xl border border-emerald-100 shadow-sm print:hidden">
@@ -594,7 +603,7 @@ export function ReportsPage() {
             className="space-y-4"
             onSubmit={(event) => {
               event.preventDefault()
-              setAppliedFilters(filters)
+              setAppliedFilters({ ...filters })
             }}
           >
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -695,7 +704,11 @@ export function ReportsPage() {
                 disabled={loading}
                 onClick={() => {
                   setFilters(EMPTY_FILTERS)
-                  setAppliedFilters(EMPTY_FILTERS)
+                  setAppliedFilters(null)
+                  setReport(null)
+                  setLoadedAt(null)
+                  setError(null)
+                  setLoading(false)
                 }}
               >
                 Reset Filters
@@ -728,6 +741,7 @@ export function ReportsPage() {
               <Button
                 variant="outline"
                 onClick={printReport}
+                disabled={!hasGenerated || loading || !report}
               >
                 <Printer className="size-4" />
                 Print Report
@@ -741,11 +755,11 @@ export function ReportsPage() {
           <div className="mt-6 grid gap-4 border-t border-emerald-100 pt-6 md:grid-cols-2 xl:grid-cols-5 print:mt-0 print:border-t-0 print:pt-0">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">From Date</div>
-              <div className="mt-1 font-medium text-zinc-900">{formatDateLabel(appliedFilters.dateFrom)}</div>
+              <div className="mt-1 font-medium text-zinc-900">{formatDateLabel(effectiveFilters.dateFrom)}</div>
             </div>
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">To Date</div>
-              <div className="mt-1 font-medium text-zinc-900">{formatDateLabel(appliedFilters.dateTo)}</div>
+              <div className="mt-1 font-medium text-zinc-900">{formatDateLabel(effectiveFilters.dateTo)}</div>
             </div>
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Plant</div>
@@ -815,6 +829,12 @@ export function ReportsPage() {
                       Loading report...
                     </TableCell>
                   </TableRow>
+                ) : !hasGenerated ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                      Click Generate to load the invoice report.
+                    </TableCell>
+                  </TableRow>
                 ) : !report || report.rows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
@@ -852,7 +872,7 @@ export function ReportsPage() {
             <div>
               Generated Date &amp; Time:{" "}
               <span className="font-medium text-zinc-950">
-                {loading ? "Refreshing..." : formatDateTimeLabel(loadedAt)}
+                {loading ? "Refreshing..." : hasGenerated ? formatDateTimeLabel(loadedAt) : "—"}
               </span>
             </div>
           </div>

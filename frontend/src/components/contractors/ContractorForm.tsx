@@ -118,6 +118,21 @@ export function normalizePhoneInput(s: string): string {
   return s.replace(/\D/g, "").slice(0, 10)
 }
 
+function normalizeAddressLine(s: string): string {
+  return s.replace(/[\r\n]+/g, " ").trim()
+}
+
+export function splitAddressLines(address: string): [string, string] {
+  const [line1 = "", ...rest] = address.split(/\r?\n+/)
+  return [line1, rest.join(" ").trim()]
+}
+
+export function combineAddressLines(line1: string, line2: string): string {
+  const first = normalizeAddressLine(line1)
+  const second = normalizeAddressLine(line2)
+  return [first, second].filter(Boolean).join("\n")
+}
+
 export function contactNumberError(s: string): string | null {
   const t = s.trim()
   if (!t) return null
@@ -215,6 +230,7 @@ export function ContractorForm({ form, onChange, active, onActiveChange, showSta
 
   const phoneError = contactNumberError(form.phone)
   const alternatePhoneError = contactNumberError(form.alternate_phone)
+  const [addressLine1, addressLine2] = splitAddressLines(form.address)
 
   return (
     <div className="space-y-6">
@@ -403,11 +419,19 @@ export function ContractorForm({ form, onChange, active, onActiveChange, showSta
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
-              <div className="text-xs text-muted-foreground">Address line</div>
+              <div className="text-xs text-muted-foreground">Address line 1</div>
               <Input
-                value={form.address}
-                onChange={(e) => set("address", e.target.value)}
+                value={addressLine1}
+                onChange={(e) => set("address", combineAddressLines(e.target.value, addressLine2))}
                 placeholder="Street, area, landmark"
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <div className="text-xs text-muted-foreground">Address line 2</div>
+              <Input
+                value={addressLine2}
+                onChange={(e) => set("address", combineAddressLines(addressLine1, e.target.value))}
+                placeholder="Building, suite, floor"
               />
             </div>
             <div className="space-y-1.5">

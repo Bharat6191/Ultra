@@ -5,6 +5,7 @@ import {
   type WorkspaceOverviewSummary,
 } from "@/components/dashboard/workspace-overview-dashboard"
 import { getJson } from "@/lib/api"
+import { APP_PAGE_BACKGROUND_STYLE } from "@/lib/appearance"
 
 type MeResponse = {
   full_name?: string | null
@@ -45,7 +46,7 @@ export function DashboardPage() {
   }, [])
 
   return (
-    <div className="min-h-full bg-zinc-50/80 pb-8">
+    <div className="min-h-full pb-8" style={APP_PAGE_BACKGROUND_STYLE}>
       <WorkspaceOverviewDashboard summary={summary} loading={loading} error={loadError} userName={userName} />
     </div>
   )

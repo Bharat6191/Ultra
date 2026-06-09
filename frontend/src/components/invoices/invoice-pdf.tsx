@@ -299,12 +299,21 @@ export function InvoicePdfDownloadButton({
   }
 
   return (
-    <PDFDownloadLink
-      document={<InvoicePdfDocument data={data} />}
-      fileName={filename}
-      className={btnClass}
-    >
-      {({ loading }) => (loading ? "Preparing PDF…" : "Download PDF")}
-    </PDFDownloadLink>
-  )
+  <PDFDownloadLink
+    document={<InvoicePdfDocument data={data} />}
+    fileName={filename}
+    className={btnClass}>
+    {({ loading }) =>
+      loading ? (
+        "Preparing PDF..."
+      ) : (
+        <span className="inline-flex items-center gap-1">
+          
+          <span>PDF</span>
+          <span className="text-2xl ">⤓</span>
+        </span>
+      )
+    }
+  </PDFDownloadLink>
+ )
 }

@@ -46,6 +46,7 @@ import { ReportsPage } from "@/pages/reports"
 import * as React from "react"
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { getJson } from "@/lib/api"
+import { loadAndApplyAppearanceSettings } from "@/lib/appearance"
 import {
   clearAuthProfile,
   isSuperuser,
@@ -68,6 +69,19 @@ function workspaceMeSignature(me: {
 }
 
 function App() {
+  React.useEffect(() => {
+    void loadAndApplyAppearanceSettings()
+
+    function refreshAppearance() {
+      void loadAndApplyAppearanceSettings({ force: true })
+    }
+
+    window.addEventListener("focus", refreshAppearance)
+    return () => {
+      window.removeEventListener("focus", refreshAppearance)
+    }
+  }, [])
+
   return (
     <>
       <AppToaster />

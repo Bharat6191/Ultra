@@ -1,6 +1,7 @@
 import * as React from "react"
 
 import { AppLogo } from "@/components/layout/AppLogo"
+import { APP_PAGE_BACKGROUND_STYLE } from "@/lib/appearance"
 
 type AppAuthMarketingLayoutProps = {
   children: React.ReactNode
@@ -34,7 +35,7 @@ export function AppAuthMarketingLayout({ children }: AppAuthMarketingLayoutProps
         </div>
       </aside>
 
-      <main className="bg-gray-100 px-6 py-10" id="bg">
+      <main className="px-6 py-10" id="bg" style={APP_PAGE_BACKGROUND_STYLE}>
         <div className="mx-auto flex min-h-full max-w-md items-center">{children}</div>
       </main>
     </div>

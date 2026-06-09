@@ -18,6 +18,7 @@ import { useLocation } from "react-router-dom"
 
 import { AppNavbar } from "@/components/layout/AppNavbar"
 import { AppSidebar } from "@/components/layout/AppSidebar"
+import { APP_PAGE_BACKGROUND_STYLE } from "@/lib/appearance"
 import { hasPermission, TASK_INBOX_PERMISSION_CODES } from "@/lib/permissions"
 import type { SidebarNavItem } from "@/components/layout/AppSidebar"
 
@@ -192,7 +193,10 @@ export function AppShellLayout({
   }, [sidebarCollapsed])
 
   return (
-    <div className="flex h-svh min-h-0 w-full overflow-hidden bg-gray-50 text-foreground print:block print:h-auto print:overflow-visible print:bg-white">
+    <div
+      className="flex h-svh min-h-0 w-full overflow-hidden text-foreground print:block print:h-auto print:overflow-visible print:bg-white"
+      style={APP_PAGE_BACKGROUND_STYLE}
+    >
       <AppSidebar items={sidebarItems} collapsed={sidebarCollapsed} />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden print:block print:overflow-visible">
@@ -208,6 +212,7 @@ export function AppShellLayout({
         <main
           ref={mainRef}
           className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 sm:px-6 lg:px-8 print:overflow-visible print:px-0 print:py-0"
+          style={APP_PAGE_BACKGROUND_STYLE}
         >
           <div className="w-full">{children}</div>
         </main>

@@ -162,7 +162,7 @@ export function PartMasterPage() {
             value={plantFilter}
             onChange={(e) => setPlantFilter(e.target.value)}
           >
-            <option value="">All plants & clusters</option>
+            <option value="">All Plants & Clusters</option>
             <optgroup label="Clusters">
               {orgCatalog
                 .filter((o) => String(o.type).toUpperCase() === "CLUSTER")
@@ -213,9 +213,9 @@ export function PartMasterPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Unit</TableHead>
                   <TableHead>Pricing</TableHead>
-                  <TableHead>Rate unit</TableHead>
-                  <TableHead className="text-right">Should cost</TableHead>
-                  <TableHead className="text-right">Cost / day</TableHead>
+                  <TableHead>Rate Unit</TableHead>
+                  <TableHead className="text-right">Should Cost</TableHead>
+                  <TableHead className="text-right">Cost / Day</TableHead>
                   <TableHead>Effective</TableHead>
                   <TableHead>Status</TableHead>
                   {/* <TableHead className="w-[72px] text-right">Actions</TableHead> */}
