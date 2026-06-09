@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Printer, RefreshCcw } from "lucide-react"
+import { ChevronDown, Printer, RefreshCcw } from "lucide-react"
 
 import { formatMoney } from "@/components/contractors/rateStatus"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments } from "@/lib/permissions"
+import { cn } from "@/lib/utils"
 
 type LookupOption = {
   id: number
@@ -71,6 +72,8 @@ const EMPTY_FILTERS: ReportFilters = {
   contractorId: "",
   orgUnitId: "",
 }
+
+const INVOICE_PREVIEW_LIMIT = 10
 
 function formatDateLabel(value: string): string {
   if (!value) return "All"
@@ -196,6 +199,45 @@ function SummaryTable({
   )
 }
 
+function ReportCollapsibleSection({
+  title,
+  subtitle,
+  defaultOpen = true,
+  children,
+}: {
+  title: string
+  subtitle?: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = React.useState(defaultOpen)
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-emerald-100 print:rounded-none print:border-zinc-300">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-3 bg-emerald-50 px-4 py-3 text-left transition-colors hover:bg-emerald-50/80 print:pointer-events-none print:bg-white"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
+      >
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-800 print:text-zinc-950">
+            {title}
+          </h3>
+          {subtitle ? <p className="mt-1 text-xs text-zinc-600 print:hidden">{subtitle}</p> : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-2 text-xs font-medium text-zinc-600 print:hidden">
+          <span>{open ? "Collapse" : "Expand"}</span>
+          <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
+        </div>
+      </button>
+      <div className={cn("border-t border-emerald-100 print:block print:border-t-0", open ? "block" : "hidden")}>
+        {children}
+      </div>
+    </section>
+  )
+}
+
 export function ReportsPage() {
   const [filters, setFilters] = React.useState<ReportFilters>(EMPTY_FILTERS)
   const [appliedFilters, setAppliedFilters] = React.useState<ReportFilters | null>(null)
@@ -205,6 +247,7 @@ export function ReportsPage() {
   const [loadedAt, setLoadedAt] = React.useState<Date | null>(null)
   const [contractors, setContractors] = React.useState<LookupOption[]>([])
   const [plants, setPlants] = React.useState<LookupOption[]>([])
+  const [showAllInvoiceRows, setShowAllInvoiceRows] = React.useState(false)
 
   React.useEffect(() => {
     void (async () => {
@@ -256,6 +299,10 @@ export function ReportsPage() {
     void loadReport()
   }, [appliedFilters, loadReport])
 
+  React.useEffect(() => {
+    setShowAllInvoiceRows(false)
+  }, [appliedFilters, report?.total_invoices])
+
   const effectiveFilters = appliedFilters ?? EMPTY_FILTERS
   const hasGenerated = appliedFilters !== null
 
@@ -263,6 +310,9 @@ export function ReportsPage() {
     STATUS_OPTIONS.find((option) => option.value === effectiveFilters.status)?.label ?? "All Status"
   const selectedPlantLabel = findName(plants, effectiveFilters.orgUnitId, "All Plants")
   const selectedContractorLabel = findName(contractors, effectiveFilters.contractorId, "All Contractors")
+  const invoiceRows = report?.rows ?? []
+  const visibleInvoiceRows = showAllInvoiceRows ? invoiceRows : invoiceRows.slice(0, INVOICE_PREVIEW_LIMIT)
+  const hasMoreInvoiceRows = invoiceRows.length > INVOICE_PREVIEW_LIMIT
 
   function printReport() {
     if (typeof window === "undefined" || !report) return
@@ -804,12 +854,10 @@ export function ReportsPage() {
         </div>
 
         <div className="space-y-6 px-6 py-6 print:px-0">
-          <div className="overflow-hidden rounded-2xl border border-emerald-100 print:rounded-none print:border-zinc-300">
-            <div className="border-b border-emerald-100 bg-emerald-50 px-4 py-3 print:bg-white">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-800 print:text-zinc-950">
-                Invoice List
-              </h3>
-            </div>
+          <ReportCollapsibleSection
+            title="Invoice List"
+            subtitle="On screen this preview shows 10 invoices first. Print/PDF still includes the full report."
+          >
             <Table>
               <TableHeader>
                 <TableRow className="bg-zinc-50 hover:bg-zinc-50">
@@ -835,14 +883,14 @@ export function ReportsPage() {
                       Click Generate to load the invoice report.
                     </TableCell>
                   </TableRow>
-                ) : !report || report.rows.length === 0 ? (
+                ) : !report || invoiceRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                       No invoices found for the selected filters.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  report.rows.map((row, index) => (
+                  visibleInvoiceRows.map((row, index) => (
                     <TableRow key={row.id}>
                       <TableCell>{index + 1}</TableCell>
                       <TableCell className="font-medium text-zinc-950">{row.invoice_number}</TableCell>
@@ -856,12 +904,44 @@ export function ReportsPage() {
                 )}
               </TableBody>
             </Table>
-          </div>
+            {hasGenerated && !loading && hasMoreInvoiceRows ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-emerald-100 px-4 py-3 print:hidden">
+                <p className="text-sm text-zinc-600">
+                  Showing{" "}
+                  <span className="font-medium text-zinc-950">
+                    {visibleInvoiceRows.length}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-medium text-zinc-950">
+                    {invoiceRows.length}
+                  </span>{" "}
+                  invoices in the on-screen preview.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAllInvoiceRows((current) => !current)}
+                >
+                  {showAllInvoiceRows ? "Show First 10" : `Show All ${invoiceRows.length}`}
+                </Button>
+              </div>
+            ) : null}
+          </ReportCollapsibleSection>
 
-          <div className="grid gap-6 xl:grid-cols-2 print:grid-cols-1">
+          <ReportCollapsibleSection
+            title="Plant Wise Invoice Summary"
+            subtitle="Plant-level invoice counts and values for the selected filters."
+          >
             <SummaryTable title="Plant Wise Invoice Summary" nameLabel="Plant" rows={report?.by_plant ?? []} />
+          </ReportCollapsibleSection>
+
+          <ReportCollapsibleSection
+            title="Contractor Wise Invoice Summary"
+            subtitle="Contractor-level invoice counts and values for the selected filters."
+          >
             <SummaryTable title="Contractor Wise Invoice Summary" nameLabel="Contractor" rows={report?.by_contractor ?? []} />
-          </div>
+          </ReportCollapsibleSection>
         </div>
 
         <div className="border-t border-emerald-100 bg-zinc-50 px-6 py-4 text-sm text-zinc-600 print:bg-white print:px-0">
