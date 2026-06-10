@@ -347,7 +347,7 @@ export function NegotiatedRatesPage() {
                         : "ml-1.5 tabular-nums text-muted-foreground"
                     }
                   >
-                    {loading ? "(Loading...)" : `(${n})`}
+                    {loading ? "(...)" : `(${n})`}
                   </span>
                 </Button>
               )

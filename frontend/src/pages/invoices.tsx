@@ -166,6 +166,7 @@ export function InvoicesPage() {
                   : t.id === "pass"
                     ? statusCounts.pass
                     : statusCounts.blocked
+              const countLabel = rows === null ? "(...)" : `(${n})`
               return (
                 <Button
                   key={t.id}
@@ -188,7 +189,7 @@ export function InvoicesPage() {
                         : "ml-1.5 tabular-nums text-muted-foreground"
                     }
                   >
-                    ({n})
+                    {countLabel}
                   </span>
                 </Button>
               )

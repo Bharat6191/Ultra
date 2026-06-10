@@ -292,6 +292,10 @@ function ContractorRateApprovalReviewCard({ task }: { task: UnifiedTaskDetail })
   if (!approval || approval.entity_type !== "contractor_rate_approval") return null
 
   const payload = approval.payload ?? {}
+  const taskStatusText = String(task.status ?? "—")
+  const approvalStatusText = rateStatusLabel(approval.status)
+  const showApprovalStatusBadge =
+    approvalStatusText.trim().toLowerCase() !== taskStatusText.trim().toLowerCase()
   const submittedBy =
     approval.created_by_display_name ?? (approval.created_by != null ? `User #${approval.created_by}` : "—")
   const detailRows: Array<{ label: string; value: string }> = [
@@ -327,13 +331,10 @@ function ContractorRateApprovalReviewCard({ task }: { task: UnifiedTaskDetail })
             <CardTitle className="text-xl leading-tight text-zinc-950">
               {task.title?.trim() || "Negotiated rate approval"}
             </CardTitle>
-            <CardDescription className="max-w-3xl text-sm leading-relaxed text-zinc-600">
-              {task.description?.trim() || "Review the negotiated commercial terms before approving this request."}
-            </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant={taskStatusBadgeVariant(task.status)}>{task.status}</Badge>
-            <Badge variant="outline">{rateStatusLabel(approval.status)}</Badge>
+            <Badge variant={taskStatusBadgeVariant(task.status)}>{taskStatusText}</Badge>
+            {showApprovalStatusBadge ? <Badge variant="outline">{approvalStatusText}</Badge> : null}
           </div>
         </div>
       </CardHeader>
@@ -746,6 +747,7 @@ export function MyTaskDetailPage() {
   }
 
   const recordOpen = task ? openRecordAction(task) : null
+  const hideTopReviewSubtitle = Boolean(task?.approval?.entity_type === "contractor_rate_approval")
 
   return (
     <div className="w-full space-y-4">
@@ -754,38 +756,40 @@ export function MyTaskDetailPage() {
           <h2 className="text-lg font-semibold tracking-tight">
             {task && !loading && isApprovalLike ? "Review Request" : "Task details"}
           </h2>
-          <p className="text-sm text-muted-foreground">
-            {(() => {
-              if (!task) return "Task"
-              if (isApprovalLike && task.approval) {
-                const p = task.approval.payload as {
-                  full_name?: unknown
-                  title?: unknown
-                  work_order_number?: unknown
-                  work_order_title?: unknown
-                  invoice_number?: unknown
+          {!hideTopReviewSubtitle ? (
+            <p className="text-sm text-muted-foreground">
+              {(() => {
+                if (!task) return "Task"
+                if (isApprovalLike && task.approval) {
+                  const p = task.approval.payload as {
+                    full_name?: unknown
+                    title?: unknown
+                    work_order_number?: unknown
+                    work_order_title?: unknown
+                    invoice_number?: unknown
+                  }
+                  if (task.approval.entity_type === "user_creation" && typeof p.full_name === "string" && p.full_name.trim() !== "")
+                    return p.full_name
+                  if (task.approval.entity_type === "user_creation") return "New user account"
+                  if (task.approval.entity_type === "work_order_approval") {
+                    if (typeof p.title === "string" && p.title.trim() !== "") return p.title
+                    if (typeof p.work_order_number === "string" && p.work_order_number.trim() !== "") return p.work_order_number
+                    return "Work order submission"
+                  }
+                  if (task.approval.entity_type === "work_order_rate_override") {
+                    if (typeof p.work_order_title === "string" && p.work_order_title.trim() !== "") return p.work_order_title
+                    return "Rate override request"
+                  }
+                  if (task.approval.entity_type === "invoice_exception_approval") {
+                    if (typeof p.invoice_number === "string" && p.invoice_number.trim() !== "") return p.invoice_number
+                    return "Invoice exception review"
+                  }
+                  return task.approval.entity_type.replace(/_/g, " ")
                 }
-                if (task.approval.entity_type === "user_creation" && typeof p.full_name === "string" && p.full_name.trim() !== "")
-                  return p.full_name
-                if (task.approval.entity_type === "user_creation") return "New user account"
-                if (task.approval.entity_type === "work_order_approval") {
-                  if (typeof p.title === "string" && p.title.trim() !== "") return p.title
-                  if (typeof p.work_order_number === "string" && p.work_order_number.trim() !== "") return p.work_order_number
-                  return "Work order submission"
-                }
-                if (task.approval.entity_type === "work_order_rate_override") {
-                  if (typeof p.work_order_title === "string" && p.work_order_title.trim() !== "") return p.work_order_title
-                  return "Rate override request"
-                }
-                if (task.approval.entity_type === "invoice_exception_approval") {
-                  if (typeof p.invoice_number === "string" && p.invoice_number.trim() !== "") return p.invoice_number
-                  return "Invoice exception review"
-                }
-                return task.approval.entity_type.replace(/_/g, " ")
-              }
-              return task.title ?? "Task"
-            })()}
-          </p>
+                return task.title ?? "Task"
+              })()}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
           {approvalStepNeedsDecision && task?.approval ? renderApprovalDecisionActions("w-auto space-y-0", true) : null}
