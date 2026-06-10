@@ -929,19 +929,10 @@ export function ReportsPage() {
             ) : null}
           </ReportCollapsibleSection>
 
-          <ReportCollapsibleSection
-            title="Plant Wise Invoice Summary"
-            subtitle="Plant-level invoice counts and values for the selected filters."
-          >
+          <div className="grid gap-6 xl:grid-cols-2 print:grid-cols-1">
             <SummaryTable title="Plant Wise Invoice Summary" nameLabel="Plant" rows={report?.by_plant ?? []} />
-          </ReportCollapsibleSection>
-
-          <ReportCollapsibleSection
-            title="Contractor Wise Invoice Summary"
-            subtitle="Contractor-level invoice counts and values for the selected filters."
-          >
             <SummaryTable title="Contractor Wise Invoice Summary" nameLabel="Contractor" rows={report?.by_contractor ?? []} />
-          </ReportCollapsibleSection>
+          </div>
         </div>
 
         <div className="border-t border-emerald-100 bg-zinc-50 px-6 py-4 text-sm text-zinc-600 print:bg-white print:px-0">

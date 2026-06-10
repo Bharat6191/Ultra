@@ -157,21 +157,19 @@ export function MyTasksPage() {
 
   function renderInboxView(emptyMessage: string) {
     return (
-      <div className="space-y-5">
+      <div className="space-y-6">
         <Tabs value={section} onValueChange={(value) => setSection(value as TaskSectionKey)} className="w-full">
-          <div className="rounded-[24px] border border-zinc-200 bg-zinc-50/80 p-1.5">
-            <TabsList className="grid h-auto w-full grid-cols-1 gap-1.5 overflow-hidden rounded-[20px] bg-transparent p-0 shadow-none sm:grid-cols-3">
-              {sections.map((item) => (
-                <TabsTrigger
-                  key={item.key}
-                  value={item.key}
-                  className="h-11 rounded-[16px] border border-transparent bg-transparent px-4 text-sm font-semibold text-zinc-500 shadow-none after:hidden transition-colors hover:bg-white/60 hover:text-zinc-900 data-[state=active]:border-zinc-200 data-[state=active]:bg-white data-[state=active]:text-zinc-950 data-[state=active]:shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
-                >
-                  {item.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
+          <TabsList className="grid h-auto w-full grid-cols-1 gap-3 bg-transparent p-0 shadow-none sm:grid-cols-3">
+            {sections.map((item) => (
+              <TabsTrigger
+                key={item.key}
+                value={item.key}
+                className="relative min-h-[58px] rounded-[22px] border border-zinc-200 bg-white px-5 py-4 text-sm font-semibold text-zinc-500 shadow-[0_10px_24px_rgba(15,23,42,0.04)] after:hidden before:absolute before:left-5 before:right-5 before:top-0 before:h-1 before:rounded-b-full before:bg-emerald-500 before:opacity-0 before:transition-opacity before:content-[''] transition-all hover:-translate-y-0.5 hover:border-zinc-300 hover:text-zinc-900 hover:shadow-[0_12px_28px_rgba(15,23,42,0.07)] data-[state=active]:border-emerald-200 data-[state=active]:bg-gradient-to-b data-[state=active]:from-emerald-50 data-[state=active]:to-white data-[state=active]:text-zinc-950 data-[state=active]:shadow-[0_14px_32px_rgba(16,185,129,0.12)] data-[state=active]:before:opacity-100"
+              >
+                {item.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
         </Tabs>
 
         <InboxTable

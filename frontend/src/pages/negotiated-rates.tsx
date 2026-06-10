@@ -118,6 +118,7 @@ export function NegotiatedRatesPage() {
   const [summary, setSummary] = React.useState<Summary | null>(null)
   const [orgScopes, setOrgScopes] = React.useState<OrgUnitLite[]>([])
   const [error, setError] = React.useState<string | null>(null)
+  const [loading, setLoading] = React.useState(true)
 
   const [search, setSearch] = React.useState("")
   const [statusTab, setStatusTab] = React.useState<RateStatusTab>(() => rateStatusTabFromQuery(searchParams.get("status")))
@@ -140,6 +141,7 @@ export function NegotiatedRatesPage() {
   }, [setSearchParams, statusTab])
 
   async function load() {
+    setLoading(true)
     setError(null)
     try {
       const [list, sum] = await Promise.all([
@@ -151,6 +153,9 @@ export function NegotiatedRatesPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load negotiations")
       setRows([])
+      setSummary(null)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -342,7 +347,7 @@ export function NegotiatedRatesPage() {
                         : "ml-1.5 tabular-nums text-muted-foreground"
                     }
                   >
-                    ({n})
+                    {loading ? "(Loading...)" : `(${n})`}
                   </span>
                 </Button>
               )

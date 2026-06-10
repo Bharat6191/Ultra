@@ -287,15 +287,133 @@ function approvalPayloadEntries(payload: Record<string, unknown>, entityType: st
     .map((k) => ({ key: k, label: k.replace(/_/g, " "), value: formatPayloadValue(p[k]) }))
 }
 
+function ContractorRateApprovalReviewCard({ task }: { task: UnifiedTaskDetail }) {
+  const approval = task.approval
+  if (!approval || approval.entity_type !== "contractor_rate_approval") return null
+
+  const payload = approval.payload ?? {}
+  const submittedBy =
+    approval.created_by_display_name ?? (approval.created_by != null ? `User #${approval.created_by}` : "—")
+  const detailRows: Array<{ label: string; value: string }> = [
+    { label: "Action code", value: String(payloadPrimitive(payload, "action_code") ?? "—") },
+    { label: "Contractor ID", value: String(payloadPrimitive(payload, "contractor_id") ?? "—") },
+    { label: "Part master ID", value: String(payloadPrimitive(payload, "part_master_id") ?? "—") },
+    { label: "Rate record", value: `#${approval.entity_id}` },
+    { label: "Effective from", value: String(payloadPrimitive(payload, "effective_from") ?? "—") },
+    {
+      label: "Effective to",
+      value:
+        payloadPrimitive(payload, "effective_to") != null
+          ? String(payloadPrimitive(payload, "effective_to"))
+          : "Open",
+    },
+  ]
+
+  const originRows: Array<{ label: string; value: string }> = [
+    { label: "Request #", value: `#${approval.request_id}` },
+    { label: "Submitted by", value: submittedBy },
+    { label: "Entity", value: entityLabel(task) },
+    { label: "Task status", value: task.status ?? "—" },
+  ]
+
+  return (
+    <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
+      <CardHeader className="space-y-3 border-b border-border/60 bg-gradient-to-br from-emerald-50/90 via-white to-white py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1.5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              What you're approving
+            </div>
+            <CardTitle className="text-xl leading-tight text-zinc-950">
+              {task.title?.trim() || "Negotiated rate approval"}
+            </CardTitle>
+            <CardDescription className="max-w-3xl text-sm leading-relaxed text-zinc-600">
+              {task.description?.trim() || "Review the negotiated commercial terms before approving this request."}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant={taskStatusBadgeVariant(task.status)}>{task.status}</Badge>
+            <Badge variant="outline">{rateStatusLabel(approval.status)}</Badge>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-6 pt-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Negotiated rate</div>
+            <div className="mt-1 text-3xl font-semibold tracking-tight text-zinc-950">
+              {formatMoney(payloadPrimitive(payload, "negotiated_rate") as number | string | null)}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-border/70 bg-white px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Savings amount</div>
+            <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">
+              {formatMoney(payloadPrimitive(payload, "savings_amount") as number | string | null)}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-border/70 bg-white px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Savings %</div>
+            <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">
+              {formatPercent(payloadPrimitive(payload, "savings_percentage") as number | string | null)}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-border/70 bg-white px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Effective window</div>
+            <div className="mt-1 text-lg font-semibold tracking-tight text-zinc-950">
+              {String(payloadPrimitive(payload, "effective_from") ?? "—")}
+              {payloadPrimitive(payload, "effective_from") != null
+                ? payloadPrimitive(payload, "effective_to") != null
+                  ? ` → ${String(payloadPrimitive(payload, "effective_to"))}`
+                  : " → Open"
+                : ""}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+          <div className="rounded-2xl border border-border/70 bg-white">
+            <div className="border-b border-border/60 px-4 py-3">
+              <div className="text-sm font-semibold text-zinc-950">Rate details</div>
+              <div className="mt-1 text-xs text-muted-foreground">Core identifiers and effective dates for this negotiated rate.</div>
+            </div>
+            <dl className="grid gap-x-6 gap-y-0 px-4 py-2 sm:grid-cols-2">
+              {detailRows.map((row) => (
+                <div key={row.label} className="border-b border-border/50 py-3 last:border-b-0 sm:last:border-b-0">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{row.label}</dt>
+                  <dd className="mt-1 text-sm font-medium text-zinc-950">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
+          <div className="rounded-2xl border border-border/70 bg-muted/10">
+            <div className="border-b border-border/60 px-4 py-3">
+              <div className="text-sm font-semibold text-zinc-950">Request origin</div>
+              <div className="mt-1 text-xs text-muted-foreground">Who submitted this request and how it is tracked.</div>
+            </div>
+            <dl className="space-y-0 px-4 py-2">
+              {originRows.map((row) => (
+                <div key={row.label} className="border-b border-border/50 py-3 last:border-b-0">
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{row.label}</dt>
+                  <dd className="mt-1 text-sm font-medium text-zinc-950">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function ApprovalSummaryCard({ task }: { task: UnifiedTaskDetail }) {
   const approval = task.approval
   if (!approval) return null
 
-  const payload = approval.payload ?? {}
+  const isRateApproval = approval.entity_type === "contractor_rate_approval"
   const approvalStatus =
-    approval.entity_type === "contractor_rate_approval" ? rateStatusLabel(approval.status) : (approval.status ?? "—")
-  const effectiveFrom = payloadPrimitive(payload, "effective_from")
-  const effectiveTo = payloadPrimitive(payload, "effective_to")
+    isRateApproval ? rateStatusLabel(approval.status) : (approval.status ?? "—")
   const workflowStep =
     approval.step_order != null
       ? `Step ${approval.step_order}`
@@ -304,32 +422,22 @@ function ApprovalSummaryCard({ task }: { task: UnifiedTaskDetail }) {
         : "—"
 
   const metrics =
-    approval.entity_type === "contractor_rate_approval"
+    isRateApproval
       ? [
-          { label: "Negotiated Rate", value: formatMoney(payloadPrimitive(payload, "negotiated_rate") as number | string | null), strong: true },
-          { label: "Savings Amount", value: formatMoney(payloadPrimitive(payload, "savings_amount") as number | string | null) },
-          { label: "Savings %", value: formatPercent(payloadPrimitive(payload, "savings_percentage") as number | string | null) },
+          { label: "Workflow step", value: workflowStep, strong: true },
           {
-            label: "Effective Window",
-            value:
-              effectiveFrom != null
-                ? `${String(effectiveFrom)}${effectiveTo != null ? ` → ${String(effectiveTo)}` : " → Open"}`
-                : "—",
+            label: "Required approvals",
+            value: approval.required_approvals != null ? String(approval.required_approvals) : "—",
           },
+          { label: "Approval status", value: approvalStatus },
+          { label: "Task status", value: task.status ?? "—" },
         ]
       : []
 
   const rows: Array<{ label: string; value: string }> = [
     { label: "Entity", value: entityLabel(task) },
     { label: "Request #", value: `#${approval.request_id}` },
-    { label: "Approval status", value: approvalStatus },
-    { label: "Task status", value: task.status ?? "—" },
-    { label: "Workflow step", value: workflowStep },
     { label: "Approver role", value: approval.approver_role_name ?? "—" },
-    {
-      label: "Required approvals",
-      value: approval.required_approvals != null ? String(approval.required_approvals) : "—",
-    },
     {
       label: "Submitted by",
       value: approval.created_by_display_name ?? (approval.created_by != null ? `User #${approval.created_by}` : "—"),
@@ -337,26 +445,15 @@ function ApprovalSummaryCard({ task }: { task: UnifiedTaskDetail }) {
     { label: "Due date", value: task.due_date ? formatDateTime(task.due_date) : "—" },
   ]
 
-  if (approval.entity_type === "contractor_rate_approval") {
-    rows.splice(
-      1,
-      0,
-      { label: "Action code", value: String(payloadPrimitive(payload, "action_code") ?? "—") },
-      { label: "Contractor ID", value: String(payloadPrimitive(payload, "contractor_id") ?? "—") },
-      { label: "Part master ID", value: String(payloadPrimitive(payload, "part_master_id") ?? "—") },
-      { label: "Rate record", value: `#${approval.entity_id}` },
-    )
-  }
-
   return (
     <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
       <CardHeader className="space-y-1 border-b border-border/60 bg-muted/20 py-3">
         <CardTitle className="text-base">
-          {approval.entity_type === "contractor_rate_approval" ? "Negotiation summary" : "Request summary"}
+          {isRateApproval ? "Approval context" : "Request summary"}
         </CardTitle>
         <CardDescription className="text-xs">
-          {approval.entity_type === "contractor_rate_approval"
-            ? "Commercial snapshot and approval context."
+          {isRateApproval
+            ? "Workflow status, role routing, and decision context."
             : "Workflow context for this approval request."}
         </CardDescription>
       </CardHeader>
@@ -558,6 +655,7 @@ export function MyTaskDetailPage() {
   const isApprovalLike = Boolean(task && (task.task_type === "approval" || task.task_type === "rework") && task.approval)
   const showApprovalSummaryAside = Boolean(
     task?.approval &&
+      task.approval.entity_type !== "contractor_rate_approval" &&
       task.approval.entity_type !== "work_order_approval" &&
       task.approval.entity_type !== "work_order_rate_override" &&
       task.approval.entity_type !== "invoice_exception_approval",
@@ -828,67 +926,71 @@ export function MyTaskDetailPage() {
               <div
                 className={cn(
                   "grid grid-cols-1 gap-4 lg:items-start",
-                  showApprovalSummaryAside ? "lg:grid-cols-2" : "",
+                  showApprovalSummaryAside ? "lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]" : "",
                 )}
               >
-                <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
-                  <CardHeader className="space-y-1 border-b border-border/60 bg-muted/20 py-3">
-                    <CardTitle className="text-base">What you&apos;re approving</CardTitle>
-                    {task.approval.entity_type === "work_order_approval" ? (
-                      <CardDescription className="text-xs">
-                        Full work order detail — same execution sheet as the work order screen (live record when available).
-                      </CardDescription>
-                    ) : task.approval.entity_type === "work_order_rate_override" ? (
-                      <CardDescription className="text-xs">
-                        Governed rate vs requested override for this line item.
-                      </CardDescription>
-                    ) : task.approval.entity_type === "invoice_exception_approval" ? (
-                      <CardDescription className="text-xs">
-                        Live invoice data with the exact blocker reasons, work order references, and invoice preview.
-                      </CardDescription>
-                    ) : null}
-                  </CardHeader>
-                  <CardContent className="pt-3">
-                    {task.approval.entity_type === "work_order_approval" &&
-                    task.approval.entity_id != null &&
-                    Number.isFinite(Number(task.approval.entity_id)) ? (
-                      <WorkOrderApprovalReview
-                        workOrderId={Number(task.approval.entity_id)}
-                        fallbackPayload={task.approval.payload ?? {}}
-                      />
-                    ) : task.approval.entity_type === "work_order_rate_override" ? (
-                      <WorkOrderRateOverrideApprovalReview payload={task.approval.payload ?? {}} />
-                    ) : task.approval.entity_type === "invoice_exception_approval" &&
+                {task.approval.entity_type === "contractor_rate_approval" ? (
+                  <ContractorRateApprovalReviewCard task={task} />
+                ) : (
+                  <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
+                    <CardHeader className="space-y-1 border-b border-border/60 bg-muted/20 py-3">
+                      <CardTitle className="text-base">What you&apos;re approving</CardTitle>
+                      {task.approval.entity_type === "work_order_approval" ? (
+                        <CardDescription className="text-xs">
+                          Full work order detail — same execution sheet as the work order screen (live record when available).
+                        </CardDescription>
+                      ) : task.approval.entity_type === "work_order_rate_override" ? (
+                        <CardDescription className="text-xs">
+                          Governed rate vs requested override for this line item.
+                        </CardDescription>
+                      ) : task.approval.entity_type === "invoice_exception_approval" ? (
+                        <CardDescription className="text-xs">
+                          Live invoice data with the exact blocker reasons, work order references, and invoice preview.
+                        </CardDescription>
+                      ) : null}
+                    </CardHeader>
+                    <CardContent className="pt-3">
+                      {task.approval.entity_type === "work_order_approval" &&
                       task.approval.entity_id != null &&
                       Number.isFinite(Number(task.approval.entity_id)) ? (
-                      <InvoiceExceptionApprovalReview
-                        invoiceId={Number(task.approval.entity_id)}
-                        fallbackPayload={task.approval.payload ?? {}}
-                      />
-                    ) : (
-                      (() => {
-                        const rows = approvalPayloadEntries(task.approval!.payload, task.approval!.entity_type)
-                        if (rows.length === 0) return <p className="text-sm text-muted-foreground">No request details available.</p>
-                        return (
-                          <dl className="divide-y divide-border/60">
-                            {rows.map((row) => (
-                              <div key={row.key} className="grid grid-cols-1 gap-0.5 py-2 first:pt-0 sm:grid-cols-3 sm:gap-3">
-                                <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:col-span-1">{row.label}</dt>
-                                <dd className="text-sm text-foreground sm:col-span-2">{row.value}</dd>
-                              </div>
-                            ))}
-                          </dl>
-                        )
-                      })()
-                    )}
-                    <p className="mt-6 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-                      Submitted by{" "}
-                      {task.approval!.created_by_display_name ??
-                        (task.approval!.created_by != null ? `User #${task.approval!.created_by}` : "—")}{" "}
-                      · Request #{task.approval!.request_id}
-                    </p>
-                  </CardContent>
-                </Card>
+                        <WorkOrderApprovalReview
+                          workOrderId={Number(task.approval.entity_id)}
+                          fallbackPayload={task.approval.payload ?? {}}
+                        />
+                      ) : task.approval.entity_type === "work_order_rate_override" ? (
+                        <WorkOrderRateOverrideApprovalReview payload={task.approval.payload ?? {}} />
+                      ) : task.approval.entity_type === "invoice_exception_approval" &&
+                        task.approval.entity_id != null &&
+                        Number.isFinite(Number(task.approval.entity_id)) ? (
+                        <InvoiceExceptionApprovalReview
+                          invoiceId={Number(task.approval.entity_id)}
+                          fallbackPayload={task.approval.payload ?? {}}
+                        />
+                      ) : (
+                        (() => {
+                          const rows = approvalPayloadEntries(task.approval!.payload, task.approval!.entity_type)
+                          if (rows.length === 0) return <p className="text-sm text-muted-foreground">No request details available.</p>
+                          return (
+                            <dl className="divide-y divide-border/60">
+                              {rows.map((row) => (
+                                <div key={row.key} className="grid grid-cols-1 gap-0.5 py-2 first:pt-0 sm:grid-cols-3 sm:gap-3">
+                                  <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:col-span-1">{row.label}</dt>
+                                  <dd className="text-sm text-foreground sm:col-span-2">{row.value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          )
+                        })()
+                      )}
+                      <p className="mt-6 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                        Submitted by{" "}
+                        {task.approval!.created_by_display_name ??
+                          (task.approval!.created_by != null ? `User #${task.approval!.created_by}` : "—")}{" "}
+                        · Request #{task.approval!.request_id}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
                 {showApprovalSummaryAside ? <ApprovalSummaryCard task={task} /> : null}
               </div>
               {task.approval.workflow_steps && task.approval.workflow_steps.length > 0 ? (
