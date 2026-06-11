@@ -1,4 +1,5 @@
 const STORAGE_RETURN_TO = "auth.passwordResetReturnTo"
+const STORAGE_WORKSPACE_RETURN_TO = "auth.workspaceReturnTo"
 
 /**
  * Prevents open redirects: only same-origin path-style values are allowed.
@@ -25,6 +26,24 @@ export function takePasswordResetReturnTo(): string | null {
   try {
     const v = sessionStorage.getItem(STORAGE_RETURN_TO)
     sessionStorage.removeItem(STORAGE_RETURN_TO)
+    return v && v.length > 0 ? v : null
+  } catch {
+    return null
+  }
+}
+
+export function storeWorkspaceReturnTo(path: string) {
+  try {
+    sessionStorage.setItem(STORAGE_WORKSPACE_RETURN_TO, path)
+  } catch {
+    // ignore
+  }
+}
+
+export function takeWorkspaceReturnTo(): string | null {
+  try {
+    const v = sessionStorage.getItem(STORAGE_WORKSPACE_RETURN_TO)
+    sessionStorage.removeItem(STORAGE_WORKSPACE_RETURN_TO)
     return v && v.length > 0 ? v : null
   } catch {
     return null

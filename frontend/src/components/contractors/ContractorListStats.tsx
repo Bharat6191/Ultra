@@ -1,7 +1,7 @@
 import * as React from "react"
 import { BriefcaseBusiness, CalendarClock, CheckCircle2 } from "lucide-react"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export type ContractorListStatsData = {
@@ -28,27 +28,25 @@ function StatCard({
 }) {
   const ringClass =
     tone === "success"
-      ? "bg-emerald-50 text-emerald-700"
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
       : tone === "warning"
-      ? "bg-amber-50 text-amber-700"
+      ? "bg-amber-50 text-amber-700 ring-amber-200"
       : tone === "danger"
-      ? "bg-red-50 text-red-700"
-      : "bg-zinc-50 text-zinc-700"
+      ? "bg-red-50 text-red-700 ring-red-200"
+      : "bg-gray-50 text-gray-600 ring-gray-200"
   return (
-    <Card className="rounded-2xl">
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-3">
-          <CardTitle className="text-lg font-bold uppercase tracking-wide text-zinc-950">{title}</CardTitle>
-          <div className={`flex size-9 items-center justify-center rounded-xl ${ringClass}`}>{icon}</div>
+    <Card>
+      <CardContent className="flex items-center justify-between gap-3 p-4">
+        <div className="min-w-0">
+          <div className="text-xs font-bold uppercase tracking-wide text-zinc-950">{title}</div>
+          {loading ? (
+            <Skeleton className="mt-1 h-8 w-16" />
+          ) : (
+            <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">{value}</div>
+          )}
+          {hint ? <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{hint}</div> : null}
         </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        {loading ? (
-          <Skeleton className="h-7 w-16" />
-        ) : (
-          <div className="text-2xl font-normal tracking-tight text-zinc-950">{value}</div>
-        )}
-        {hint ? <div className="mt-1 text-xs text-muted-foreground">{hint}</div> : null}
+        <span className={`grid size-9 place-items-center rounded-xl ring-2 ${ringClass}`}>{icon}</span>
       </CardContent>
     </Card>
   )

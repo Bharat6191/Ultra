@@ -18,6 +18,7 @@ export type AppNavbarProps = {
   title: string
   userEmail?: string | null
   onSignOut?: () => void
+  onSessionExpired?: () => void
   onRefreshProfile?: () => void
   sidebarCollapsed?: boolean
   onToggleSidebar?: () => void
@@ -37,6 +38,7 @@ export function AppNavbar({
   title,
   userEmail,
   onSignOut,
+  onSessionExpired,
   onRefreshProfile,
   sidebarCollapsed = false,
   onToggleSidebar,
@@ -63,7 +65,7 @@ export function AppNavbar({
       </div>
 
       <div className="flex items-center gap-2">
-        <SessionExpiryBadge onExpired={onSignOut} className="shrink-0" />
+        <SessionExpiryBadge onExpired={onSessionExpired ?? onSignOut} className="shrink-0" />
         <Button type="button" variant="ghost" size="icon-sm" className="rounded-lg" aria-label="Notifications">
           <Bell className="size-4 opacity-70" aria-hidden />
         </Button>

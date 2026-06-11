@@ -267,6 +267,11 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
     })
   }, [plants, rows, form.role, plantQuery])
 
+  const selectedPlant = React.useMemo(
+    () => plants.find((p) => String(p.id) === String(form.org_unit_id)) ?? null,
+    [plants, form.org_unit_id],
+  )
+
   const summary = React.useMemo(() => {
     if (!rows) return { total: 0, active: 0, expiring: 0, expired: 0, upcoming: 0 }
     const today = new Date()
@@ -520,14 +525,28 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
                 <div className="text-xs text-muted-foreground">Plant</div>
                 <Input
                   value={plantQuery}
-                  onChange={(e) => setPlantQuery(e.target.value)}
+                  onChange={(e) => {
+                    const nextQuery = e.target.value
+                    setPlantQuery(nextQuery)
+                    if (
+                      selectedPlant &&
+                      nextQuery.trim().toLowerCase() !== selectedPlant.name.trim().toLowerCase()
+                    ) {
+                      setForm((s) => ({ ...s, org_unit_id: "" }))
+                    }
+                  }}
                   placeholder="Search plants…"
                   autoFocus
                 />
                 <select
                   className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm"
                   value={form.org_unit_id}
-                  onChange={(e) => setForm((s) => ({ ...s, org_unit_id: e.target.value }))}
+                  onChange={(e) => {
+                    const nextPlant =
+                      plants.find((p) => String(p.id) === e.target.value) ?? null
+                    setForm((s) => ({ ...s, org_unit_id: e.target.value }))
+                    setPlantQuery(nextPlant?.name ?? "")
+                  }}
                   size={Math.min(6, Math.max(2, availablePlants.length))}
                 >
                   {availablePlants.length === 0 ? (

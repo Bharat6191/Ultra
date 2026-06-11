@@ -1,16 +1,13 @@
 import * as React from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
-import { ArrowLeft } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ContractorFormWizard } from "@/components/contractors/ContractorFormWizard"
 import {
-  ContractorForm,
   contractorFormFromSource,
   contractorFormToUpdatePayload,
-  isContractorFormValid,
   type ContractorFormValues,
 } from "@/components/contractors/ContractorForm"
 import { getJson, patchJson } from "@/lib/api"
@@ -137,37 +134,26 @@ export function ContractorEditPage() {
   }
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <Button asChild variant="ghost" size="icon-sm" className="mt-0.5 rounded-lg" aria-label="Back to contractor">
-            <Link to={`/dashboard/contractors/${contractor.id}`}>
-              <ArrowLeft className="size-4 opacity-70" aria-hidden />
-            </Link>
-          </Button>
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">Edit contractor</h1>
-            <p className="text-sm text-muted-foreground">
-              Update profile details for {contractor.name}. Sensitive statutory changes may trigger approval workflows.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" onClick={() => navigate(`/dashboard/contractors/${contractor.id}`)}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            className="bg-emerald-600 text-white hover:bg-emerald-700"
-            disabled={saving || !isContractorFormValid(form)}
-            onClick={() => void submit()}
-          >
-            {saving ? "Saving…" : "Save Changes"}
-          </Button>
-        </div>
-      </div>
-
-      <ContractorForm form={form} onChange={setForm} active={active} onActiveChange={setActive} />
-    </div>
+    <ContractorFormWizard
+      title="Edit Contractor"
+      // subtitle={`Update ${contractor.name} in a compact section flow. Open any section directly and save without scrolling through the full page.`}
+      form={form}
+      onChange={setForm}
+      onSubmit={submit}
+      saving={saving}
+      submitLabel="Save Changes"
+      submittingLabel="Saving…"
+      helperText="Open the section you want, update the filled values, and save when the profile looks correct."
+      reviewMessage="Review the updated details and internal notes before saving. Operational status changes are included with the same save action."
+      onCancel={() => navigate(`/dashboard/contractors/${contractor.id}`)}
+      showStatus
+      active={active}
+      onActiveChange={setActive}
+      allowStepJump
+      submitFromAnyStep
+      compactLayout
+      navigationMode="tab"
+      showReviewStep={false}
+    />
   )
 }

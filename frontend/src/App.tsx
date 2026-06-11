@@ -47,6 +47,7 @@ import * as React from "react"
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { getJson } from "@/lib/api"
 import { loadAndApplyAppearanceSettings } from "@/lib/appearance"
+import { storeWorkspaceReturnTo } from "@/lib/auth-routes"
 import {
   clearAuthProfile,
   isSuperuser,
@@ -439,6 +440,7 @@ function AppLoginRoute() {
 }
 
 function AppRoute() {
+  const location = useLocation()
   const navigate = useNavigate()
   const [checking, setChecking] = React.useState(true)
   const [userEmail, setUserEmail] = React.useState<string | null>(null)
@@ -452,6 +454,7 @@ function AppRoute() {
     async (opts?: { silent?: boolean }) => {
       if (!hasToken()) {
         if (!opts?.silent) {
+          storeWorkspaceReturnTo(location.pathname)
           setChecking(false)
           navigate("/login", { replace: true })
         }
@@ -478,10 +481,11 @@ function AppRoute() {
       } catch {
         if (opts?.silent) return
         clearTokens()
+        storeWorkspaceReturnTo(location.pathname)
         navigate("/login", { replace: true })
       }
     },
-    [navigate],
+    [location.pathname, navigate],
   )
 
   React.useEffect(() => {
@@ -513,6 +517,11 @@ function AppRoute() {
     <AppShellLayout
       userEmail={userEmail}
       onRefreshProfile={() => void refreshProfile({ silent: true })}
+      onSessionExpired={() => {
+        storeWorkspaceReturnTo(location.pathname)
+        clearTokens()
+        navigate("/login", { replace: true })
+      }}
       onSignOut={() => {
         clearTokens()
         navigate("/login", { replace: true })

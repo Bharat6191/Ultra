@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ApiError, getJson, postJson } from "@/lib/api"
+import { safeReturnTo, takeWorkspaceReturnTo } from "@/lib/auth-routes"
 import { clearAuthProfile, persistAuthFromMe } from "@/lib/permissions"
 import { clearSessionLastActivity, resetSessionLastActivity } from "@/lib/session-timeout"
 
@@ -97,7 +98,8 @@ export function AppLoginPage() {
       return
     }
     persistAuthFromMe(me)
-    navigate("/dashboard", { replace: true })
+    const returnTo = takeWorkspaceReturnTo()
+    navigate(returnTo ? safeReturnTo(returnTo) : "/dashboard", { replace: true })
   }
 
   async function onSubmitPassword(e: React.FormEvent) {

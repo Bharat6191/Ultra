@@ -215,15 +215,25 @@ export function isContractorFormValid(form: ContractorFormValues): boolean {
   )
 }
 
+export type ContractorFormSectionKey = "basic" | "status" | "contact" | "businessIds" | "address" | "web" | "notes"
+
 type Props = {
   form: ContractorFormValues
   onChange: (next: ContractorFormValues) => void
   active: boolean
   onActiveChange: (active: boolean) => void
   showStatus?: boolean
+  sectionIds?: Partial<Record<ContractorFormSectionKey, string>>
 }
 
-export function ContractorForm({ form, onChange, active, onActiveChange, showStatus = true }: Props) {
+export function ContractorForm({
+  form,
+  onChange,
+  active,
+  onActiveChange,
+  showStatus = true,
+  sectionIds,
+}: Props) {
   function set<K extends keyof ContractorFormValues>(key: K, value: ContractorFormValues[K]) {
     onChange({ ...form, [key]: value })
   }
@@ -235,7 +245,7 @@ export function ContractorForm({ form, onChange, active, onActiveChange, showSta
   return (
     <div className="space-y-6">
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="rounded-2xl shadow-sm lg:col-span-2">
+        <Card id={sectionIds?.basic} className="rounded-2xl shadow-sm lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Basic information</CardTitle>
             <CardDescription>Core identity details used across workflows and compliance.</CardDescription>
@@ -309,7 +319,7 @@ export function ContractorForm({ form, onChange, active, onActiveChange, showSta
         </Card>
 
         {showStatus ? (
-          <Card className="rounded-2xl shadow-sm">
+          <Card id={sectionIds?.status} className="rounded-2xl shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Status</CardTitle>
               <CardDescription>Operational status for this contractor.</CardDescription>
@@ -328,7 +338,7 @@ export function ContractorForm({ form, onChange, active, onActiveChange, showSta
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="rounded-2xl shadow-sm lg:col-span-2">
+        <Card id={sectionIds?.contact} className="rounded-2xl shadow-sm lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Contact information</CardTitle>
             <CardDescription>Primary and secondary contact channels.</CardDescription>
@@ -373,7 +383,7 @@ export function ContractorForm({ form, onChange, active, onActiveChange, showSta
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl shadow-sm">
+        <Card id={sectionIds?.businessIds} className="rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Business IDs</CardTitle>
             <CardDescription>Compliance and statutory identifiers.</CardDescription>
@@ -412,7 +422,7 @@ export function ContractorForm({ form, onChange, active, onActiveChange, showSta
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="rounded-2xl shadow-sm lg:col-span-2">
+        <Card id={sectionIds?.address} className="rounded-2xl shadow-sm lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Address</CardTitle>
             <CardDescription>Structured address helps reporting and filters later.</CardDescription>
@@ -453,7 +463,7 @@ export function ContractorForm({ form, onChange, active, onActiveChange, showSta
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl shadow-sm">
+        <Card id={sectionIds?.web} className="rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Web</CardTitle>
             <CardDescription>Optional discoverability links.</CardDescription>
@@ -471,7 +481,7 @@ export function ContractorForm({ form, onChange, active, onActiveChange, showSta
         </Card>
       </div>
 
-      <Card className="rounded-2xl shadow-sm">
+      <Card id={sectionIds?.notes} className="rounded-2xl shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Internal notes</CardTitle>
           <CardDescription>Non-public notes for operators and audit context.</CardDescription>

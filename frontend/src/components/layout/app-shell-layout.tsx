@@ -147,6 +147,7 @@ export type AppShellLayoutProps = {
   children: React.ReactNode
   userEmail?: string | null
   onSignOut?: () => void
+  onSessionExpired?: () => void
   onRefreshProfile?: () => void
 }
 
@@ -154,6 +155,7 @@ export function AppShellLayout({
   children,
   userEmail,
   onSignOut,
+  onSessionExpired,
   onRefreshProfile,
 }: AppShellLayoutProps) {
   const location = useLocation()
@@ -204,6 +206,7 @@ export function AppShellLayout({
           title={title}
           userEmail={userEmail}
           onSignOut={onSignOut}
+          onSessionExpired={onSessionExpired}
           onRefreshProfile={onRefreshProfile}
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed((value) => !value)}

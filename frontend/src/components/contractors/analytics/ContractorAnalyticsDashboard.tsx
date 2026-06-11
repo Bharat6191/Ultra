@@ -601,7 +601,7 @@ export function ContractorAnalyticsDashboard({
         <CardContent className="p-0">
           <div className="grid gap-0 lg:grid-cols-5">
             <div className="space-y-3 p-6">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
                 Contractor
               </div>
               <div className="text-2xl font-semibold tracking-tight">
@@ -610,14 +610,14 @@ export function ContractorAnalyticsDashboard({
             </div>
 
             <div className="space-y-3 border-t p-6 lg:border-t-0 lg:border-l">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
                 Status
               </div>
               <Badge variant={statusVariant(summary.status)}>{statusLabel(summary.status)}</Badge>
             </div>
 
             <div className="space-y-3 border-t p-6 lg:border-t-0 lg:border-l">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
                 Plants
               </div>
               <div className="space-y-1 text-base font-medium leading-snug">
@@ -630,7 +630,7 @@ export function ContractorAnalyticsDashboard({
             </div>
 
             <div className="space-y-3 border-t p-6 lg:border-t-0 lg:border-l">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
                 Active since
               </div>
               <div className="inline-flex items-center gap-2 text-xl font-semibold tracking-tight">
@@ -640,7 +640,7 @@ export function ContractorAnalyticsDashboard({
             </div>
 
             <div className="space-y-3 border-t p-6 lg:border-t-0 lg:border-l">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
                 Negotiated parts
               </div>
               <div className="text-2xl font-semibold tabular-nums tracking-tight">

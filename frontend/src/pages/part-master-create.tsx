@@ -178,7 +178,7 @@ export function PartMasterCreatePage() {
           <span>New</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">Create Part</h1>
+          <h1 className="text-2xl font-semibold tracking-tight"> Create Part </h1>
           <SectionHint text="Weight-based: man days × labour cost ÷ weight (kg) sets rate per kg. New parts start active from today; adjust validity on the part detail screen if needed." />
         </div>
       </header>
@@ -367,7 +367,7 @@ export function PartMasterCreatePage() {
           <Link to="/dashboard/part-master">Cancel</Link>
         </Button>
         <Button disabled={saving} onClick={() => void submit()}>
-          {saving ? "Saving…" : "Create part"}
+          {saving ? "Saving…" : "Create"}
         </Button>
       </div>
     </div>

@@ -342,25 +342,25 @@ function ContractorRateApprovalReviewCard({ task }: { task: UnifiedTaskDetail })
       <CardContent className="space-y-6 pt-5">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Negotiated rate</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Negotiated Rate</div>
             <div className="mt-1 text-3xl font-semibold tracking-tight text-zinc-950">
               {formatMoney(payloadPrimitive(payload, "negotiated_rate") as number | string | null)}
             </div>
           </div>
           <div className="rounded-2xl border border-border/70 bg-white px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Savings amount</div>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-zinc-950">Savings</div>
             <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">
               {formatMoney(payloadPrimitive(payload, "savings_amount") as number | string | null)}
             </div>
           </div>
           <div className="rounded-2xl border border-border/70 bg-white px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Savings %</div>
-            <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-zinc-950">Savings %</div>
+            <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950"> 
               {formatPercent(payloadPrimitive(payload, "savings_percentage") as number | string | null)}
             </div>
           </div>
           <div className="rounded-2xl border border-border/70 bg-white px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Effective window</div>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-zinc-950">Effective From</div>
             <div className="mt-1 text-lg font-semibold tracking-tight text-zinc-950">
               {String(payloadPrimitive(payload, "effective_from") ?? "—")}
               {payloadPrimitive(payload, "effective_from") != null
@@ -381,7 +381,7 @@ function ContractorRateApprovalReviewCard({ task }: { task: UnifiedTaskDetail })
             <dl className="grid gap-x-6 gap-y-0 px-4 py-2 sm:grid-cols-2">
               {detailRows.map((row) => (
                 <div key={row.label} className="border-b border-border/50 py-3 last:border-b-0 sm:last:border-b-0">
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{row.label}</dt>
+                  <dt className="text-[11px] font-bold uppercase tracking-wide text-zinc-950">{row.label}</dt>
                   <dd className="mt-1 text-sm font-medium text-zinc-950">{row.value}</dd>
                 </div>
               ))}
@@ -396,7 +396,7 @@ function ContractorRateApprovalReviewCard({ task }: { task: UnifiedTaskDetail })
             <dl className="space-y-0 px-4 py-2">
               {originRows.map((row) => (
                 <div key={row.label} className="border-b border-border/50 py-3 last:border-b-0">
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{row.label}</dt>
+                  <dt className="text-[11px] font-bold uppercase tracking-wide text-zinc-950">{row.label}</dt>
                   <dd className="mt-1 text-sm font-medium text-zinc-950">{row.value}</dd>
                 </div>
               ))}
@@ -468,7 +468,7 @@ function ApprovalSummaryCard({ task }: { task: UnifiedTaskDetail }) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             {metrics.map((metric) => (
               <div key={metric.label} className="rounded-xl border border-border/70 bg-muted/15 px-3 py-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{metric.label}</div>
+                <div className="text-[11px] font-bold uppercase tracking-wide text-zinc-950">{metric.label}</div>
                 <div className={cn("mt-1 text-sm font-semibold text-foreground", metric.strong && "text-xl tracking-tight")}>
                   {metric.value}
                 </div>
@@ -480,7 +480,7 @@ function ApprovalSummaryCard({ task }: { task: UnifiedTaskDetail }) {
         <dl className="divide-y divide-border/60">
           {rows.map((row) => (
             <div key={row.label} className="grid grid-cols-1 gap-0.5 py-2 first:pt-0 sm:grid-cols-3 sm:gap-3">
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:col-span-1">{row.label}</dt>
+              <dt className="text-[11px] font-bold uppercase tracking-wide text-zinc-950 sm:col-span-1">{row.label}</dt>
               <dd className="text-sm text-foreground sm:col-span-2">{row.value}</dd>
             </div>
           ))}
