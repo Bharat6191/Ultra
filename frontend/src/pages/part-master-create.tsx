@@ -226,11 +226,11 @@ export function PartMasterCreatePage() {
         </Card>
 
         <Card className="min-w-0 rounded-2xl border-border/50 shadow-sm xl:col-span-7">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <CardHeader className="flex flex-row items-center justify-between space-y-5 pb-3">
             <CardTitle className="text-base">Commercial</CardTitle>
             <SectionHint text="Weight-based parts derive rate per kg from labour inputs. Piece-based parts use billing UOM + rate unit + should cost." />
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
+          <CardContent className="grid gap-4 sm:grid-cols-2 space-y-5">
             <div className="grid gap-1">
               <Label showRequired>Pricing method</Label>
               <select
@@ -357,19 +357,29 @@ export function PartMasterCreatePage() {
                   />
                 </div>
               </>
-            )}
+            )} 
+  <div className="flex flex-wrap items-center gap-2">
+    <Button variant="outline" asChild>
+      <Link to="/dashboard/part-master">Cancel</Link>
+    </Button>
+
+    <Button disabled={saving} onClick={() => void submit()}>
+      {saving ? "Saving…" : "Create"}
+    </Button>
+  </div>
           </CardContent>
+         
         </Card>
       </div>
 
-      <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-2 border-t border-border/70 bg-gray-50/95 px-4 py-4 backdrop-blur-sm sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      {/* <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-2 border-t border-border/70 bg-gray-50/95 px-4 py-4 backdrop-blur-sm sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <Button variant="outline" asChild>
           <Link to="/dashboard/part-master">Cancel</Link>
         </Button>
         <Button disabled={saving} onClick={() => void submit()}>
           {saving ? "Saving…" : "Create"}
         </Button>
-      </div>
+      </div> */}
     </div>
   )
 }

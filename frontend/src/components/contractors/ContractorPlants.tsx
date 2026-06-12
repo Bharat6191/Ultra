@@ -299,9 +299,9 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <CardTitle className="text-base">Plant mapping</CardTitle>
-            <div className="text-sm text-muted-foreground">
+            {/* <div className="text-sm text-muted-foreground">
               Where this contractor is operationally engaged, in what status, and for how long.
-            </div>
+            </div> */}
             {rows && rows.length > 0 ? (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
                 <span>

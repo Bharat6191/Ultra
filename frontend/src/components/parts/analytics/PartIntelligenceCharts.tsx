@@ -78,7 +78,11 @@ export function PartIntelligenceCharts({ contractors, workOrders }: Props) {
       <Card>
         <CardHeader className="pb-1 pt-4">
           <CardTitle className="text-sm font-semibold">Negotiated rate vs should cost</CardTitle>
-          <CardDescription className="text-xs">By contractor — compare quotes to standard should cost.</CardDescription>
+          <br />
+          <br />
+          <br />
+
+          {/* <CardDescription className="text-xs">By contractor — compare quotes to standard should cost.</CardDescription> */}
         </CardHeader>
         <CardContent className="h-60 min-h-[240px] w-full min-w-0 pb-4 pt-1">
           {rateBars.length === 0 ? (
@@ -109,7 +113,10 @@ export function PartIntelligenceCharts({ contractors, workOrders }: Props) {
       <Card>
         <CardHeader className="pb-1 pt-4">
           <CardTitle className="text-sm font-semibold">Work order status mix</CardTitle>
-          <CardDescription className="text-xs">Orders that include this part — by lifecycle status.</CardDescription>
+          <br />
+          <br />
+          <br />
+          {/* <CardDescription className="text-xs">Orders that include this part — by lifecycle status.</CardDescription> */}
         </CardHeader>
         <CardContent className="h-60 min-h-[240px] w-full min-w-0 pb-4 pt-1">
           <ResponsiveContainer width="100%" height="100%">

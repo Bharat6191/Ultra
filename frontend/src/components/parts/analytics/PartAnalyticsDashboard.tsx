@@ -312,7 +312,7 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Part Summary</CardTitle>
-          <CardDescription>Master data snapshot and cross-module footprint.</CardDescription>
+          {/* <CardDescription>Master data snapshot and cross-module footprint.</CardDescription> */}
         </CardHeader>
         <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
@@ -474,10 +474,10 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
       <Card>
         <CardHeader className="pb-2 pt-4">
           <CardTitle className="text-sm font-semibold">Work Orders</CardTitle>
-          <CardDescription className="text-xs">
+          {/* <CardDescription className="text-xs">
             Orders including this part — {formatMoney(wo.total_wo_value)} total value, {formatMoney(wo.total_invoiced_for_part)}{" "}
             invoiced, {formatMoney(wo.pending_invoice_amount_for_part)} pending.
-          </CardDescription>
+          </CardDescription> */}
         </CardHeader>
         <CardContent className="px-0 pb-3">
           <div className="overflow-x-auto">

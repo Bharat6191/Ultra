@@ -762,7 +762,7 @@ export function ContractorAnalyticsDashboard({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Negotiation detail</CardTitle>
-              <CardDescription>Part-by-part negotiated outcomes in a compact list.</CardDescription>
+              {/* <CardDescription>Part-by-part negotiated outcomes in a compact list.</CardDescription> */}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -903,10 +903,10 @@ export function ContractorAnalyticsDashboard({
           <Card>
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-base">Work Orders</CardTitle>
-              <CardDescription>
+              {/* <CardDescription>
                 Work orders for this contractor — {formatMoney(wo.total_wo_value)} total value,{" "}
                 {formatMoney(wo.total_invoiced)} invoiced, {formatMoney(wo.pending_invoice_amount)} pending.
-              </CardDescription>
+              </CardDescription> */}
             </CardHeader>
             <CardContent className="space-y-4 px-0 pb-3">
               <div className="px-6">
