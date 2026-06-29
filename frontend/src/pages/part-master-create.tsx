@@ -15,12 +15,14 @@ import type { PartMasterPublic } from "@/pages/part-master"
 type OrgUnitLite = { id: number; name: string; type: string }
 
 const PART_MASTER_DESCRIPTION_MAX_LENGTH = 200
+const WEIGHT_DECIMAL_SCALE = 3
 
-function sanitizeDecimalString(raw: string): string {
+function sanitizeDecimalString(raw: string, maxDecimals?: number): string {
   let t = raw.replace(/[^\d.]/g, "")
   const dot = t.indexOf(".")
   if (dot === -1) return t
-  return t.slice(0, dot + 1) + t.slice(dot + 1).replace(/\./g, "")
+  const decimals = t.slice(dot + 1).replace(/\./g, "")
+  return t.slice(0, dot + 1) + (typeof maxDecimals === "number" ? decimals.slice(0, maxDecimals) : decimals)
 }
 
 function roundMoney2(n: number): number {
@@ -98,7 +100,7 @@ export function PartMasterCreatePage() {
       return
     }
 
-    const w = sanitizeDecimalString(form.weight_per_piece.trim())
+    const w = sanitizeDecimalString(form.weight_per_piece.trim(), WEIGHT_DECIMAL_SCALE)
     const labourCostStr = sanitizeDecimalString(form.labour_cost.trim())
     const manDaysStr = sanitizeDecimalString(form.man_days.trim())
     let br: number
@@ -315,7 +317,7 @@ export function PartMasterCreatePage() {
                     inputMode="decimal"
                     value={form.weight_per_piece}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, weight_per_piece: sanitizeDecimalString(e.target.value) }))
+                      setForm((f) => ({ ...f, weight_per_piece: sanitizeDecimalString(e.target.value, WEIGHT_DECIMAL_SCALE) }))
                     }
                     placeholder="e.g. 100"
                     className="tabular-nums"
@@ -341,7 +343,7 @@ export function PartMasterCreatePage() {
                     inputMode="decimal"
                     value={form.weight_per_piece}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, weight_per_piece: sanitizeDecimalString(e.target.value) }))
+                      setForm((f) => ({ ...f, weight_per_piece: sanitizeDecimalString(e.target.value, WEIGHT_DECIMAL_SCALE) }))
                     }
                     placeholder="Reference only"
                     className="tabular-nums"

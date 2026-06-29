@@ -73,6 +73,7 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
 
 const PART_MASTER_DESCRIPTION_MAX_LENGTH = 200
 const PART_MASTER_NOTES_MAX_LENGTH = 200
+const WEIGHT_DECIMAL_SCALE = 3
 
 function humanizeAuditField(key: string): string {
   return humanizeFieldKey(key, AUDIT_FIELD_LABELS)
@@ -188,7 +189,7 @@ function hydrateFormFromRow(r: PartMasterPublic) {
     description: r.description ?? "",
     unit_type: r.unit_type,
     pricing_method: r.pricing_method,
-    weight_per_piece: sanitizeDecimalString(r.weight_per_piece != null ? String(r.weight_per_piece) : ""),
+    weight_per_piece: sanitizeDecimalString(r.weight_per_piece != null ? String(r.weight_per_piece) : "", WEIGHT_DECIMAL_SCALE),
     labour_cost: sanitizeDecimalString(r.labour_cost != null ? String(r.labour_cost) : ""),
     man_days: sanitizeDecimalString(r.man_days != null ? String(r.man_days) : ""),
     base_rate: sanitizeDecimalString(String(r.base_rate)),
@@ -202,11 +203,12 @@ function hydrateFormFromRow(r: PartMasterPublic) {
 }
 
 /** Keep only digits and at most one decimal point (avoids pasted garbage like "("). */
-function sanitizeDecimalString(raw: string): string {
+function sanitizeDecimalString(raw: string, maxDecimals?: number): string {
   let t = raw.replace(/[^\d.]/g, "")
   const dot = t.indexOf(".")
   if (dot === -1) return t
-  return t.slice(0, dot + 1) + t.slice(dot + 1).replace(/\./g, "")
+  const decimals = t.slice(dot + 1).replace(/\./g, "")
+  return t.slice(0, dot + 1) + (typeof maxDecimals === "number" ? decimals.slice(0, maxDecimals) : decimals)
 }
 
 function roundMoney2(n: number): number {
@@ -315,7 +317,7 @@ export function PartMasterDetailPage() {
       toast.error("Select a plant")
       return
     }
-    const w = sanitizeDecimalString(form.weight_per_piece.trim())
+    const w = sanitizeDecimalString(form.weight_per_piece.trim(), WEIGHT_DECIMAL_SCALE)
     const labourCostStr = sanitizeDecimalString(form.labour_cost.trim())
     const manDaysStr = sanitizeDecimalString(form.man_days.trim())
     let br: number
@@ -650,7 +652,7 @@ export function PartMasterDetailPage() {
                         inputMode="decimal"
                         value={form.weight_per_piece}
                         onChange={(e) =>
-                          setForm((f) => ({ ...f, weight_per_piece: sanitizeDecimalString(e.target.value) }))
+                          setForm((f) => ({ ...f, weight_per_piece: sanitizeDecimalString(e.target.value, WEIGHT_DECIMAL_SCALE) }))
                         }
                         placeholder="e.g. 42.35"
                         disabled={!canUpdate}
@@ -679,7 +681,7 @@ export function PartMasterDetailPage() {
                           inputMode="decimal"
                           value={form.weight_per_piece}
                           onChange={(e) =>
-                            setForm((f) => ({ ...f, weight_per_piece: sanitizeDecimalString(e.target.value) }))
+                            setForm((f) => ({ ...f, weight_per_piece: sanitizeDecimalString(e.target.value, WEIGHT_DECIMAL_SCALE) }))
                           }
                           placeholder="Reference only"
                           disabled={!canUpdate}
@@ -836,57 +838,57 @@ export function PartMasterDetailPage() {
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent className="pt-5">
+            <CardContent className="pt-4">
               {activityEntries.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
                   No audit entries yet.
                 </div>
               ) : (
                 <>
-                  <div className="space-y-5">
+                  <div className="space-y-4">
                     {visibleAuditEntries.map((entry) => {
                       const actor = entry.changed_by_name ?? (entry.changed_by != null ? `User #${entry.changed_by}` : "—")
                       const { date, time } = formatAuditDateTime(entry.created_at)
                       const changes = auditChangeRows(entry)
                       const expanded = expandedAuditIds.includes(entry.id)
                       return (
-                        <div key={entry.id} className="flex gap-4">
-                          <div className="shrink-0 pt-3">
-                            <div className="flex size-12 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm sm:size-14">
-                              <Sparkles className="size-5 sm:size-6" aria-hidden />
+                        <div key={entry.id} className="flex gap-3">
+                          <div className="shrink-0 pt-2">
+                            <div className="flex size-10 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm sm:size-12">
+                              <Sparkles className="size-4.5 sm:size-5" aria-hidden />
                             </div>
                           </div>
 
-                          <div className="min-w-0 flex-1 rounded-[28px] border border-border/70 bg-background px-5 py-5 shadow-sm">
-                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                              <div className="min-w-0 flex-1 space-y-4">
-                                <div className="flex flex-wrap items-center gap-3">
-                                  <h3 className="text-xl font-semibold tracking-tight text-foreground">
+                          <div className="min-w-0 flex-1 rounded-[24px] border border-border/70 bg-background px-4 py-4 shadow-sm">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="min-w-0 flex-1 space-y-3">
+                                <div className="flex flex-wrap items-center gap-2.5">
+                                  <h3 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
                                     {auditActionLabel(entry.action)}
                                   </h3>
-                                  <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide">
+                                  <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide">
                                     AUDIT
                                   </Badge>
                                 </div>
 
-                                <div className="grid gap-3 sm:grid-cols-2 xl:max-w-2xl">
-                                  <div className="rounded-3xl border border-border/70 bg-muted/10 px-5 py-4">
-                                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                <div className="grid gap-2.5 sm:grid-cols-2 xl:max-w-xl">
+                                  <div className="rounded-2xl border border-border/70 bg-muted/10 px-4 py-3">
+                                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                                       Performed By
                                     </div>
-                                    <div className="mt-2 flex items-center gap-3">
-                                      <div className="flex size-9 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
+                                    <div className="mt-1.5 flex items-center gap-2.5">
+                                      <div className="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
                                         {initialsFromName(actor)}
                                       </div>
-                                      <div className="min-w-0 text-base font-semibold text-foreground">{actor}</div>
+                                      <div className="min-w-0 text-sm font-semibold text-foreground sm:text-[15px]">{actor}</div>
                                     </div>
                                   </div>
 
-                                  <div className="rounded-3xl border border-border/70 bg-muted/10 px-5 py-4">
-                                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                  <div className="rounded-2xl border border-border/70 bg-muted/10 px-4 py-3">
+                                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                                       Time
                                     </div>
-                                    <time dateTime={entry.created_at} className="mt-2 block text-base font-semibold text-foreground">
+                                    <time dateTime={entry.created_at} className="mt-1.5 block text-sm font-semibold text-foreground sm:text-[15px]">
                                       {date}
                                       {time ? `, ${time}` : ""}
                                     </time>
@@ -898,11 +900,11 @@ export function PartMasterDetailPage() {
                                 <Button
                                   type="button"
                                   variant="ghost"
-                                  className="h-auto rounded-full px-3 py-2 text-base font-semibold text-foreground hover:bg-transparent hover:text-foreground"
+                                  className="h-auto rounded-full px-2.5 py-1.5 text-sm font-semibold text-foreground hover:bg-transparent hover:text-foreground"
                                   onClick={() => toggleAuditEntry(entry.id)}
                                 >
                                   <ChevronRight
-                                    className={cn("mr-2 size-5 transition-transform duration-200", expanded && "rotate-90")}
+                                    className={cn("mr-1.5 size-4 transition-transform duration-200", expanded && "rotate-90")}
                                     aria-hidden
                                   />
                                   {expanded ? "Hide Changes" : "View Changes"}
@@ -912,7 +914,7 @@ export function PartMasterDetailPage() {
                             
 
                             {expanded ? (
-                              <div className="mt-5 border-t border-border/60 pt-5">
+                              <div className="mt-4 border-t border-border/60 pt-4">
                                 {changes.length > 0 ? (
                                   <div className="overflow-hidden rounded-2xl border border-border/60">
                                     <div className="hidden grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-border/60 bg-muted/20 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:grid">

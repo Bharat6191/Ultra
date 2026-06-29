@@ -44,6 +44,11 @@ function fmtPct(v: number | null): string {
   return `${v.toFixed(1)}%`
 }
 
+function fmtWeightUnit(v: string | number | null | undefined): string {
+  const n = num(v)
+  return n === null ? "—" : n.toFixed(3)
+}
+
 function fmtDate(iso: string | null): string {
   if (!iso) return "—"
   try {
@@ -328,7 +333,7 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
             <div className={summaryValueClass}>{h.description?.trim() || "—"}</div>
           </div>
           <div>
-            <div className={summaryLabelClass}>Category / Pricing</div>
+            <div className={summaryLabelClass}>Pricing Method</div>
             <div className={summaryValueClass}>{h.part_category.replace(/_/g, " ")}</div>
           </div>
           <div>
@@ -341,7 +346,7 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
           </div>
           <div>
             <div className={summaryLabelClass}>Weight / Unit</div>
-            <div className={summaryMetricValueClass}>{h.weight_per_unit != null ? String(h.weight_per_unit) : "—"}</div>
+            <div className={summaryMetricValueClass}>{fmtWeightUnit(h.weight_per_unit)}</div>
           </div>
           <div>
             <div className={summaryLabelClass}>Should Cost</div>
