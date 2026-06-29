@@ -264,13 +264,17 @@ export function NewNegotiationDialog({
                   setForm((s) => ({ ...s, initial_rate: e.target.value }))
                 }
               />
-              <p className="mt-1 text-[11px] text-muted-foreground">Opening price from the contractor.</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Opening price from the contractor.
+              </p>
             </div>
+
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">
+              <Label htmlFor="dlg-neg-agreed" className="mb-1" showRequired>
                 Agreed rate
-              </label>
+              </Label>
               <Input
+                id="dlg-neg-agreed"
                 type="number"
                 inputMode="decimal"
                 placeholder="0.00"
@@ -279,7 +283,11 @@ export function NewNegotiationDialog({
                   setForm((s) => ({ ...s, negotiated_rate: e.target.value }))
                 }
               />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Final negotiated rate agreed with the contractor.
+              </p>
             </div>
+
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">
                 Effective from

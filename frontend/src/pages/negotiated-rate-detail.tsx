@@ -138,10 +138,7 @@ export function NegotiatedRateDetailPage() {
               </>
             ) : null}
           </h1>
-           <p className="text-xs text-muted-foreground">
-                {rate.org_unit_name ?? "—"} · {(rate.pricing_method ?? "").replace(/_/g, " ")} ·{" "}
-                {rate.unit_type ?? "—"}
-              </p>
+          
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canSubmit ? (

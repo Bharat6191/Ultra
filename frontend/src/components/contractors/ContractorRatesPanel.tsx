@@ -922,7 +922,7 @@ export function RateDetailPanel({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Fact label="Should Cost" value={formatMoney(rate.base_rate)} />
             <Fact label="Initial ask" value={formatMoney(rate.initial_rate)} />
-            <Fact label="Agreed rate" value={formatMoney(rate.negotiated_rate)} strong />
+            <Fact label="Agreed rate" value={formatMoney(rate.negotiated_rate)} />
             {rate.vs_base_percentage != null && rate.vs_base_percentage !== "" ? (
             <div className="space-y-1">
               <p className="text-xs font-semibold text-foreground">VARIANCE</p>
@@ -1052,16 +1052,14 @@ export function RateDetailPanel({
 function Fact({
   label,
   value,
-  strong,
 }: {
   label: string
   value: React.ReactNode
-  strong?: boolean
 }) {
   return (
     <div>
       <div className="text-xs font-bold uppercase tracking-wide text-zinc-950">{label}</div>
-      <div className={`mt-0.5 text-zinc-950 ${strong ? "text-base font-normal" : "text-sm font-normal"}`}>
+      <div className="mt-0.5 text-sm font-normal text-zinc-950">
         {value}
       </div>
     </div>
