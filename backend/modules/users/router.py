@@ -51,7 +51,7 @@ def create_user(
     except DuplicateEmployeeCodeError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Employee code already registered",
+            detail="Employee Code already exists. Please enter a unique Employee Code.",
         ) from None
     except DuplicatePhoneError:
         raise HTTPException(
@@ -69,10 +69,12 @@ def create_user(
 @router.get("", response_model=list[UserPublic])
 def list_users(
     svc: Annotated[UserService, Depends(get_user_service)],
+    response: Response,
     _: Annotated[object, Depends(require_permission("users.view"))],
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ) -> list[User]:
+    response.headers["X-Total-Count"] = str(svc.count_users())
     return svc.list_users(offset=skip, limit=limit)
 
 
@@ -104,7 +106,7 @@ def update_user(
     except DuplicateEmployeeCodeError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Employee code already registered",
+            detail="Employee Code already exists. Please enter a unique Employee Code.",
         ) from None
     except DuplicatePhoneError:
         raise HTTPException(

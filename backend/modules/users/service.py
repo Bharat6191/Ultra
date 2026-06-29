@@ -3,7 +3,7 @@ import re
 import secrets
 import string
 
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -64,6 +64,27 @@ class UserService:
         alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+[]{}"
         return "".join(secrets.choice(alphabet) for _ in range(20))
 
+    @staticmethod
+    def _normalize_employee_code(employee_code: str | None) -> str | None:
+        if employee_code is None:
+            return None
+        normalized = str(employee_code).strip().upper()
+        return normalized or None
+
+    def _find_existing_employee_code_user_id(
+        self,
+        employee_code: str | None,
+        *,
+        exclude_user_id: int | None = None,
+    ) -> int | None:
+        normalized = self._normalize_employee_code(employee_code)
+        if not normalized:
+            return None
+        stmt = select(User.id).where(func.upper(func.btrim(User.employee_code)) == normalized)
+        if exclude_user_id is not None:
+            stmt = stmt.where(User.id != int(exclude_user_id))
+        return self._db.scalar(stmt)
+
     def create_user(self, data: UserCreate, *, actor_user_id: int | None = None) -> User:
         phone = self._normalize_phone(data.phone)
         requested_active = bool(data.is_active)
@@ -83,13 +104,9 @@ class UserService:
         if existing_email is not None:
             raise DuplicateEmailError
 
-        employee_code_norm: str | None = None
-        if getattr(data, "employee_code", None):
-            employee_code_norm = str(data.employee_code).strip()
-            if employee_code_norm:
-                existing_emp = self._db.scalar(select(User.id).where(User.employee_code == employee_code_norm))
-                if existing_emp is not None:
-                    raise DuplicateEmployeeCodeError
+        employee_code_norm = self._normalize_employee_code(getattr(data, "employee_code", None))
+        if self._find_existing_employee_code_user_id(employee_code_norm) is not None:
+            raise DuplicateEmployeeCodeError
 
         resolved_role_ids = list(data.role_ids or [])
         if not resolved_role_ids:
@@ -183,7 +200,7 @@ class UserService:
                 raise DuplicateUsernameError from None
             if email_norm and self._db.scalar(select(User.id).where(User.email == email_norm)) is not None:
                 raise DuplicateEmailError from None
-            if employee_code_norm and self._db.scalar(select(User.id).where(User.employee_code == employee_code_norm)) is not None:
+            if self._find_existing_employee_code_user_id(employee_code_norm) is not None:
                 raise DuplicateEmployeeCodeError from None
             raise
         user_id = user.id
@@ -225,6 +242,9 @@ class UserService:
         )
         return list(self._db.scalars(stmt).all())
 
+    def count_users(self) -> int:
+        return int(self._db.scalar(select(func.count()).select_from(User)) or 0)
+
     def update_user(
         self,
         user_id: int,
@@ -246,6 +266,7 @@ class UserService:
             "username": user.username,
             "phone": user.phone,
             "email": user.email,
+            "employee_code": user.employee_code,
             "is_active": bool(user.is_active),
         }
 
@@ -280,11 +301,9 @@ class UserService:
             user.email = email_norm
 
         if "employee_code" in updates:
-            emp = str(updates["employee_code"]).strip() if updates["employee_code"] else None
-            if emp and emp != user.employee_code:
-                existing_emp = self._db.scalar(select(User.id).where(and_(User.employee_code == emp, User.id != user.id)))
-                if existing_emp is not None:
-                    raise DuplicateEmployeeCodeError
+            emp = self._normalize_employee_code(updates["employee_code"])
+            if emp and self._find_existing_employee_code_user_id(emp, exclude_user_id=user.id) is not None:
+                raise DuplicateEmployeeCodeError
             user.employee_code = emp
         if "department" in updates:
             user.department = str(updates["department"]).strip() if updates["department"] else None
@@ -359,7 +378,15 @@ class UserService:
             self._db.commit()
         except IntegrityError:
             self._db.rollback()
-            raise DuplicatePhoneError from None
+            if "phone" in updates and user.phone and self._db.scalar(select(User.id).where(User.phone == user.phone, User.id != user.id)) is not None:
+                raise DuplicatePhoneError from None
+            if "username" in updates and user.username and self._db.scalar(select(User.id).where(User.username == user.username, User.id != user.id)) is not None:
+                raise DuplicateUsernameError from None
+            if "email" in updates and user.email and self._db.scalar(select(User.id).where(User.email == user.email, User.id != user.id)) is not None:
+                raise DuplicateEmailError from None
+            if self._find_existing_employee_code_user_id(user.employee_code, exclude_user_id=user.id) is not None:
+                raise DuplicateEmployeeCodeError from None
+            raise
 
         uid = user.id
         self._db.expire_all()
@@ -375,6 +402,7 @@ class UserService:
             "username": reloaded.username,
             "phone": reloaded.phone,
             "email": reloaded.email,
+            "employee_code": reloaded.employee_code,
             "is_active": bool(reloaded.is_active),
         }
         changed = {k: after_snapshot[k] for k in after_snapshot.keys() if before_snapshot.get(k) != after_snapshot.get(k)}

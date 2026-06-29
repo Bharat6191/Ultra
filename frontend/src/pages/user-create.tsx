@@ -2,9 +2,10 @@ import * as React from "react"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
-import { Link, useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
+import { PageBackLink } from "@/components/layout/page-back-link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -65,6 +66,8 @@ const createUserSchema = z.object({
   org_unit_id: z.string().min(1, "Plant is required"),
   is_active: z.boolean(),
 })
+
+const DUPLICATE_EMPLOYEE_CODE_MESSAGE = "Employee Code already exists. Please enter a unique Employee Code."
 
 type CreateUserValues = z.infer<typeof createUserSchema>
 
@@ -138,6 +141,7 @@ export function UserCreatePage() {
   async function onSubmit(values: CreateUserValues) {
     toast.loading("Creating user…", { id: "create-user" })
     setError(null)
+    form.clearErrors("employee_code")
     try {
       const email = values.email.trim()
       const orgUnitId = Number(values.org_unit_id)
@@ -166,6 +170,9 @@ export function UserCreatePage() {
       navigate(`../${created.id}`, { replace: true })
     } catch (e) {
       const message = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to create user"
+      if (message === DUPLICATE_EMPLOYEE_CODE_MESSAGE) {
+        form.setError("employee_code", { type: "server", message })
+      }
       toast.error(message, { id: "create-user" })
       setError(message)
     }
@@ -173,11 +180,9 @@ export function UserCreatePage() {
 
   return (
     <div className="w-full space-y-3">
-      <div className="flex items-center justify-between gap-4">
+      <div className="space-y-1">
+        <PageBackLink to=".." label="Users" />
         <h2 className="text-base font-semibold tracking-tight">Create User</h2>
-        <Button asChild variant="outline" size="xs">
-          <Link to="..">Back</Link>
-        </Button>
       </div>
 
       {error ? (

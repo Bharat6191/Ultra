@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 
 ApprovalEntityType = Literal["user_creation"]
@@ -84,7 +84,7 @@ class ApprovalTaskPublic(BaseModel):
 
 class ApprovalTaskActionRequest(BaseModel):
     action: ApprovalActionType
-    comment: str | None = Field(default=None, max_length=10_000)
+    comment: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10_000)]
 
 
 class WorkflowMappingCreate(BaseModel):
@@ -153,4 +153,3 @@ class ApprovalRequestStatusDetailPublic(ApprovalRequestStatusPublic):
 
 class ApprovalTaskCommentRequest(BaseModel):
     comment: str = Field(min_length=1, max_length=10_000)
-

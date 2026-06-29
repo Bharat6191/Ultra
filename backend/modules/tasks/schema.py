@@ -142,4 +142,3 @@ class TaskDetailPublic(BaseModel):
 
     comments: list[TaskCommentPublic] = Field(default_factory=list)
     audit_logs: list[TaskAuditLogPublic] = Field(default_factory=list)
-

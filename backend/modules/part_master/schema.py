@@ -12,7 +12,7 @@ from modules.part_master.models import BILLING_BASIS, PART_STATUSES, PRICING_MET
 class PartMasterCreate(BaseModel):
     part_code: str = Field(min_length=1, max_length=64)
     part_name: str = Field(min_length=1, max_length=255)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=200)
     unit_type: str = Field(min_length=1, max_length=32)
     pricing_method: str = Field(min_length=1, max_length=32)
     billing_basis: str | None = Field(
@@ -33,7 +33,7 @@ class PartMasterCreate(BaseModel):
     effective_to: date | None = None
     is_active: bool = True
     status: str = Field(default="active", max_length=32)
-    notes: str | None = None
+    notes: str | None = Field(default=None, max_length=200)
 
     @field_validator("part_code")
     @classmethod
@@ -104,7 +104,7 @@ class PartMasterUpdate(BaseModel):
     part_code: str | None = Field(default=None, min_length=1, max_length=64)
     part_name: str | None = Field(default=None, min_length=1, max_length=255)
     org_unit_id: int | None = Field(default=None, ge=1)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=200)
     unit_type: str | None = Field(default=None, min_length=1, max_length=32)
     pricing_method: str | None = None
     billing_basis: str | None = Field(default=None, max_length=16)
@@ -120,7 +120,7 @@ class PartMasterUpdate(BaseModel):
     effective_to: date | None = None
     is_active: bool | None = None
     status: str | None = Field(default=None, max_length=32)
-    notes: str | None = None
+    notes: str | None = Field(default=None, max_length=200)
 
     @field_validator("part_code")
     @classmethod

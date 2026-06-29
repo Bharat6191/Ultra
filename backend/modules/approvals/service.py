@@ -5,6 +5,7 @@ import secrets
 from typing import Any
 
 from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from modules.approvals.model import (
@@ -216,6 +217,15 @@ class ApprovalEngineService:
     ) -> ApprovalRequest:
         if not workflow.steps:
             raise ConflictError("Active workflow has no steps configured.")
+        existing_pending = self._db.scalar(
+            select(ApprovalRequest).where(
+                ApprovalRequest.entity_type == entity_type,
+                ApprovalRequest.entity_id == entity_id,
+                ApprovalRequest.status == "pending",
+            )
+        )
+        if existing_pending is not None:
+            raise ConflictError("An approval request for this record is already pending.")
         req = ApprovalRequest(
             workflow_id=workflow.id,
             entity_type=entity_type,
@@ -226,7 +236,13 @@ class ApprovalEngineService:
             created_by=created_by,
         )
         self._db.add(req)
-        self._db.flush()
+        try:
+            self._db.flush()
+        except IntegrityError as exc:
+            self._db.rollback()
+            if "uq_approval_requests_entity_status" in str(exc.orig):
+                raise ConflictError("An approval request for this record is already pending.") from exc
+            raise
         self._create_tasks_for_step(req, workflow.steps[0])
         return req
 
@@ -526,6 +542,39 @@ class ApprovalEngineService:
         reloaded = self.get_request(int(req.id))
         return reloaded, int(new_task.id)
 
+    def _archive_conflicting_requests_for_status(
+        self,
+        *,
+        entity_type: str,
+        entity_id: int,
+        target_status: str,
+        keep_request_id: int,
+        now: datetime | None = None,
+    ) -> None:
+        conflicts = self._db.scalars(
+            select(ApprovalRequest)
+            .where(
+                ApprovalRequest.entity_type == entity_type,
+                ApprovalRequest.entity_id == entity_id,
+                ApprovalRequest.status == target_status,
+                ApprovalRequest.id != keep_request_id,
+            )
+            .options(selectinload(ApprovalRequest.tasks))
+        ).all()
+        if not conflicts:
+            return
+
+        closed_at = now or _now_utc()
+        for stale in conflicts:
+            stale_tasks = self._db.scalars(
+                select(ApprovalTask).where(ApprovalTask.request_id == int(stale.id))
+            ).all()
+            for task in stale_tasks:
+                if str(task.status) in ("open", "pending", "in_progress"):
+                    task.status = "closed"
+                    task.closed_at = closed_at
+            stale.status = "rejected"
+
     @staticmethod
     def _task_link(task_id: int) -> str:
         base = (os.environ.get("FRONTEND_APP_URL") or os.environ.get("FRONTEND_ORIGIN") or "http://localhost:5173").rstrip("/")
@@ -568,17 +617,22 @@ class ApprovalEngineService:
         rows = self._db.scalars(
             select(User).where(User.id.in_(user_ids), User.is_active.is_(True))
         ).all()
+        events: list[tuple[str, dict[str, Any]]] = []
         for u in rows:
             if not u.email:
                 continue
-            EmailNotificationService(self._db).trigger_event(
-                event_code=event_code,
-                payload={
-                    "user_name": u.full_name,
-                    "email": u.email,
-                    **payload,
-                },
+            events.append(
+                (
+                    event_code,
+                    {
+                        "user_name": u.full_name,
+                        "email": u.email,
+                        **payload,
+                    },
+                )
             )
+        if events:
+            EmailNotificationService(self._db).trigger_events_async(events=events)
 
     @staticmethod
     def _build_user_creation_payload(user: User, requested_is_active: bool | None = None) -> dict[str, Any]:
@@ -635,6 +689,10 @@ class ApprovalEngineService:
         act = action.strip().lower()
         if act not in ("approve", "reject"):
             raise ConflictError("action must be one of: approve, reject.")
+        normalized_comment = (comment or "").strip()
+        if not normalized_comment:
+            raise ApprovalError("Reason is required to approve or reject this task.")
+        comment = normalized_comment
 
         # Persist the action record first; then update task/request status depending on task type.
         self._db.add(
@@ -654,22 +712,29 @@ class ApprovalEngineService:
                 new_value={"action": act},
             )
         )
-        if comment:
-            self._db.add(TaskComment(task_id=int(task.id), user_id=actor_user_id, comment=comment))
-            self._db.add(
-                TaskAuditLog(
-                    task_id=int(task.id),
-                    action="commented",
-                    actor_user_id=actor_user_id,
-                    new_value={"comment": comment},
-                )
+        self._db.add(TaskComment(task_id=int(task.id), user_id=actor_user_id, comment=comment))
+        self._db.add(
+            TaskAuditLog(
+                task_id=int(task.id),
+                action="commented",
+                actor_user_id=actor_user_id,
+                new_value={"comment": comment},
             )
+        )
         self._db.flush()
 
         if act == "reject":
             now = _now_utc()
             task.status = "rejected"
             task.acted_at = now
+
+            self._archive_conflicting_requests_for_status(
+                entity_type=str(req.entity_type),
+                entity_id=int(req.entity_id),
+                target_status="in_rework",
+                keep_request_id=int(req.id),
+                now=now,
+            )
 
             # Entity-specific rejection hook (best-effort: contractor_rate flips to "rejected"
             # so it can be reworked or replaced; other entities stay on the rework path).
@@ -759,7 +824,8 @@ class ApprovalEngineService:
 
         # Approved: check whether the step has enough approvals.
         step = task.step
-        assert step is not None
+        if step is None:
+            raise ApprovalError("Approval step not found for this task.")
         if is_user_task:
             task.status = "approved"
             task.acted_at = _now_utc()
@@ -839,6 +905,7 @@ class ApprovalEngineService:
                     rejector_user_id=rejector_user_id,
                     approval_request_id=int(req.id),
                     comment=comment,
+                    commit=False,
                 )
             if req.entity_type == "work_order_approval":
                 from modules.work_orders.service import WorkOrderService
@@ -848,6 +915,7 @@ class ApprovalEngineService:
                     rejector_user_id=rejector_user_id,
                     approval_request_id=int(req.id),
                     comment=comment,
+                    commit=False,
                 )
             if req.entity_type == "work_order_rate_override":
                 from modules.work_orders.service import WorkOrderService
@@ -1009,6 +1077,7 @@ class ApprovalEngineService:
                 int(req.entity_id),
                 approver_user_id=approver_user_id,
                 approval_request_id=int(req.id),
+                commit=False,
             )
             return
 
@@ -1034,6 +1103,7 @@ class ApprovalEngineService:
                 int(req.entity_id),
                 approver_user_id=approver_user_id,
                 approval_request_id=int(req.id),
+                commit=False,
             )
             return
 

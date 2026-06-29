@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ApiError, getJson } from "@/lib/api"
+import { humanizeFieldKey } from "@/lib/field-labels"
 import { formatMoney, formatPercent } from "@/components/contractors/rateStatus"
 
 export type RateVersionEntry = {
@@ -62,28 +63,28 @@ function formatDateTime(iso: string): string {
 }
 
 const FIELD_LABELS: Record<string, string> = {
-  base_rate: "Should cost",
+  base_rate: "Should Cost",
   negotiated_rate: "Negotiated Rate",
-  initial_rate: "Initial rate",
-  previous_rate: "Previous rate",
+  initial_rate: "Initial Rate",
+  previous_rate: "Previous Rate",
   savings_amount: "Savings",
   savings_percentage: "Savings %",
-  effective_from: "Effective from",
-  effective_to: "Effective to",
+  effective_from: "Effective From",
+  effective_to: "Effective To",
   is_active: "Active",
   notes: "Notes",
   status: "Status",
-  part_code: "Part code",
-  part_name: "Part name",
-  unit_type: "Unit type",
-  pricing_method: "Pricing method",
-  rate_unit_type: "Rate unit type",
+  part_code: "Part Code",
+  part_name: "Part Name",
+  unit_type: "Unit Type",
+  pricing_method: "Pricing Method",
+  rate_unit_type: "Rate Unit Type",
   weight_per_piece: "Weight / piece",
   org_unit_id: "Plant ID",
   contractor_id: "Contractor ID",
-  part_master_id: "Part master ID",
+  part_master_id: "Part Master ID",
   remarks: "Remarks",
-  approval_request_id: "Approval request",
+  approval_request_id: "Approval Request",
   current_round: "Round",
 }
 
@@ -128,7 +129,7 @@ const CONTRACTOR_RATE_FIELD_ORDER = [
 ]
 
 function fieldLabel(field: string): string {
-  return FIELD_LABELS[field] ?? field
+  return humanizeFieldKey(field, FIELD_LABELS)
 }
 
 function humanizeToken(key: string, text: string): string {

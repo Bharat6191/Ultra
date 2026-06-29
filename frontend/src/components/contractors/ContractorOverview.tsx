@@ -60,10 +60,10 @@ export function ContractorOverview({ contractor }: { contractor: ContractorOverv
           <CardTitle className="text-base">Statutory IDs</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <FieldRow label="PAN" value={contractor.pan} mono />
-          <FieldRow label="GSTIN" value={contractor.gstin} mono />
-          <FieldRow label="CIN" value={contractor.cin} mono />
-          <FieldRow label="Registration #" value={contractor.registration_number} mono />
+          <FieldRow label="PAN Number" value={contractor.pan} mono />
+          <FieldRow label="GSTIN Number" value={contractor.gstin} mono />
+          <FieldRow label="CIN Number" value={contractor.cin} mono />
+          <FieldRow label="Registration Number" value={contractor.registration_number} mono />
         </CardContent>
       </Card>
 
@@ -72,10 +72,10 @@ export function ContractorOverview({ contractor }: { contractor: ContractorOverv
           <CardTitle className="text-base">Contractor Information</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <FieldRow label="Person" value={contractor.contact_person} />
-          <FieldRow label="Title" value={contractor.contact_person_title} />
+          <FieldRow label="Contact Person" value={contractor.contact_person} />
+          <FieldRow label="Contact Title" value={contractor.contact_person_title} />
           <FieldRow label="Email" value={contractor.email} />
-          <FieldRow label="Alt email" value={contractor.alternate_email} />
+          <FieldRow label="Alternate email" value={contractor.alternate_email} />
           <FieldRow label="Contact no." value={contractor.phone} />
           <FieldRow label="Alternate contact no." value={contractor.alternate_phone} />
         </CardContent>

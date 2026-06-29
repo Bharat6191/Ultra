@@ -15,6 +15,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { getJson } from "@/lib/api"
+import { humanizeFieldKey } from "@/lib/field-labels"
 import { formatMoney, type VsBaseTolerance } from "@/components/contractors/rateStatus"
 import { VsBaseToleranceBadge } from "@/components/contractors/VsBaseToleranceBadge"
 
@@ -150,9 +151,10 @@ const TONE_CLASSES: Record<string, { ring: string; bg: string; text: string }> =
 
 const HIGHLIGHT_LABELS: Record<string, string> = {
   negotiated_rate: "Negotiated Rate",
+  initial_rate: "Initial Rate",
   proposed_rate: "Proposed rate",
   counter_rate: "Counter offer",
-  base_rate: "Part should cost",
+  base_rate: "Should Cost",
   previous_rate: "Previous rate",
   savings_amount: "Savings vs opening ask",
   savings_percentage: "Savings %",
@@ -190,7 +192,7 @@ function TimelineHighlights({ highlights }: { highlights: Record<string, string>
           }`}
         >
           <span className="font-normal text-muted-foreground">
-            {HIGHLIGHT_LABELS[key] ?? key}:{" "}
+            {humanizeFieldKey(key, HIGHLIGHT_LABELS)}:{" "}
           </span>
           {formatHighlightValue(key, value)}
         </span>
@@ -262,9 +264,9 @@ export function ContractorRateTimeline({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Negotiation Log</CardTitle>
-        <p className="text-xs text-muted-foreground">
+        {/* <p className="text-xs text-muted-foreground">
           Compact Audit Log with its own scroll area so the rate view stays easier to scan.
-        </p>
+        </p> */}
       </CardHeader>
       <CardContent>
         {error ? <div className="text-sm text-destructive">{error}</div> : null}

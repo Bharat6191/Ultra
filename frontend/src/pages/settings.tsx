@@ -186,8 +186,8 @@ export function SettingsPage() {
                   <div className="grid gap-3 lg:grid-cols-2">
                     <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
                       <div className="min-w-0">
-                        <div className="text-sm font-medium">Password sign-in</div>
-                        <div className="text-xs text-muted-foreground">Allow email/phone + password.</div>
+                        <div className="text-sm font-medium">Password Sign-In</div>
+                        {/* <div className="text-xs text-muted-foreground">Allow email/phone + password.</div> */}
                       </div>
                       <Switch
                         checked={authPolicy.password_enabled}
@@ -198,7 +198,7 @@ export function SettingsPage() {
                     <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
                       <div className="min-w-0">
                         <div className="text-sm font-medium">Captcha</div>
-                        <div className="text-xs text-muted-foreground">Require captcha token on login.</div>
+                        {/* <div className="text-xs text-muted-foreground">Require captcha token on login.</div> */}
                       </div>
                       <Switch
                         checked={authPolicy.captcha_enabled}
@@ -209,7 +209,7 @@ export function SettingsPage() {
                     <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
                       <div className="min-w-0">
                         <div className="text-sm font-medium">MFA (TOTP)</div>
-                        <div className="text-xs text-muted-foreground">Require authenticator code after password.</div>
+                        {/* <div className="text-xs text-muted-foreground">Require authenticator code after password.</div> */}
                       </div>
                       <Switch
                         checked={authPolicy.mfa_enabled}
@@ -219,8 +219,8 @@ export function SettingsPage() {
                     </div>
                     <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
                       <div className="min-w-0">
-                        <div className="text-sm font-medium">MFA enforced</div>
-                        <div className="text-xs text-muted-foreground">Block login until MFA is set up.</div>
+                        <div className="text-sm font-medium">MFA Enforced</div>
+                        {/* <div className="text-xs text-muted-foreground">Block login until MFA is set up.</div> */}
                       </div>
                       <Switch
                         checked={authPolicy.mfa_enforced}
@@ -232,10 +232,10 @@ export function SettingsPage() {
 
                   <div className="space-y-4 rounded-lg border p-4">
                     <div className="space-y-1">
-                      <div className="text-sm font-medium">Session timeout mode</div>
-                      <p className="text-xs text-muted-foreground">
+                      <div className="text-sm font-medium">Session Timeout Mode</div>
+                      {/* <p className="text-xs text-muted-foreground">
                         Choose whether logout is controlled by backend access-token expiry or by true user inactivity.
-                      </p>
+                      </p> */}
                     </div>
 
                     <div className="grid gap-3 lg:grid-cols-2">
@@ -261,9 +261,9 @@ export function SettingsPage() {
                         }
                       >
                         <div className="text-sm font-medium">Use access token expiry</div>
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        {/* <p className="mt-1 text-xs text-muted-foreground">
                           Users stay signed in until the current access token lifetime ends.
-                        </p>
+                        </p> */}
                       </button>
 
                       <button
@@ -288,15 +288,15 @@ export function SettingsPage() {
                         }
                       >
                         <div className="text-sm font-medium">Use true idle logout</div>
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        {/* <p className="mt-1 text-xs text-muted-foreground">
                           Users are logged out only after the configured minutes with no mouse, keyboard, click, scroll,
                           or touch activity.
-                        </p>
+                        </p> */}
                       </button>
                     </div>
 
                     <div className="grid gap-1.5 sm:max-w-xs">
-                      <Label htmlFor="idle_timeout_minutes">Minutes of no activity to logout</Label>
+                      <Label htmlFor="idle_timeout_minutes">Inactivity Timeout (min)</Label>
                       <Input
                         id="idle_timeout_minutes"
                         type="number"
@@ -312,11 +312,11 @@ export function SettingsPage() {
                           setAuthPolicy((p) => (p ? { ...p, idle_timeout_minutes: next } : p))
                         }}
                       />
-                      <p className="text-xs text-muted-foreground">
+                      {/* <p className="text-xs text-muted-foreground">
                         {authPolicy.session_timeout_mode === "idle_timeout"
                           ? "The header timer shows a live MM:SS countdown and resets on user activity."
                           : "Token-expiry mode uses the backend access-token lifetime. Idle minutes are ignored until idle logout is selected."}
-                      </p>
+                      </p> */}
                     </div>
                   </div>
 
@@ -388,9 +388,9 @@ export function SettingsPage() {
                             placeholder="#f9fafb"
                           />
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        {/* <p className="text-xs text-muted-foreground">
                           Admin-controlled background for dashboard, admin, login, and workspace screens.
-                        </p>
+                        </p> */}
                       </div>
                     </div>
 
@@ -398,9 +398,9 @@ export function SettingsPage() {
                       <div className="text-sm font-medium">Preview</div>
                       <div className="rounded-2xl border border-zinc-200 p-4" style={{ backgroundColor: previewBackgroundColor }}>
                         <div className="rounded-2xl border border-zinc-200/80 bg-white/88 p-5 shadow-sm backdrop-blur-sm">
-                          <div className="text-lg font-semibold text-zinc-950">Ultra workspace</div>
+                          <div className="text-lg font-semibold text-zinc-950">Ultra Workspace</div>
                           <div className="mt-1 text-sm text-muted-foreground">
-                            Main page background preview using <span className="font-medium text-zinc-900">{previewBackgroundColor}</span>.
+                            {/* Main page background preview using <span className="font-medium text-zinc-900">{previewBackgroundColor}</span>. */}
                           </div>
                           <div className="mt-4 grid gap-3 sm:grid-cols-2">
                             <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
@@ -436,13 +436,13 @@ export function SettingsPage() {
         <TabsContent value="password" className="mt-4 space-y-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Password rules</CardTitle>
+              <CardTitle className="text-base">Password Rules</CardTitle>
               {/* <CardDescription>These rules are enforced on password changes and resets.</CardDescription> */}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="min_length">Minimum length</Label>
+                  <Label htmlFor="min_length">Minimum Length</Label>
                   <Input
                     id="min_length"
                     type="number"
@@ -457,7 +457,7 @@ export function SettingsPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="max_age_days">Max age (days)</Label>
+                  <Label htmlFor="max_age_days">Max Age (Days)</Label>
                   <Input
                     id="max_age_days"
                     type="number"
@@ -470,7 +470,7 @@ export function SettingsPage() {
                       setPolicy((p) => (p ? { ...p, max_age_days: Number.isFinite(n) ? n : p.max_age_days } : p))
                     }}
                   />
-                  <p className="text-xs text-muted-foreground">Use 0 to disable password expiry.</p>
+                  {/* <p className="text-xs text-muted-foreground">Use 0 to disable password expiry.</p> */}
                 </div>
               </div>
 
@@ -478,10 +478,10 @@ export function SettingsPage() {
 
               {(
                 [
-                  ["require_uppercase", "Require uppercase (A–Z)"],
-                  ["require_lowercase", "Require lowercase (a–z)"],
-                  ["require_digit", "Require a digit"],
-                  ["require_special", "Require a special character"],
+                  ["require_uppercase", "Required Uppercase (A–Z)"],
+                  ["require_lowercase", "Required Lowercase (a–z)"],
+                  ["require_digit", "Required Digit"],
+                  ["require_special", "Required Special Character"],
                 ] as const
               ).map(([key, label]) => (
                 <div key={key} className="flex items-center justify-between gap-4">

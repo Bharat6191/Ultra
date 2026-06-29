@@ -9,49 +9,60 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from db.base import Base
 from db.session import DATABASE_URL
-from modules.audit.model import AuditLog  # noqa: F401
-from modules.auth.model import UserSession  # noqa: F401
-from modules.features.model import Feature  # noqa: F401
-from modules.permissions.model import Permission  # noqa: F401
-from modules.rbac_association import role_org_unit, role_permission, user_role  # noqa: F401
-from modules.roles.model import Role  # noqa: F401
-from modules.settings.model import Setting  # noqa: F401
-from modules.users.model import User  # noqa: F401
-from modules.contractor.models import Contractor, ContractorDocument  # noqa: F401
-from modules.contractor_rates.models import (  # noqa: F401
-    ContractorRate,
-    ContractorRateAuditLog,
-    ContractorRateVersion,
-    NegotiationAttachment,
-    NegotiationLog,
-)
-from modules.part_master.models import (  # noqa: F401
-    PartMaster,
-    PartMasterAttachment,
-    PartMasterAuditLog,
-    PartMasterVersion,
-)
-from modules.notifications.model import NotificationSetting, NotificationDedupKey  # noqa: F401
-from modules.work_orders.models import (  # noqa: F401
-    WorkOrder,
-    WorkOrderAuditLog,
-    WorkOrderItem,
-    WorkOrderItemProgress,
-)
-from modules.invoices.models import (  # noqa: F401
-    ContractorInvoiceCompliance,
-    Invoice,
-    InvoiceAttachment,
-    InvoiceAuditLog,
-    InvoiceLine,
-    InvoiceValidationIssue,
-)
-
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
-target_metadata = Base.metadata
+
+def _load_target_metadata():
+    cmd_opts = getattr(config, "cmd_opts", None)
+    if not getattr(cmd_opts, "autogenerate", False):
+        # Regular alembic commands such as upgrade/current/history do not need
+        # the full ORM graph loaded just to execute existing migrations.
+        return None
+
+    from db.base import Base
+    from modules.audit.model import AuditLog  # noqa: F401
+    from modules.auth.model import UserSession  # noqa: F401
+    from modules.features.model import Feature  # noqa: F401
+    from modules.permissions.model import Permission  # noqa: F401
+    from modules.rbac_association import role_org_unit, role_permission, user_role  # noqa: F401
+    from modules.roles.model import Role  # noqa: F401
+    from modules.settings.model import Setting  # noqa: F401
+    from modules.users.model import User  # noqa: F401
+    from modules.contractor.models import Contractor, ContractorDocument  # noqa: F401
+    from modules.contractor_rates.models import (  # noqa: F401
+        ContractorRate,
+        ContractorRateAuditLog,
+        ContractorRateVersion,
+        NegotiationAttachment,
+        NegotiationLog,
+    )
+    from modules.part_master.models import (  # noqa: F401
+        PartMaster,
+        PartMasterAttachment,
+        PartMasterAuditLog,
+        PartMasterVersion,
+    )
+    from modules.notifications.model import NotificationSetting, NotificationDedupKey  # noqa: F401
+    from modules.work_orders.models import (  # noqa: F401
+        WorkOrder,
+        WorkOrderAuditLog,
+        WorkOrderItem,
+        WorkOrderItemProgress,
+    )
+    from modules.invoices.models import (  # noqa: F401
+        ContractorInvoiceCompliance,
+        Invoice,
+        InvoiceAttachment,
+        InvoiceAuditLog,
+        InvoiceLine,
+        InvoiceValidationIssue,
+    )
+
+    return Base.metadata
+
+
+target_metadata = _load_target_metadata()
 
 
 def run_migrations_offline() -> None:

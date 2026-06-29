@@ -1,7 +1,8 @@
 import * as React from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
+import { PageBackLink } from "@/components/layout/page-back-link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -158,15 +159,17 @@ export function EmailTemplateEditorPage() {
     <div className="w-full min-w-0 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="space-y-0.5">
+          <PageBackLink
+            to="/admin/email-templates"
+            label={tpl.event_code?.trim() || "Email Templates"}
+            className={tpl.event_code ? "font-mono" : undefined}
+          />
           <h2 className="text-lg font-semibold tracking-tight">Edit template</h2>
           <p className="text-sm text-muted-foreground">
             {tpl.name} · <span className="font-mono">{tpl.event_code}</span>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link to="/admin/email-templates">Back</Link>
-          </Button>
           <Button size="sm" onClick={() => void save()} disabled={!canUpdate}>
             Save
           </Button>
@@ -303,4 +306,3 @@ export function EmailTemplateEditorPage() {
     </div>
   )
 }
-

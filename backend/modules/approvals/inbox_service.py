@@ -27,6 +27,41 @@ def safe_payload_preview(payload: dict[str, Any] | None) -> dict[str, Any]:
     return out
 
 
+def effective_request_status(req: ApprovalRequest | None) -> str:
+    """
+    Read-side status normalizer for partially-updated approval requests.
+
+    Older second-step rejection flows could leave ``approval_requests.status`` at
+    ``pending`` even though a current-cycle approval task had already been rejected.
+    When that happens, treat the request as ``in_rework`` unless it has been
+    resubmitted after that rejection.
+    """
+    if req is None:
+        return "pending"
+    raw = str(req.status or "").strip().lower()
+    if raw != "pending":
+        return raw
+
+    latest_rejected_at: datetime | None = None
+    for task in req.tasks or []:
+        task_type = str(task.task_type or "approval").lower()
+        if task_type != "approval":
+            continue
+        if str(task.status or "").lower() != "rejected":
+            continue
+        acted_at = task.acted_at or task.closed_at or req.created_at
+        if latest_rejected_at is None or acted_at > latest_rejected_at:
+            latest_rejected_at = acted_at
+
+    if latest_rejected_at is None:
+        return raw
+
+    if req.last_resubmitted_at is not None and latest_rejected_at <= req.last_resubmitted_at:
+        return raw
+
+    return "in_rework"
+
+
 def should_show_approval_in_inbox(t: ApprovalTask) -> bool:
     """
     One inbox row per open approval request: only the task for the *current* workflow step.
@@ -42,7 +77,7 @@ def should_show_approval_in_inbox(t: ApprovalTask) -> bool:
         req = t.request
         if req is None or req.created_by is None:
             return False
-        if str(req.status) not in ("rejected", "in_rework"):
+        if effective_request_status(req) not in ("rejected", "in_rework"):
             return False
         return str(t.status) in ("open", "pending")
 
@@ -53,13 +88,14 @@ def should_show_approval_in_inbox(t: ApprovalTask) -> bool:
     if req is None:
         # Defensive: if task is orphaned from its request, treat it like a normal task row.
         return str(t.status) in ("open", "in_progress", "pending")
-    if str(req.status) in ("rejected", "in_rework"):
+    req_status = effective_request_status(req)
+    if req_status in ("rejected", "in_rework"):
         # Submitter sees a single "rework" task to edit / resubmit.
         if req.created_by is None:
             return False
         # Rework task handling is above; suppress everything else.
         return False
-    if str(req.status) != "pending":
+    if req_status != "pending":
         return False
     step = t.step
     if step is None:
@@ -250,6 +286,7 @@ class ApprovalInboxService:
         if req is None:
             raise NotFoundError("ApprovalRequest", request_id)
 
+        req_status = effective_request_status(req)
         wf = req.workflow
         steps = sorted(wf.steps, key=lambda s: s.step_order) if wf is not None else []
         total = len(steps)
@@ -288,6 +325,8 @@ class ApprovalInboxService:
             }
 
         for t in req.tasks:
+            if t.step_id is None:
+                continue
             st = step_rows_by_id.get(int(t.step_id))
             if st is None:
                 continue
@@ -331,7 +370,7 @@ class ApprovalInboxService:
 
         return {
             "request_id": req.id,
-            "request_status": req.status,
+            "request_status": req_status,
             "current_step": int(req.current_step),
             "total_steps": total,
             "pending_approvers": pending_names,

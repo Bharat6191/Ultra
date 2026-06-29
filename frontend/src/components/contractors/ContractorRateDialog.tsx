@@ -429,7 +429,7 @@ export function NegotiationRoundDialog({
         <div className="grid gap-3">
           <div className="rounded-lg border bg-gray-50 p-3 text-xs text-muted-foreground">
             <div className="flex items-center justify-between">
-              <span>Should cost</span>
+              <span>Should Cost</span>
               <span className="font-medium text-foreground">{formatMoney(baseRate)}</span>
             </div>
             <div className="flex items-center justify-between">

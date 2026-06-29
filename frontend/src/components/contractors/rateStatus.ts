@@ -19,7 +19,7 @@ export const CONTRACTOR_RATE_STATUS_OPTIONS: {
   label: string
 }[] = [
   { value: "draft", label: "Draft" },
-  { value: "pending_approval", label: "Pending approval" },
+  { value: "pending_approval", label: "Pending Approval" },
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
   { value: "expired", label: "Expired" },

@@ -1,6 +1,7 @@
 import * as React from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import {
+  Filter,
   Hourglass,
   MessagesSquare,
   Plus,
@@ -11,7 +12,16 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { ListPagination } from "@/components/shared/ListPagination"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson } from "@/lib/api"
 import {
@@ -23,7 +33,6 @@ import {
 import type { ContractorRateStatus } from "@/components/contractors/rateStatus"
 import {
   formatMoney,
-  formatPercent,
   rateStatusLabel,
   rateStatusVariant,
 } from "@/components/contractors/rateStatus"
@@ -75,41 +84,20 @@ type OrgUnitLite = { id: number; name: string; type: string; parent_id: number |
 
 type RateStatusTab = "all" | ContractorRateStatus
 
+const NEGOTIATION_PAGE_SIZE = 20
+
 const RATE_STATUS_TABS: { id: RateStatusTab; label: string }[] = [
   { id: "all", label: "All" },
   { id: "draft", label: "Draft" },
   { id: "pending_approval", label: "Pending Approval" },
   { id: "approved", label: "Approved" },
   { id: "rejected", label: "Rejected" },
+  { id: "cancelled", label: "Cancelled" },
 ]
 
 function rateStatusTabFromQuery(value: string | null): RateStatusTab {
   return RATE_STATUS_TABS.some((tab) => tab.id === value) ? (value as RateStatusTab) : "all"
 }
-
-/** Client-side mirror of cluster → plant expansion for table filters. */
-function plantIdsUnderScope(rows: OrgUnitLite[], scopeId: number): number[] {
-  const root = rows.find((r) => r.id === scopeId)
-  if (!root) return []
-  const t = String(root.type).toUpperCase()
-  if (t === "PLANT") return [scopeId]
-  if (t !== "CLUSTER") return []
-  const out = new Set<number>()
-  const queue = [scopeId]
-  while (queue.length) {
-    const cur = queue.shift()!
-    for (const row of rows) {
-      if (row.parent_id !== cur) continue
-      const rt = String(row.type).toUpperCase()
-      if (rt === "PLANT") out.add(row.id)
-      else if (rt === "CLUSTER") queue.push(row.id)
-    }
-  }
-  return [...out]
-}
-
-const SELECT_CLASS =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
 
 export function NegotiatedRatesPage() {
   const navigate = useNavigate()
@@ -118,35 +106,47 @@ export function NegotiatedRatesPage() {
   const [summary, setSummary] = React.useState<Summary | null>(null)
   const [orgScopes, setOrgScopes] = React.useState<OrgUnitLite[]>([])
   const [error, setError] = React.useState<string | null>(null)
-  const [loading, setLoading] = React.useState(true)
+  const [page, setPage] = React.useState(0)
 
-  const [search, setSearch] = React.useState("")
+  const [search, setSearch] = React.useState(() => searchParams.get("q") ?? "")
   const [statusTab, setStatusTab] = React.useState<RateStatusTab>(() => rateStatusTabFromQuery(searchParams.get("status")))
-  const [plantFilter, setPlantFilter] = React.useState<string>("all")
+  const [scopeFilter, setScopeFilter] = React.useState<string>(() => searchParams.get("plant_id") ?? "all")
 
   const canView = canReadNegotiatedRates()
   const canCreate = hasPermission("contractor_rates.create") || isSuperuser()
 
   React.useEffect(() => {
     if (!canView) return
-    void load()
+    void load(scopeFilter)
+  }, [canView, scopeFilter])
+
+  React.useEffect(() => {
+    if (!canView) return
     if (canListOrgUnitsForAssignments()) void loadOrgScopes()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [canView])
 
   React.useEffect(() => {
     const next = new URLSearchParams()
     if (statusTab !== "all") next.set("status", statusTab)
+    if (search.trim()) next.set("q", search.trim())
+    if (scopeFilter !== "all") next.set("plant_id", scopeFilter)
     setSearchParams(next, { replace: true })
-  }, [setSearchParams, statusTab])
+  }, [scopeFilter, search, setSearchParams, statusTab])
 
-  async function load() {
-    setLoading(true)
+  React.useEffect(() => {
+    setPage(0)
+  }, [search, scopeFilter, statusTab])
+
+  async function load(scopeId: string) {
     setError(null)
     try {
+      const params = new URLSearchParams()
+      if (scopeId !== "all") params.set("org_unit_id", scopeId)
+      const queryString = params.toString()
+      const query = queryString ? `?${queryString}` : ""
       const [list, sum] = await Promise.all([
-        getJson<ContractorRatePublic[]>("/contractor-rates"),
-        getJson<Summary>("/contractor-rates/summary"),
+        getJson<ContractorRatePublic[]>(`/contractor-rates${query}`),
+        getJson<Summary>(`/contractor-rates/summary${query}`),
       ])
       setRows(list)
       setSummary(sum)
@@ -154,8 +154,6 @@ export function NegotiatedRatesPage() {
       setError(e instanceof Error ? e.message : "Failed to load negotiations")
       setRows([])
       setSummary(null)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -171,26 +169,11 @@ export function NegotiatedRatesPage() {
     }
   }
 
-  const statusCounts = React.useMemo(() => {
-    const m = new Map<string, number>()
-    if (!rows) return m
-    for (const r of rows) {
-      const k = String(r.status ?? "")
-      m.set(k, (m.get(k) ?? 0) + 1)
-    }
-    return m
-  }, [rows])
-
   const filtered = React.useMemo(() => {
     if (!rows) return []
     const q = search.trim().toLowerCase()
     return rows.filter((r) => {
       if (statusTab !== "all" && r.status !== statusTab) return false
-      if (plantFilter !== "all") {
-        const sid = Number(plantFilter)
-        const allowed = new Set(plantIdsUnderScope(orgScopes, sid))
-        if (!allowed.has(Number(r.org_unit_id ?? 0))) return false
-      }
       if (q) {
         const hay = [
           r.contractor_name ?? "",
@@ -205,7 +188,37 @@ export function NegotiatedRatesPage() {
       }
       return true
     })
-  }, [rows, search, statusTab, plantFilter, orgScopes])
+  }, [rows, search, statusTab])
+
+  const totalRows = filtered.length
+  const pageCount = Math.max(1, Math.ceil(totalRows / NEGOTIATION_PAGE_SIZE))
+  const pageSafe = Math.min(page, pageCount - 1)
+  const paginatedRows = React.useMemo(
+    () =>
+      filtered.slice(
+        pageSafe * NEGOTIATION_PAGE_SIZE,
+        pageSafe * NEGOTIATION_PAGE_SIZE + NEGOTIATION_PAGE_SIZE,
+      ),
+    [filtered, pageSafe],
+  )
+
+  const activeFilterCount = (statusTab !== "all" ? 1 : 0) + (scopeFilter !== "all" ? 1 : 0) + (search.trim() ? 1 : 0)
+
+  const clusters = React.useMemo(
+    () =>
+      orgScopes
+        .filter((o) => String(o.type).toUpperCase() === "CLUSTER")
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [orgScopes],
+  )
+
+  const plants = React.useMemo(
+    () =>
+      orgScopes
+        .filter((o) => String(o.type).toUpperCase() === "PLANT")
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [orgScopes],
+  )
 
   if (!canView) {
     return (
@@ -275,48 +288,109 @@ export function NegotiatedRatesPage() {
         </Alert>
       ) : null}
 
-      {/* Refine by plant / text (lifecycle uses tabs on the table card). */}
-      <Card>
-        <CardHeader className="pb-2">
-          {/* <CardTitle className="text-sm font-medium">Refine List</CardTitle> */}
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-2">
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Card className="rounded-2xl">
+        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 opacity-60" aria-hidden />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search contractor, part, plant…"
-              className="pl-8"
+              placeholder="Search by contractor, part, plant or owner…"
+              className="pl-9"
             />
           </div>
-          <select
-            className={SELECT_CLASS}
-            value={plantFilter}
-            onChange={(e) => setPlantFilter(e.target.value)}
-          >
-            <option value="all">All Plants & Clusters</option>
-            <optgroup label="Clusters">
-              {orgScopes
-                .filter((o) => String(o.type).toUpperCase() === "CLUSTER")
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </option>
+          <div className="flex flex-wrap items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Filter className="mr-2 size-4 opacity-70" aria-hidden />
+                  Status
+                  {statusTab !== "all" ? (
+                    <span className="ml-2 rounded-md bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
+                      1
+                    </span>
+                  ) : null}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {RATE_STATUS_TABS.map((option) => (
+                  <DropdownMenuCheckboxItem
+                    key={option.id}
+                    checked={statusTab === option.id}
+                    onCheckedChange={() => setStatusTab(option.id)}
+                  >
+                    {option.label}
+                  </DropdownMenuCheckboxItem>
                 ))}
-            </optgroup>
-            <optgroup label="Plants">
-              {orgScopes
-                .filter((o) => String(o.type).toUpperCase() === "PLANT")
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((p) => (
-                  <option key={p.id} value={String(p.id)}>
-                    {p.name}
-                  </option>
-                ))}
-            </optgroup>
-          </select>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Plant
+                  {scopeFilter !== "all" ? (
+                    <span className="ml-2 rounded-md bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
+                      1
+                    </span>
+                  ) : null}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="max-h-64 w-56 overflow-auto">
+                <DropdownMenuLabel>Scope</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem checked={scopeFilter === "all"} onCheckedChange={() => setScopeFilter("all")}>
+                  All Plants & Clusters
+                </DropdownMenuCheckboxItem>
+                {clusters.length > 0 ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Clusters</DropdownMenuLabel>
+                    {clusters.map((cluster) => (
+                      <DropdownMenuCheckboxItem
+                        key={cluster.id}
+                        checked={scopeFilter === String(cluster.id)}
+                        onCheckedChange={() => setScopeFilter(String(cluster.id))}
+                      >
+                        {cluster.name}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </>
+                ) : null}
+                {plants.length > 0 ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Plants</DropdownMenuLabel>
+                    {plants.map((plant) => (
+                      <DropdownMenuCheckboxItem
+                        key={plant.id}
+                        checked={scopeFilter === String(plant.id)}
+                        onCheckedChange={() => setScopeFilter(String(plant.id))}
+                      >
+                        {plant.name}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {activeFilterCount > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearch("")
+                  setStatusTab("all")
+                  setScopeFilter("all")
+                }}
+              >
+                Clear
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -324,35 +398,6 @@ export function NegotiatedRatesPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Negotiations</CardTitle>
-          {/* <CardDescription>
-            Pick a lifecycle tab to focus the table; search and plant filters still apply on top of the tab.
-          </CardDescription> */}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {RATE_STATUS_TABS.map((t) => {
-              const n = t.id === "all" ? (rows?.length ?? 0) : (statusCounts.get(t.id) ?? 0)
-              return (
-                <Button
-                  key={t.id}
-                  type="button"
-                  size="sm"
-                  variant={statusTab === t.id ? "default" : "outline"}
-                  className="h-8"
-                  onClick={() => setStatusTab(t.id)}
-                >
-                  {t.label}
-                  <span
-                    className={
-                      statusTab === t.id
-                        ? "ml-1.5 tabular-nums text-primary-foreground/85"
-                        : "ml-1.5 tabular-nums text-muted-foreground"
-                    }
-                  >
-                    {loading ? "(...)" : `(${n})`}
-                  </span>
-                </Button>
-              )
-            })}
-          </div>
         </CardHeader>
         <CardContent className="p-0 border-t">
           <Table>
@@ -382,50 +427,34 @@ export function NegotiatedRatesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((r) => (
+                paginatedRows.map((r) => (
                   <TableRow
                     key={r.id}
                     className="cursor-pointer"
                     onClick={() => navigate(`/dashboard/negotiated-rates/${r.id}`)}
                   >
                     <TableCell>
-                      <div className="font-medium text-foreground">
+                      <div className="truncate font-medium text-foreground" title={r.contractor_name ?? `Contractor ${r.contractor_id}`}>
                         {r.contractor_name ?? `Contractor #${r.contractor_id}`}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Round {r.current_round}
-                        {r.created_by_name ? ` · by ${r.created_by_name}` : ""}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-mono text-xs font-medium text-foreground">{r.part_code ?? "—"}</div>
-                      <div className="text-xs text-muted-foreground">{r.part_name ?? "—"}</div>
-                      <div className="text-[11px] capitalize text-muted-foreground">
-                        {(r.pricing_method ?? "").replace(/_/g, " ") || "—"} · {r.unit_type ?? "—"}
+                      <div className="truncate font-mono text-xs font-medium text-foreground" title={r.part_code ?? "—"}>
+                        {r.part_code ?? "—"}
                       </div>
                     </TableCell>
-                    <TableCell>{r.org_unit_name ?? "—"}</TableCell>
+                    <TableCell className="truncate" title={r.org_unit_name ?? "—"}>{r.org_unit_name ?? "—"}</TableCell>
                     <TableCell className="text-right font-medium">
                       {formatMoney(r.negotiated_rate)}
                     </TableCell>
                     <TableCell className="text-right">
                       {r.savings_amount !== null ? (
-                        <div>
-                          <div className="font-medium">{formatMoney(r.savings_amount)}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {formatPercent(r.savings_percentage)}
-                          </div>
-                        </div>
+                        <div className="font-medium">{formatMoney(r.savings_amount)}</div>
                       ) : (
                         "—"
                       )}
                     </TableCell>
-                    <TableCell className="text-xs">
-                      <div>{r.effective_from}</div>
-                      <div className="text-muted-foreground">
-                        {r.effective_to ? `→ ${r.effective_to}` : "→ open"}
-                      </div>
-                    </TableCell>
+                    <TableCell className="text-xs">{r.effective_from}</TableCell>
                     <TableCell>
                       <Badge variant={rateStatusVariant(r.status)}>
                         {rateStatusLabel(r.status)}
@@ -443,6 +472,15 @@ export function NegotiatedRatesPage() {
               )}
             </TableBody>
           </Table>
+          {totalRows > 0 ? (
+            <ListPagination
+              page={pageSafe}
+              pageSize={NEGOTIATION_PAGE_SIZE}
+              total={totalRows}
+              loading={rows === null}
+              onPageChange={setPage}
+            />
+          ) : null}
         </CardContent>
       </Card>
 

@@ -20,6 +20,59 @@ from modules.org_units.model import OrgUnit
 from modules.users.model import User
 
 
+FIELD_LABELS: dict[str, str] = {
+    "action": "Action",
+    "address": "Address",
+    "alternate_email": "Alternate Email",
+    "alternate_phone": "Alternate Phone",
+    "approval_request_id": "Approval Request ID",
+    "city": "City",
+    "cin": "CIN",
+    "contact_person": "Contact Person",
+    "contact_person_title": "Contact Person Title",
+    "contractor_code": "Contractor Code",
+    "contractor_type": "Contractor Type",
+    "country": "Country",
+    "current_step": "Current Step",
+    "document_name": "Document",
+    "document_type": "Document Type",
+    "email": "Email",
+    "end_date": "End Date",
+    "entity_type": "Entity Type",
+    "gst_number": "GST Number",
+    "gstin": "GSTIN",
+    "is_active": "Active",
+    "legal_name": "Legal Name",
+    "name": "Contractor Name",
+    "notes": "Notes",
+    "org_unit_id": "Org Unit ID",
+    "org_unit_name": "Plant / Org Unit",
+    "pan": "PAN",
+    "pan_number": "PAN Number",
+    "phone": "Phone",
+    "postal_code": "Postal Code",
+    "registration_number": "Registration Number",
+    "request_id": "Request ID",
+    "role": "Role",
+    "start_date": "Start Date",
+    "state": "State",
+    "status": "Status",
+    "task_id": "Task ID",
+    "trade_name": "Trade Name",
+    "website": "Website",
+}
+
+WORD_OVERRIDES: dict[str, str] = {
+    "cin": "CIN",
+    "gstin": "GSTIN",
+    "id": "ID",
+    "pan": "PAN",
+    "po": "PO",
+    "uom": "UOM",
+    "wo": "WO",
+}
+
+
 def _user_label(db: Session, user_id: int | None) -> str | None:
     if user_id is None:
         return None
@@ -31,18 +84,18 @@ def _user_label(db: Session, user_id: int | None) -> str | None:
 
 def _action_title(action: str) -> str:
     mapping = {
-        "CREATED": "Contractor created",
-        "UPDATED": "Profile updated",
-        "STATUS_CHANGED": "Status changed",
-        "DOCUMENT_UPLOADED": "Document uploaded",
-        "DOCUMENT_UPDATED": "Document updated",
-        "DOCUMENT_VERIFIED": "Document verified",
-        "DOCUMENT_REJECTED": "Document rejected",
-        "DOCUMENT_DELETED": "Document removed",
-        "PLANT_MAPPING_ADDED": "Plant mapping added",
-        "PLANT_MAPPING_REMOVED": "Plant mapping removed",
-        "PLANT_MAPPING_UPDATED": "Plant mapping updated",
-        "COMPLIANCE_FLAGGED": "Compliance state changed",
+        "CREATED": "Contractor Created",
+        "UPDATED": "Profile Updated",
+        "STATUS_CHANGED": "Status Changed",
+        "DOCUMENT_UPLOADED": "Document Uploaded",
+        "DOCUMENT_UPDATED": "Document Updated",
+        "DOCUMENT_VERIFIED": "Document Verified",
+        "DOCUMENT_REJECTED": "Document Rejected",
+        "DOCUMENT_DELETED": "Document Deleted",
+        "PLANT_MAPPING_ADDED": "Plant Mapping Added",
+        "PLANT_MAPPING_REMOVED": "Plant Mapping Removed",
+        "PLANT_MAPPING_UPDATED": "Plant Mapping Updated",
+        "COMPLIANCE_FLAGGED": "Compliance State Changed",
     }
     return mapping.get(action, action.replace("_", " ").title())
 
@@ -67,6 +120,14 @@ def _org_unit_label(db: Session, row: ContractorAuditLog) -> str | None:
             return str(org.name)
         return f"Org unit #{org_id}"
     return None
+
+
+def _field_label(key: str) -> str:
+    label = FIELD_LABELS.get(key)
+    if label:
+        return label
+    words = [WORD_OVERRIDES.get(part.lower(), part.capitalize()) for part in key.split("_") if part]
+    return " ".join(words) if words else key
 
 
 class ContractorTimelineService:
@@ -188,17 +249,17 @@ def _describe_audit(db: Session, row: ContractorAuditLog) -> str | None:
         if new:
             return f"Status set to {new}."
     if row.action == "UPDATED" and isinstance(row.new_value, dict):
-        keys = sorted(row.new_value.keys())
-        if keys:
-            return f"Updated fields: {', '.join(keys)}."
+        labels = [_field_label(key) for key in sorted(row.new_value.keys())]
+        if labels:
+            return f"Updated fields: {', '.join(labels)}."
     if row.action == "DOCUMENT_UPLOADED" and isinstance(row.new_value, dict):
         name = row.new_value.get("document_name") or row.new_value.get("document_type")
         if name:
             return f"Uploaded document: {name}."
     if row.action == "DOCUMENT_UPDATED" and isinstance(row.new_value, dict):
-        keys = sorted(row.new_value.keys())
-        if keys:
-            return f"Updated document fields: {', '.join(keys)}."
+        labels = [_field_label(key) for key in sorted(row.new_value.keys())]
+        if labels:
+            return f"Updated document fields: {', '.join(labels)}."
     if row.action.startswith("PLANT_MAPPING_"):
         org_name = _org_unit_label(db, row)
         if org_name:

@@ -1,10 +1,8 @@
 import * as React from "react"
 import {
-  ArrowLeft,
   BadgeCheck,
   BriefcaseBusiness,
   Building2,
-  ChevronRight,
   ClipboardList,
   Clock3,
   Mail,
@@ -17,7 +15,7 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
-import { CollapsibleAuditList } from "@/components/shared/collapsible-audit-list"
+import { PageBackLink } from "@/components/layout/page-back-link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -91,11 +89,30 @@ function humanizeLabel(value: string): string {
     .join(" ")
 }
 
+function getRoleIdsFromAuditValue(value: unknown): number[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return []
+  const roleIds = (value as { role_ids?: unknown }).role_ids
+  return Array.isArray(roleIds)
+    ? roleIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+    : []
+}
+
+function getRoleNamesFromAuditValue(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return []
+  const roleNames = (value as { role_names?: unknown }).role_names
+  return Array.isArray(roleNames) ? roleNames.filter((name): name is string => typeof name === "string" && name.trim() !== "") : []
+}
+
 function getRoleNamesFromEvent(event: TimelineEvent): string[] {
-  const nextValue = event.details?.new_value
-  if (!nextValue || typeof nextValue !== "object" || Array.isArray(nextValue)) return []
-  const roleNames = (nextValue as { role_names?: unknown }).role_names
-  return Array.isArray(roleNames) ? roleNames.filter((name): name is string => typeof name === "string") : []
+  return getRoleNamesFromAuditValue(event.details?.new_value)
+}
+
+function getOldRoleIdsFromEvent(event: TimelineEvent): number[] {
+  return getRoleIdsFromAuditValue(event.details?.old_value)
+}
+
+function getNewRoleIdsFromEvent(event: TimelineEvent): number[] {
+  return getRoleIdsFromAuditValue(event.details?.new_value)
 }
 
 function getChangeEntriesFromEvent(
@@ -111,8 +128,33 @@ function getEventComment(event: TimelineEvent): string | null {
   return typeof value === "string" && value.trim() ? value : null
 }
 
+function rbacAuditActionLabel(event: TimelineEvent): string {
+  const oldRoleIds = getOldRoleIdsFromEvent(event)
+  const newRoleIds = getNewRoleIdsFromEvent(event)
+  const action = String(event.action ?? "").trim().toLowerCase()
+
+  if (newRoleIds.length === 0 && oldRoleIds.length > 0) return "Roles Removed"
+  if (oldRoleIds.length === 0 && newRoleIds.length > 0) return "Roles Assigned"
+  if (action === "assign" && newRoleIds.length > oldRoleIds.length) return "Role Added"
+  return "Roles Updated"
+}
+
+function rbacAuditSummary(event: TimelineEvent): string {
+  const roles = getRoleNamesFromEvent(event)
+  const oldRoleIds = getOldRoleIdsFromEvent(event)
+  const newRoleIds = getNewRoleIdsFromEvent(event)
+
+  if (newRoleIds.length === 0 && oldRoleIds.length > 0) return "All assigned roles were removed"
+  if (roles.length === 0) return "User role access was updated"
+  if (oldRoleIds.length === 0 && newRoleIds.length > 0) return `Assigned roles: ${roles.join(", ")}`
+  if (String(event.action ?? "").trim().toLowerCase() === "assign" && newRoleIds.length > oldRoleIds.length) {
+    return `Current roles: ${roles.join(", ")}`
+  }
+  return `Updated roles: ${roles.join(", ")}`
+}
+
 function auditEventTitle(event: TimelineEvent): string {
-  return event.type === "rbac_audit" ? "RBAC" : humanizeLabel(event.type)
+  return event.type === "rbac_audit" ? "User Access" : humanizeLabel(event.type)
 }
 
 function auditEventAction(event: TimelineEvent): string {
@@ -124,7 +166,7 @@ function auditEventAction(event: TimelineEvent): string {
   }
   if (event.type === "entity_updated") return "Updated"
   if (event.type === "created") return "Created"
-  if (event.type === "rbac_audit") return humanizeLabel(String(event.action ?? "change"))
+  if (event.type === "rbac_audit") return rbacAuditActionLabel(event)
   return auditEventTitle(event)
 }
 
@@ -147,9 +189,7 @@ function auditEventSummary(event: TimelineEvent): string {
   }
 
   if (event.type === "rbac_audit") {
-    const roles = getRoleNamesFromEvent(event)
-    if (roles.length > 0) return `Roles: ${roles.join(", ")}`
-    return event.user ? `Changed by ${event.user}` : "Role or assignment updated"
+    return rbacAuditSummary(event)
   }
 
   if (event.type === "entity_updated") {
@@ -286,6 +326,11 @@ export function UserViewPage() {
     return [...entries].sort((a, b) => eventTimeMs(b) - eventTimeMs(a))
   }, [timeline])
   const recentAuditRows = React.useMemo(() => sortedTimeline.slice(0, 4), [sortedTimeline])
+  const visibleAuditRows = React.useMemo(
+    () => (showFullAudit ? sortedTimeline : recentAuditRows),
+    [recentAuditRows, showFullAudit, sortedTimeline],
+  )
+  const hasMoreAuditRows = sortedTimeline.length > recentAuditRows.length
 
   const canHardDelete = isSuperuser() && meId !== null && user !== null && user.id !== meId
 
@@ -411,15 +456,10 @@ export function UserViewPage() {
       <div className="w-full space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-1">
+            <PageBackLink to=".." label="Users" />
             <h2 className="text-lg font-semibold tracking-tight text-zinc-950">User Details</h2>
             <p className="text-sm text-muted-foreground">Loading…</p>
           </div>
-          <Button asChild variant="outline" size="sm">
-            <Link to=".." className="inline-flex items-center gap-2">
-              <ArrowLeft className="size-4" />
-              Back
-            </Link>
-          </Button>
         </div>
       </div>
     )
@@ -445,28 +485,18 @@ export function UserViewPage() {
   return (
     <div className="w-full space-y-6">
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-zinc-500">
-          <Link to="/dashboard/users" className="transition-colors hover:text-zinc-900">
-            Users
-          </Link>
-          <ChevronRight className="size-3.5" />
-          <span className="text-zinc-900">User Details</span>
-        </div>
-
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="space-y-1">
+            <PageBackLink
+              to="/dashboard/users"
+              label={user?.username?.trim() || "Users"}
+              className={user?.username ? "font-mono" : undefined}
+            />
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">User Details</h1>
             {/* <p className="text-sm text-muted-foreground">View user profile and assignment information.</p> */}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link to=".." className="inline-flex items-center gap-2">
-                <ArrowLeft className="size-4" />
-                Back
-              </Link>
-            </Button>
-
             {user && canUpdate && user.is_active && !user.is_superuser ? (
               <Button
                 type="button"
@@ -615,7 +645,7 @@ export function UserViewPage() {
               </dl>
             </SectionCard>
 
-            <SectionCard title="Activity Details" icon={<Clock3 className="size-4" />}>
+            {/* <SectionCard title="Activity Details" icon={<Clock3 className="size-4" />}>
               <dl>
                 <DetailRow
                   label="Status"
@@ -640,18 +670,18 @@ export function UserViewPage() {
                   value={user.mfa_setup_completed ? "Setup complete" : mfaEnabled ? "Pending setup" : "Not required"}
                 />
               </dl>
-            </SectionCard>
+            </SectionCard> */}
 
             <SectionCard
               title="Audit Log (Summary)"
               icon={<ClipboardList className="size-4" />}
-              className="xl:col-span-2"
+              className="xl:col-span-3"
             >
               {!canViewAudit ? (
                 <p className="text-sm text-muted-foreground">
                   Missing permission: <span className="font-mono">approval.view</span>
                 </p>
-              ) : recentAuditRows.length === 0 ? (
+              ) : visibleAuditRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No audit events found.</p>
               ) : (
                 <>
@@ -666,7 +696,7 @@ export function UserViewPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {recentAuditRows.map((event, index) => (
+                        {visibleAuditRows.map((event, index) => (
                           <TableRow key={`${event.type}-${event.timestamp ?? index}-${index}`} className="hover:bg-zinc-50/50">
                             <TableCell className="text-sm text-zinc-600">
                               {event.timestamp ? formatDateTime(event.timestamp) : event.action === "pending" ? "Now" : "—"}
@@ -682,93 +712,17 @@ export function UserViewPage() {
                     </Table>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs text-muted-foreground">
-                      Showing {recentAuditRows.length} of {sortedTimeline.length} audit events.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-auto rounded-full px-0 text-sm font-semibold text-emerald-700 hover:bg-transparent hover:text-emerald-800"
-                      onClick={() => setShowFullAudit((current) => !current)}
-                    >
-                      {showFullAudit ? "Hide Full Audit Log" : "View Full Audit Log"}
-                    </Button>
-                  </div>
-
-                  {showFullAudit ? (
-                    <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50/60 p-4">
-                      <CollapsibleAuditList
-                        items={sortedTimeline}
-                        initialVisibleCount={3}
-                        className="space-y-3 text-sm"
-                        renderItem={(event, index) => (
-                          <div
-                            key={`${event.type}-${event.timestamp ?? index}-detail-${index}`}
-                            className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm"
-                          >
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="font-medium capitalize text-zinc-950">{auditEventTitle(event)}</div>
-                                {event.type === "created" ? (
-                                  <p className="mt-1 text-xs text-muted-foreground">By {event.user ?? "—"}</p>
-                                ) : null}
-                              </div>
-                              <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-600">
-                                {event.timestamp ? formatDateTime(event.timestamp) : event.action === "pending" ? "Now" : "—"}
-                              </span>
-                            </div>
-
-                            {event.type === "rbac_audit" ? (
-                              <>
-                                <p className="mt-2 text-xs text-muted-foreground">
-                                  {String(event.action ?? "change")}
-                                  {event.user ? ` · by ${event.user}` : ""}
-                                </p>
-                                {getRoleNamesFromEvent(event).length > 0 ? (
-                                  <p className="mt-0.5 text-xs text-muted-foreground">
-                                    Roles: {getRoleNamesFromEvent(event).join(", ")}
-                                  </p>
-                                ) : null}
-                              </>
-                            ) : null}
-
-                            {event.type === "approval_step" && event.action && event.action !== "pending" ? (
-                              <p className="mt-2 text-xs text-muted-foreground">
-                                Step {event.step ?? "—"} · {event.action} by {event.user ?? "—"}
-                              </p>
-                            ) : null}
-
-                            {getEventComment(event) ? (
-                              <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">
-                                Note: {getEventComment(event)}
-                              </p>
-                            ) : null}
-
-                            {event.type === "approval_step" && event.action === "pending" ? (
-                              <p className="mt-2 text-xs text-muted-foreground">
-                                Awaiting: {(event.assigned_to ?? []).join(", ") || "—"}
-                                {event.details?.role ? ` · Role: ${String(event.details.role)}` : ""}
-                              </p>
-                            ) : null}
-
-                            {event.type === "entity_updated" && getChangeEntriesFromEvent(event).length > 0 ? (
-                              <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                                <ul className="space-y-1">
-                                  {getChangeEntriesFromEvent(event).map(([key, value]) => (
-                                    <li key={key}>
-                                      <span className="font-medium">{humanizeLabel(key)}</span>: {String(value.from ?? "—")}
-                                      {" -> "}
-                                      {String(value.to ?? "—")}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ) : null}
-                          </div>
-                        )}
-                      />
+                  {hasMoreAuditRows ? (
+                    <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto rounded-full px-0 text-sm font-semibold text-emerald-700 hover:bg-transparent hover:text-emerald-800"
+                        onClick={() => setShowFullAudit((current) => !current)}
+                      >
+                        {showFullAudit ? "Hide Full Audit Log" : "View Full Audit Log"}
+                      </Button>
                     </div>
                   ) : null}
                 </>

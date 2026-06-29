@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from modules.approvals.assignment_service import get_workflow_for_action
@@ -246,6 +246,7 @@ class WorkOrderService:
         *,
         org_unit_id: int | None = None,
         contractor_id: int | None = None,
+        search: str | None = None,
         status: str | None = None,
         statuses: list[str] | None = None,
         active: bool | None = True,
@@ -260,6 +261,16 @@ class WorkOrderService:
             stmt = stmt.where(WorkOrder.org_unit_id.in_(plant_ids))
         if contractor_id is not None:
             stmt = stmt.where(WorkOrder.contractor_id == int(contractor_id))
+        if search:
+            needle = search.strip()
+            if needle:
+                like = f"%{needle}%"
+                stmt = stmt.where(
+                    or_(
+                        WorkOrder.work_order_number.ilike(like),
+                        WorkOrder.title.ilike(like),
+                    )
+                )
         if statuses:
             normalized = [s.strip().lower() for s in statuses if s and str(s).strip()]
             if normalized:
@@ -273,6 +284,7 @@ class WorkOrderService:
         *,
         org_unit_id: int | None = None,
         contractor_id: int | None = None,
+        search: str | None = None,
         status: str | None = None,
         statuses: list[str] | None = None,
         active: bool | None = True,
@@ -282,6 +294,7 @@ class WorkOrderService:
             stmt,
             org_unit_id=org_unit_id,
             contractor_id=contractor_id,
+            search=search,
             status=status,
             statuses=statuses,
             active=active,
@@ -295,6 +308,7 @@ class WorkOrderService:
         *,
         org_unit_id: int | None = None,
         contractor_id: int | None = None,
+        search: str | None = None,
         status: str | None = None,
         statuses: list[str] | None = None,
         active: bool | None = True,
@@ -306,6 +320,7 @@ class WorkOrderService:
             stmt,
             org_unit_id=org_unit_id,
             contractor_id=contractor_id,
+            search=search,
             status=status,
             statuses=statuses,
             active=active,
@@ -925,7 +940,14 @@ class WorkOrderService:
 
     # ---- approval finalize hooks ----
 
-    def finalize_approval(self, work_order_id: int, *, approver_user_id: int | None, approval_request_id: int | None) -> WorkOrder:
+    def finalize_approval(
+        self,
+        work_order_id: int,
+        *,
+        approver_user_id: int | None,
+        approval_request_id: int | None,
+        commit: bool = True,
+    ) -> WorkOrder:
         wo = self.get(work_order_id)
         if wo.status != "pending_approval":
             return wo
@@ -952,10 +974,19 @@ class WorkOrderService:
             actor_user_id=approver_user_id,
             new_value={"status": "active"},
         )
-        self._db.commit()
+        if commit:
+            self._db.commit()
         return self.get(int(wo.id))
 
-    def finalize_rejection(self, work_order_id: int, *, rejector_user_id: int | None, approval_request_id: int | None, comment: str | None) -> WorkOrder:
+    def finalize_rejection(
+        self,
+        work_order_id: int,
+        *,
+        rejector_user_id: int | None,
+        approval_request_id: int | None,
+        comment: str | None,
+        commit: bool = True,
+    ) -> WorkOrder:
         wo = self.get(work_order_id)
         if wo.status != "pending_approval":
             return wo
@@ -971,7 +1002,8 @@ class WorkOrderService:
             new_value={"status": "rejected"},
             metadata={"approval_request_id": approval_request_id, "comment": comment, "via": "approval_rejected"},
         )
-        self._db.commit()
+        if commit:
+            self._db.commit()
         return self.get(int(wo.id))
 
     # ---- completion tracking ----

@@ -83,6 +83,14 @@ class PartMasterService:
                     "An active part master already exists for this part code and plant in the requested date range."
                 )
 
+    def _ensure_unique_part_code(self, *, part_code: str, exclude_id: int | None = None) -> None:
+        stmt = select(PartMaster.id).where(PartMaster.part_code == part_code.strip().upper())
+        if exclude_id is not None:
+            stmt = stmt.where(PartMaster.id != int(exclude_id))
+        existing_id = self._db.scalar(stmt.limit(1))
+        if existing_id is not None:
+            raise ConflictError("Part Code already exists. Please enter a unique Part Code.")
+
     def _public_dict(self, row: PartMaster) -> dict[str, Any]:
         org = self._db.get(OrgUnit, int(row.org_unit_id)) if row.org_unit_id else None
         return {
@@ -180,6 +188,7 @@ class PartMasterService:
         self._ensure_plant(int(payload.org_unit_id))
         self._validate_dates(payload.effective_from, payload.effective_to)
         code = payload.part_code.strip().upper()
+        self._ensure_unique_part_code(part_code=code)
 
         superseded_ids: list[int] = []
         if payload.is_active:
@@ -295,12 +304,15 @@ class PartMasterService:
         upd = payload.model_dump(exclude_unset=True)
         superseded_ids: list[int] = []
         activation_change: str | None = None
+        original_part_code = str(row.part_code).strip().upper()
 
         if "org_unit_id" in upd and upd["org_unit_id"] is not None:
             self._ensure_plant(int(upd["org_unit_id"]))
             row.org_unit_id = int(upd["org_unit_id"])
         if "part_code" in upd and upd["part_code"] is not None:
             row.part_code = str(upd["part_code"]).strip().upper()
+            if row.part_code != original_part_code:
+                self._ensure_unique_part_code(part_code=row.part_code, exclude_id=int(row.id))
 
         if "part_name" in upd and upd["part_name"] is not None:
             row.part_name = str(upd["part_name"]).strip()

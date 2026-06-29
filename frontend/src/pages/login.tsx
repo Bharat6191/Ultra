@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { getJson, postJson } from "@/lib/api"
+import { ApiError, getJson, postJson } from "@/lib/api"
 import { APP_PAGE_BACKGROUND_STYLE } from "@/lib/appearance"
 import { persistAuthFromMe } from "@/lib/permissions"
 import { resetSessionLastActivity } from "@/lib/session-timeout"
@@ -46,6 +46,10 @@ type PublicAuthPolicy = {
 
 const AUTH_POWERED_BY = "Powered by TiMAD"
 const AUTH_APP_VERSION = "V 0.0.0.0"
+
+function isInvalidCredentialsError(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.status === 401 && err.message.trim().toLowerCase() === "invalid credentials"
+}
 
 export type LoginPageProps = {
   onLoggedIn?: (tokens: { accessToken: string; refreshToken?: string }) => void
@@ -135,6 +139,10 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
       const message = e instanceof Error ? e.message : "Login failed"
       setServerError(message)
       toast.error(message, { id: "login" })
+      if (isInvalidCredentialsError(e)) {
+        form.reset({ email: "", password: "" })
+        setShowPassword(false)
+      }
     }
   }
 

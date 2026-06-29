@@ -2,14 +2,13 @@ import * as React from "react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { InvoiceLinesTableCard } from "@/components/invoices/invoice-lines-table"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ApiError, getJson } from "@/lib/api"
 import {
   invoiceDisplayStatus,
   invoiceDisplayStatusBadgeVariant,
   invoiceDisplayStatusLabel,
-  invoiceLineValidationDisplay,
 } from "@/lib/invoice-validation-display"
 
 type InvoiceIssue = {
@@ -68,6 +67,8 @@ type InvoiceTaskReviewRow = {
 }
 
 const HIDDEN_VALIDATION_ISSUE_CODES = new Set(["QTY_EXCEEDS_COMPLETION", "CUMULATIVE_QTY_EXCEEDS_ALLOWED"])
+const DUPLICATE_BLOCK_REASON_CHILD_CODE = "LINE_VALUE_EXCEEDS_APPROVED"
+const DUPLICATE_BLOCK_REASON_PARENT_CODE = "WO_INVOICE_TOTAL_EXCEEDED"
 
 function parseNumber(v: number | string | null | undefined): number {
   if (typeof v === "number") return v
@@ -79,12 +80,6 @@ function formatMoney(v: number | string | null | undefined): string {
   const n = parseNumber(v)
   if (!Number.isFinite(n)) return "—"
   return `₹${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-function formatQty(v: number | string | null | undefined): string {
-  const n = parseNumber(v)
-  if (!Number.isFinite(n)) return "—"
-  return n.toLocaleString(undefined, { maximumFractionDigits: 3 })
 }
 
 function formatWhen(v: string | null | undefined): string {
@@ -113,6 +108,36 @@ function issueAllowedActual(issue: InvoiceIssue): string | null {
   return `Allowed ${String(allowed ?? "—")} · Actual ${String(actual ?? "—")}`
 }
 
+function formatIssueCode(code: string | null | undefined): string {
+  const raw = String(code ?? "").trim()
+  return raw ? raw.replace(/_/g, " ") : "—"
+}
+
+function dedupeVisibleIssues(issues: InvoiceIssue[]): InvoiceIssue[] {
+  const hasInvoiceTotalExceeded = issues.some(
+    (issue) => String(issue.code ?? "").trim().toUpperCase() === DUPLICATE_BLOCK_REASON_PARENT_CODE,
+  )
+  const seen = new Set<string>()
+  const out: InvoiceIssue[] = []
+
+  for (const issue of issues) {
+    const code = String(issue.code ?? "").trim().toUpperCase()
+    if (HIDDEN_VALIDATION_ISSUE_CODES.has(code)) continue
+    if (hasInvoiceTotalExceeded && code === DUPLICATE_BLOCK_REASON_CHILD_CODE) continue
+
+    const fingerprint = [
+      code,
+      String(issue.message ?? "").trim(),
+      String(issue.allowed_qty ?? issue.allowed_value ?? ""),
+      String(issue.actual_qty ?? issue.actual_value ?? ""),
+    ].join("::")
+    if (seen.has(fingerprint)) continue
+    seen.add(fingerprint)
+    out.push(issue)
+  }
+  return out
+}
+
 function payloadString(payload: Record<string, unknown>, ...keys: string[]): string | null {
   for (const key of keys) {
     const value = payload[key]
@@ -128,17 +153,6 @@ function payloadNumber(payload: Record<string, unknown>, ...keys: string[]): str
     if (typeof value === "string" && value.trim() !== "") return value.trim()
   }
   return null
-}
-
-function InvoiceLineStatusBadge({ line, validated }: { line: InvoiceLine; validated: boolean }) {
-  const state = invoiceLineValidationDisplay(line, validated)
-  if (state === "blocked") {
-    return <Badge variant="destructive">Blocked</Badge>
-  }
-  if (state === "pass") {
-    return <Badge variant="success">Pass</Badge>
-  }
-  return <Badge variant="secondary">Pending</Badge>
 }
 
 function FallbackSummary({ payload }: { payload: Record<string, unknown> }) {
@@ -158,8 +172,8 @@ function FallbackSummary({ payload }: { payload: Record<string, unknown> }) {
     <dl className="grid gap-3 sm:grid-cols-2">
       {fallbackRows.map((row) => (
         <div key={row.label} className="rounded-lg border bg-muted/20 px-3 py-2">
-          <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{row.label}</dt>
-          <dd className="mt-1 text-sm font-medium">{row.value}</dd>
+          <dt className="text-[11px] font-bold uppercase tracking-wide text-foreground">{row.label}</dt>
+          <dd className="mt-1 text-sm text-foreground">{row.value}</dd>
         </div>
       ))}
     </dl>
@@ -214,7 +228,7 @@ export function InvoiceExceptionApprovalReview({
     )
   }
 
-  const visibleIssues = (row.issues ?? []).filter((issue) => !HIDDEN_VALIDATION_ISSUE_CODES.has(String(issue.code ?? "")))
+  const visibleIssues = dedupeVisibleIssues(row.issues ?? [])
   const validated = Boolean(row.validation_status)
   const workOrders =
     row.work_order_numbers && row.work_order_numbers.length > 0
@@ -232,59 +246,59 @@ export function InvoiceExceptionApprovalReview({
         <Card className="border-border/80 shadow-sm">
           <CardHeader className="space-y-1 pb-2">
             <CardTitle className="text-base">Invoice Identification</CardTitle>
-            <CardDescription className="text-xs">Key fields approvers use to identify the invoice and its work order coverage.</CardDescription>
+            {/* <CardDescription className="text-xs">Key fields approvers use to identify the invoice and its work order coverage.</CardDescription> */}
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Invoice number</div>
-              <div className="mt-1 text-sm font-semibold">{row.invoice_number}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-foreground">Invoice number</div>
+              <div className="mt-1 text-sm text-foreground">{row.invoice_number}</div>
             </div>
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Status</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-foreground">Status</div>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <Badge variant={invoiceDisplayStatusBadgeVariant(invoiceDisplayStatus(row))}>
                   {invoiceDisplayStatusLabel(invoiceDisplayStatus(row))}
                 </Badge>
                 {row.validation_status ? (
-                  <span className="text-sm text-muted-foreground">Validation {String(row.validation_status).replace(/_/g, " ")}</span>
+                  <span className="text-sm text-foreground">Validation {String(row.validation_status).replace(/_/g, " ")}</span>
                 ) : null}
               </div>
             </div>
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Contractor</div>
-              <div className="mt-1 text-sm font-medium">{row.contractor_name?.trim() || `Contractor #${row.contractor_id}`}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-foreground">Contractor</div>
+              <div className="mt-1 text-sm text-foreground">{row.contractor_name?.trim() || `Contractor #${row.contractor_id}`}</div>
             </div>
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Plant</div>
-              <div className="mt-1 text-sm font-medium">{row.org_unit_name?.trim() || `Plant #${row.org_unit_id}`}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-foreground">Plant</div>
+              <div className="mt-1 text-sm text-foreground">{row.org_unit_name?.trim() || `Plant #${row.org_unit_id}`}</div>
             </div>
             <div className="rounded-lg border bg-muted/20 px-3 py-2 sm:col-span-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Work order</div>
-              <div className="mt-1 text-sm font-medium">{workOrders.length > 0 ? workOrders.join(", ") : "—"}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-foreground">Work order</div>
+              <div className="mt-1 text-sm text-foreground">{workOrders.length > 0 ? workOrders.join(", ") : "—"}</div>
             </div>
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Invoice date</div>
-              <div className="mt-1 text-sm font-medium">{row.invoice_date}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-foreground">Invoice date</div>
+              <div className="mt-1 text-sm text-foreground">{row.invoice_date}</div>
             </div>
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Submitted</div>
-              <div className="mt-1 text-sm font-medium">{formatWhen(row.submitted_at ?? row.created_at)}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-foreground">Submitted</div>
+              <div className="mt-1 text-sm text-foreground">{formatWhen(row.submitted_at ?? row.created_at)}</div>
             </div>
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Lines subtotal</div>
-              <div className="mt-1 text-sm font-medium">{formatMoney(row.lines_subtotal_ex_vat)}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-foreground">Lines subtotal</div>
+              <div className="mt-1 text-sm text-foreground">{formatMoney(row.lines_subtotal_ex_vat)}</div>
             </div>
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Extra charges</div>
-              <div className="mt-1 text-sm font-medium">{formatMoney(row.extra_amount_ex_vat)}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-foreground">Extra charges</div>
+              <div className="mt-1 text-sm text-foreground">{formatMoney(row.extra_amount_ex_vat)}</div>
             </div>
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Invoice total</div>
-              <div className="mt-1 text-sm font-semibold">{formatMoney(row.total_amount)}</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-foreground">Invoice total</div>
+              <div className="mt-1 text-sm text-foreground">{formatMoney(row.total_amount)}</div>
             </div>
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Attachments</div>
-              <div className="mt-1 text-sm font-medium">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-foreground">Attachments</div>
+              <div className="mt-1 text-sm text-foreground">
                 {row.attachments?.length ? `${row.attachments.length} attachment(s)` : "—"}
               </div>
             </div>
@@ -293,8 +307,8 @@ export function InvoiceExceptionApprovalReview({
 
         <Card className="border-border/80 shadow-sm">
           <CardHeader className="space-y-1 pb-2">
-            <CardTitle className="text-base">Why this invoice is blocked</CardTitle>
-            <CardDescription className="text-xs">Validation issues identify the exact breach, such as exceeded approved value, unsupported quantity, or missing evidence.</CardDescription>
+            <CardTitle className="text-base">Invoice Block Reason</CardTitle>
+            {/* <CardDescription className="text-xs">Validation issues identify the exact breach, such as exceeded approved value, unsupported quantity, or missing evidence.</CardDescription> */}
           </CardHeader>
           <CardContent className="space-y-3">
             {visibleIssues.length === 0 ? (
@@ -307,16 +321,14 @@ export function InvoiceExceptionApprovalReview({
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant={issueSeverityVariant(issue.severity)}>{issue.severity}</Badge>
                         <Badge variant="outline" className="font-mono text-[11px]">
-                          {issue.code}
+                          {formatIssueCode(issue.code)}
                         </Badge>
-                        {issue.requires_justification ? <Badge variant="warning">Needs justification</Badge> : null}
-                        {issue.requires_attachments ? <Badge variant="warning">Needs attachments</Badge> : null}
                       </div>
                       <p className="text-sm font-medium">{issue.message}</p>
                     </div>
                   </div>
                   {issueAllowedActual(issue) ? (
-                    <p className="mt-2 text-xs text-muted-foreground">{issueAllowedActual(issue)}</p>
+                    <p className="mt-2 text-xs text-foreground">{issueAllowedActual(issue)}</p>
                   ) : null}
                   {issue.justification?.trim() ? (
                     <div className="mt-2 rounded-md bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground">
@@ -330,49 +342,13 @@ export function InvoiceExceptionApprovalReview({
         </Card>
       </div>
 
-      <Card className="border-border/80 shadow-sm">
-        <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base">Lines</CardTitle>
-          <CardDescription className="text-xs">Line-level view of the work order, commercial quantity, rate, and taxable amount that produced the exception.</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Status</TableHead>
-                <TableHead>Work Order</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Unit rate</TableHead>
-                <TableHead className="text-right">Taxable</TableHead>
-                <TableHead className="text-right">Incl. tax</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(row.lines ?? []).map((line) => (
-                <TableRow key={line.id}>
-                  <TableCell>
-                    <InvoiceLineStatusBadge line={line} validated={validated} />
-                  </TableCell>
-                  <TableCell className="font-medium">{line.work_order_number ?? "—"}</TableCell>
-                  <TableCell>
-                    <div className="space-y-0.5">
-                      <div className="font-medium">{line.job_description ?? `Item #${line.work_order_item_id}`}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {line.unit_label ?? line.unit_type ?? "—"} · Item #{line.work_order_item_id}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatQty(line.quantity)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatMoney(line.unit_rate ?? line.rate)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatMoney(line.taxable_value ?? line.amount)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatMoney(line.amount_including_tax)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <InvoiceLinesTableCard
+        title="Lines"
+        // description="Line-level view of the work order, billed quantity, rate, taxable amount, and totals behind this exception."
+        lines={row.lines ?? []}
+        validated={validated}
+        emptyMessage="No invoice lines available for this request."
+      />
 
     </div>
   )

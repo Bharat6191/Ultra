@@ -26,6 +26,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { PageBackLink } from "@/components/layout/page-back-link"
 import { CollapsibleAuditList } from "@/components/shared/collapsible-audit-list"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { LineWithCompletion } from "@/components/work-orders/work-order-completion-tracker"
@@ -38,6 +39,12 @@ import {
 } from "@/lib/invoice-validation-display"
 import { workOrderStatusBadgeVariant, workOrderStatusLabel } from "@/lib/work-order-status-badge"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
+
+function submitSuccessMessage(status: string | null | undefined): string {
+  return String(status ?? "").trim().toLowerCase() === "active"
+    ? "Work order activated"
+    : "Submitted for approval"
+}
 
 type LineCompletionPayload = {
   progress_type: string
@@ -298,8 +305,8 @@ export function WorkOrderDetailPage() {
           contractor_id: built.contractor_id,
           items: built.items,
         })
-        await postJson(`/work-orders/${row.id}/submit`, {})
-        toast.success("Submitted for approval")
+        const submitted = await postJson<WorkOrder>(`/work-orders/${row.id}/submit`, {})
+        toast.success(submitSuccessMessage(submitted.status))
         await load()
       } catch (e) {
         toast.error(e instanceof ApiError ? e.message : "Submit failed")
@@ -310,8 +317,8 @@ export function WorkOrderDetailPage() {
     }
     setSubmitBusy(true)
     try {
-      await postJson(`/work-orders/${row.id}/submit`, {})
-      toast.success("Submitted for approval")
+      const submitted = await postJson<WorkOrder>(`/work-orders/${row.id}/submit`, {})
+      toast.success(submitSuccessMessage(submitted.status))
       await load()
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Submit failed")
@@ -546,14 +553,18 @@ export function WorkOrderDetailPage() {
   return (
     <div className="space-y-6 [&_.text-gray-500]:text-foreground [&_.text-gray-600]:text-foreground [&_.text-gray-700]:text-foreground [&_.text-gray-800]:text-foreground [&_.text-muted-foreground]:text-foreground [&_input:disabled]:bg-background [&_input:disabled]:text-foreground [&_input:disabled]:opacity-100 [&_select:disabled]:bg-background [&_select:disabled]:text-foreground [&_select:disabled]:opacity-100 [&_textarea:disabled]:bg-background [&_textarea:disabled]:text-foreground [&_textarea:disabled]:opacity-100">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{row.work_order_number}</p>
+        <div className="min-w-0 space-y-1">
+          <PageBackLink
+            to={backTab ? `/dashboard/work-orders?tab=${backTab}` : "/dashboard/work-orders"}
+            label={row.work_order_number}
+            className="font-mono"
+          />
           <h2 className="text-base font-medium">Work Order</h2>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Badge variant={workOrderStatusBadgeVariant(row.status, row.is_active)}>
               {workOrderStatusLabel(row.status, row.is_active)}
             </Badge>
-            {!editableDraft ? (
+            {/* {!editableDraft ? (
               <>
                 <span className="text-sm text-muted-foreground tabular-nums">
                   Created: {formatWorkOrderDateTime(row.created_at)}
@@ -564,15 +575,10 @@ export function WorkOrderDetailPage() {
                   </span>
                 ) : null}
               </>
-            ) : null}
+            ) : null} */}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild size="sm" variant="outline">
-            <Link to={backTab ? `/dashboard/work-orders?tab=${backTab}` : "/dashboard/work-orders"}>
-              Back
-            </Link>
-          </Button>
           {showHeaderArchiveButton ? (
             <Button size="sm" variant="outline" disabled={lifecycleBusy} onClick={() => void archive()}>
               {lifecycleBusy ? "Working…" : "Inactive"}

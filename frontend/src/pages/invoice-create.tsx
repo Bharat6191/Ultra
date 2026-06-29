@@ -1,13 +1,13 @@
 import * as React from "react"
-import { Eye, Plus, Trash2, TriangleAlert } from "lucide-react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Plus, Trash2, TriangleAlert } from "lucide-react"
+import { useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { PageBackLink } from "@/components/layout/page-back-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,7 +16,6 @@ import { ApiError, getJson, patchJson, postJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
 import { InvoicePdfDownloadButton } from "@/components/invoices/invoice-pdf"
-import { InvoicePreview } from "@/components/invoices/invoice-preview"
 
 type BillableLine = {
   work_order_id: number
@@ -210,6 +209,7 @@ export function InvoiceCreatePage() {
   const editInvoiceId =
     editIdRaw != null && Number.isFinite(Number(editIdRaw)) && Number(editIdRaw) > 0 ? Number(editIdRaw) : null
   const isEdit = editInvoiceId != null
+  const backHref = isEdit && editInvoiceId != null ? `/dashboard/invoices/${editInvoiceId}` : "/dashboard/invoices"
 
   const canCreate = hasPermission("invoices.create")
   const canUpdate = hasPermission("invoices.update")
@@ -233,7 +233,6 @@ export function InvoiceCreatePage() {
     invoice_number: "",
     invoice_date: new Date().toISOString().slice(0, 10),
   })
-  const [showInvoicePreview, setShowInvoicePreview] = React.useState(false)
   const invoiceNumberTouchedRef = React.useRef(false)
   const suggestReqId = React.useRef(0)
   const skipScopeResetRef = React.useRef(false)
@@ -832,27 +831,15 @@ export function InvoiceCreatePage() {
   return (
     <div className="w-full min-w-0 space-y-5 pb-24">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold tracking-tight">{isEdit ? "Edit invoice" : "New invoice"}</h2>
+        <div className="min-w-0 space-y-1">
+          <PageBackLink
+            to={backHref}
+            label={isEdit ? form.invoice_number || "Invoices" : "Invoices"}
+            className={isEdit && form.invoice_number ? "font-mono" : undefined}
+          />
+          <h2 className="text-lg font-semibold tracking-tight">{isEdit ? "Edit invoice" : "New invoice"}</h2>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link to="/dashboard/invoices">Back</Link>
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (!previewLines.length) {
-                toast.message("Add at least one line with quantity to preview")
-                return
-              }
-              setShowInvoicePreview(true)
-            }}
-            className="gap-1.5"
-          >
-            <Eye className="size-4" />
-            Preview
-          </Button>
           <InvoicePdfDownloadButton
             data={pdfData}
             filename={`${(form.invoice_number || "invoice").replace(/\s+/g, "_")}.pdf`}
@@ -912,7 +899,7 @@ export function InvoiceCreatePage() {
               </select>
             </div>
             <div className="grid gap-1.5">
-                <Label showRequired>Invoice #</Label>
+                <Label showRequired>Invoice No.</Label>
               <Input
                 value={form.invoice_number}
                 onChange={(e) => {
@@ -965,7 +952,7 @@ export function InvoiceCreatePage() {
                       </select>
                     </div>
                     <div className="grid gap-1.5">
-                      <Label>Line to add</Label>
+                      <Label>Line To Add</Label>
                       <select
                         className={selectClass}
                         value={pendingItemId === "" ? "" : String(pendingItemId)}
@@ -995,7 +982,7 @@ export function InvoiceCreatePage() {
               {preflight?.work_order_id != null && preflight.approved_value_total != null ? (
                 <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-border/60 bg-muted/25 px-4 py-3 text-sm">
                   <div>
-                    <span className="text-muted-foreground">WO amount </span>
+                    <span className="text-muted-foreground">WO Amount </span>
                     <span className="font-medium tabular-nums">{money(preflight.approved_value_total ?? 0)}</span>
                   </div>
                   <div>
@@ -1014,27 +1001,6 @@ export function InvoiceCreatePage() {
           ) : null}
         </CardContent>
       </Card>
-
-      <Dialog open={showInvoicePreview} onOpenChange={setShowInvoicePreview}>
-        <DialogContent
-          className="flex max-h-[min(92vh,960px)] w-[calc(100vw-1.5rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(56rem,calc(100vw-1.5rem))]"
-          showCloseButton
-        >
-          <DialogHeader className="flex shrink-0 flex-row items-center justify-between gap-3 border-b px-5 py-4 pr-12">
-            <DialogTitle>Invoice preview</DialogTitle>
-            <InvoicePdfDownloadButton
-              data={pdfData}
-              filename={`${(form.invoice_number || "invoice").replace(/\s+/g, "_")}.pdf`}
-              variant="outline"
-              size="sm"
-              disabled={!previewLines.length}
-            />
-          </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-auto bg-zinc-100/80 p-4 sm:p-6">
-            <InvoicePreview data={pdfData} className="shadow-md" />
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {preflight && preflight.lines.length > 0 ? (
         <>
@@ -1056,7 +1022,7 @@ export function InvoiceCreatePage() {
 
           <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
                 <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/20 px-5 py-3">
-                  <CardTitle className="text-sm font-medium">Line items</CardTitle>
+                  <CardTitle className="text-sm font-medium">Line Items</CardTitle>
                   {lockedWorkOrderNumber ? (
                     <Badge variant="secondary" className="font-mono font-normal">
                       {lockedWorkOrderNumber}
@@ -1072,13 +1038,13 @@ export function InvoiceCreatePage() {
                         <Table>
                           <TableHeader>
                             <TableRow className="bg-muted/50">
-                              <TableHead>Line item</TableHead>
+                              <TableHead>Line Item</TableHead>
                               <TableHead className="w-[88px] text-right">WT (kg)</TableHead>
                               <TableHead className="w-[56px]">Unit</TableHead>
-                              <TableHead className="min-w-[88px] text-right">Unit rate</TableHead>
+                              <TableHead className="min-w-[88px] text-right">Unit Rate</TableHead>
                               <TableHead className="w-[112px] text-right">Qty (WO)</TableHead>
                               <TableHead className="text-right">Taxable</TableHead>
-                              <TableHead className="text-right">Incl. tax</TableHead>
+                              <TableHead className="text-right">Incl. Tax</TableHead>
                               <TableHead className="w-[180px]">Note</TableHead>
                               <TableHead className="w-[50px]" />
                             </TableRow>
@@ -1226,7 +1192,7 @@ export function InvoiceCreatePage() {
 
           <Card className="border-border/80 shadow-sm">
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b bg-muted/20 px-5 py-3">
-              <CardTitle className="text-sm font-medium">Extra charges (optional)</CardTitle>
+              <CardTitle className="text-sm font-medium">Extra Charges (optional)</CardTitle>
               <Button
                 type="button"
                 variant="outline"
@@ -1251,7 +1217,7 @@ export function InvoiceCreatePage() {
                         <TableHead>Description</TableHead>
                         <TableHead className="w-20">Unit</TableHead>
                         <TableHead className="w-24 text-right">Qty</TableHead>
-                        <TableHead className="w-28 text-right">Unit price</TableHead>
+                        <TableHead className="w-28 text-right">Unit Price</TableHead>
                         <TableHead className="w-28 text-right">Taxable</TableHead>
                         <TableHead className="w-10" />
                       </TableRow>
@@ -1383,7 +1349,7 @@ export function InvoiceCreatePage() {
                 {extraLines.length > 0 ? ` · ${extraLines.length} extra` : ""}
               </p>
               <div className="text-right text-sm tabular-nums">
-                <div className="text-muted-foreground">Total ex. tax</div>
+                <div className="text-muted-foreground">Total Ex. Tax</div>
                 <div className="text-lg font-semibold">{money(draftExVat)}</div>
                 {woPassedRemainingExVat != null ? (
                   <div
@@ -1394,7 +1360,7 @@ export function InvoiceCreatePage() {
                         : "text-muted-foreground")
                     }
                   >
-                    WO remaining {money(woPassedRemainingExVat)}
+                    WO Remaining {money(woPassedRemainingExVat)}
                     {woPassedRemainingExVat < 0 ? " (over cap)" : ""}
                   </div>
                 ) : null}

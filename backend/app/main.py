@@ -1,14 +1,17 @@
+import logging
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
-from starlette.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.cors import CORSMiddleware
 
 from admin_api.routes import router as admin_api_router
 from app_api.routes import router as app_api_router
 from modules.audit import AdminAuditMiddleware
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 app.add_middleware(AdminAuditMiddleware)
@@ -44,6 +47,12 @@ def admin_login_redirect() -> RedirectResponse:
 
 app.include_router(app_api_router)
 app.include_router(admin_api_router, prefix="/admin")
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled application error", exc_info=exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 # Serve local uploads (dev/simple deployments).
 _uploads_dir = Path(__file__).resolve().parents[1] / "uploads"

@@ -451,7 +451,7 @@ export function ContractorAnalyticsDashboard({
     const inactiveCount = Math.max(0, woRows.length - activeCount)
     return (
       <div className="h-72 min-h-[280px] w-full min-w-0">
-        <div className="mb-2 text-xs font-medium text-muted-foreground">Active vs inactive work orders</div>
+        <div className="mb-2 text-xs font-medium text-muted-foreground">Active vs Inactive Work Orders</div>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={[
@@ -761,7 +761,7 @@ export function ContractorAnalyticsDashboard({
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Negotiation detail</CardTitle>
+              <CardTitle className="text-base">Negotiation Detail</CardTitle>
               {/* <CardDescription>Part-by-part negotiated outcomes in a compact list.</CardDescription> */}
             </CardHeader>
             <CardContent className="space-y-4">
@@ -862,7 +862,7 @@ export function ContractorAnalyticsDashboard({
                     <TableRow>
                       <TableHead>Part</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Should cost</TableHead>
+                      <TableHead className="text-right">Should Cost</TableHead>
                       <TableHead className="text-right">Negotiated</TableHead>
                       <TableHead className="text-right">Variance</TableHead>
                     </TableRow>
@@ -1129,7 +1129,7 @@ export function ContractorAnalyticsDashboard({
 
                 <div className="rounded-2xl border bg-white p-4 sm:p-5">
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    <FactField label="Should cost" value={formatMoney(selectedNegotiation.base_rate)} />
+                    <FactField label="Should Cost" value={formatMoney(selectedNegotiation.base_rate)} />
                     <FactField
                       label="Initial ask"
                       value={selectedNegotiation.initial_rate != null ? formatMoney(selectedNegotiation.initial_rate) : "—"}

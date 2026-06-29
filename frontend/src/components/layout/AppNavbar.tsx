@@ -22,6 +22,7 @@ export type AppNavbarProps = {
   onRefreshProfile?: () => void
   sidebarCollapsed?: boolean
   onToggleSidebar?: () => void
+  onOpenMobileNav?: () => void
 }
 
 function computeInitials(email?: string | null) {
@@ -42,6 +43,7 @@ export function AppNavbar({
   onRefreshProfile,
   sidebarCollapsed = false,
   onToggleSidebar,
+  onOpenMobileNav,
 }: AppNavbarProps) {
   const initials = React.useMemo(() => computeInitials(userEmail), [userEmail])
   const [refreshing, setRefreshing] = React.useState(false)
@@ -49,6 +51,18 @@ export function AppNavbar({
   return (
     <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-gray-200 bg-white px-6 print:hidden">
       <div className="flex min-w-0 items-center gap-2">
+        {onOpenMobileNav ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="rounded-lg lg:hidden"
+            aria-label="Open navigation"
+            onClick={onOpenMobileNav}
+          >
+            <PanelLeftOpen className="size-4 opacity-70" aria-hidden />
+          </Button>
+        ) : null}
         {onToggleSidebar ? (
           <Button
             type="button"

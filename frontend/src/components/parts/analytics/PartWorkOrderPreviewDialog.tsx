@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
+  ExecutionTableHeaderLabel,
   executionDetailRateCell,
   executionDetailTaxableCell,
   ExecutionSheetContractorBanner,
@@ -305,10 +306,28 @@ export function PartWorkOrderPreviewDialog({ open, onOpenChange, partMasterId, s
                           <TableHead className="h-9 w-10 text-xs">SR</TableHead>
                           <TableHead className="h-9 min-w-[7rem] text-xs">Part</TableHead>
                           <TableHead className="h-9 w-16 text-right text-xs">Qty</TableHead>
-                          <TableHead className="h-9 w-16 text-right text-xs">Wt</TableHead>
+                          <TableHead className="h-9 w-16 text-right text-xs">
+                            <ExecutionTableHeaderLabel
+                              label="Wt"
+                              hint="Weight / Piece. Used only for weight-based per kg pricing."
+                              align="right"
+                            />
+                          </TableHead>
                           <TableHead className="h-9 w-14 text-right text-xs">Unit</TableHead>
-                          <TableHead className="h-9 min-w-[6.5rem] text-right text-xs">Rate</TableHead>
-                          <TableHead className="h-9 min-w-[8rem] text-right text-xs">Taxable</TableHead>
+                          <TableHead className="h-9 min-w-[6.5rem] text-right text-xs">
+                            <ExecutionTableHeaderLabel
+                              label="Rate"
+                              hint="Resolved unit rate. Uses the approved negotiated rate for the pricing date; otherwise the Part Master list rate."
+                              align="right"
+                            />
+                          </TableHead>
+                          <TableHead className="h-9 min-w-[8rem] text-right text-xs">
+                            <ExecutionTableHeaderLabel
+                              label="Taxable"
+                              hint="Taxable formula: Qty × Rate. For weight-based pricing: Qty × Weight / Piece × Rate / Kg."
+                              align="right"
+                            />
+                          </TableHead>
                           {showCompletionCol ? (
                             <TableHead className="h-9 w-20 text-right text-xs">Completion</TableHead>
                           ) : null}

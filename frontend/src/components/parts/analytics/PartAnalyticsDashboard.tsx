@@ -332,11 +332,11 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
             <div className={summaryValueClass}>{h.part_category.replace(/_/g, " ")}</div>
           </div>
           <div>
-            <div className={summaryLabelClass}>Part Type (Rate UOM)</div>
+            <div className={summaryLabelClass}>Part Type (UOM)</div>
             <div className={summaryValueClass}>{h.part_type.replace(/_/g, " ")}</div>
           </div>
           <div>
-            <div className={summaryLabelClass}>Billing UOM</div>
+            <div className={summaryLabelClass}> UOM</div>
             <div className={summaryValueClass}>{h.unit_of_measurement}</div>
           </div>
           <div>
@@ -348,10 +348,10 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
             <div className={summaryMetricValueClass}>{formatMoney(h.base_rate)}</div>
           </div>
           <div>
-            <div className={summaryLabelClass}>Active / Status</div>
+            <div className={summaryLabelClass}>Status</div>
             <div className="flex flex-wrap gap-2">
               <Badge variant={h.is_active ? "default" : "secondary"}>{h.is_active ? "Active" : "Inactive"}</Badge>
-              <Badge variant="outline">{h.record_status}</Badge>
+              {/* <Badge variant="outline">{h.record_status}</Badge> */}
             </div>
           </div>
           <div>
@@ -363,11 +363,11 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
             <div className={summaryMetricValueClass}>{h.total_active_work_orders}</div>
           </div>
           <div className="sm:col-span-2">
-            <div className={summaryLabelClass}>Plants Using This Part (WO Footprint)</div>
+            <div className={summaryLabelClass}>Plants</div>
             <div className={summaryValueClass}>{h.plant_names_used.length ? h.plant_names_used.join(", ") : "—"}</div>
           </div>
           <div>
-            <div className={summaryLabelClass}>Contractors (Rates + WO)</div>
+            <div className={summaryLabelClass}>Contractors (Rates+WO)</div>
             <div className={summaryMetricValueClass}>{h.total_contractors_touching}</div>
           </div>
           <div>
@@ -396,7 +396,7 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="h-8 text-xs">Contractor</TableHead>
-                  <TableHead className="h-8 text-right text-xs">Should cost</TableHead>
+                  <TableHead className="h-8 text-right text-xs">Should Cost</TableHead>
                   <TableHead className="h-8 text-right text-xs"> quote</TableHead>
                   <TableHead className="h-8 text-right text-xs">negotiated</TableHead>
                   <TableHead className="h-8 text-right text-xs">Cost Variance </TableHead>

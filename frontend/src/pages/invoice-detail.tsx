@@ -1,46 +1,26 @@
 import * as React from "react"
+import { Eye } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { InvoiceLinesTableCard } from "@/components/invoices/invoice-lines-table"
+import { InvoicePreview } from "@/components/invoices/invoice-preview"
+import { PageBackLink } from "@/components/layout/page-back-link"
 import { CollapsibleAuditList } from "@/components/shared/collapsible-audit-list"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ApiError, getJson, postJson } from "@/lib/api"
 import {
   invoiceDisplayStatus,
   invoiceDisplayStatusBadgeVariant,
   invoiceDisplayStatusLabel,
-  invoiceLineValidationDisplay,
 } from "@/lib/invoice-validation-display"
 import { hasPermission } from "@/lib/permissions"
 import { InvoicePdfDownloadButton } from "@/components/invoices/invoice-pdf"
 import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
-
-function InvoiceLineStatusBadge({ line, validated }: { line: any; validated: boolean }) {
-  const d = invoiceLineValidationDisplay(line, validated)
-  if (d === "pending") {
-    return (
-      <Badge variant="secondary" className="font-normal">
-        Pending
-      </Badge>
-    )
-  }
-  if (d === "blocked") {
-    return (
-      <Badge variant="destructive" className="font-normal">
-        Blocked
-      </Badge>
-    )
-  }
-  return (
-    <Badge variant="success" className="font-normal">
-      Pass
-    </Badge>
-  )
-}
 
 type Invoice = any
 type InvoiceAuditEntry = {
@@ -63,6 +43,7 @@ export function InvoiceDetailPage() {
   const [loading, setLoading] = React.useState(true)
   const [acting, setActing] = React.useState(false)
   const [audit, setAudit] = React.useState<InvoiceAuditEntry[]>([])
+  const [showInvoicePreview, setShowInvoicePreview] = React.useState(false)
 
   const canSubmit = hasPermission("invoices.submit")
   const canUpdate = hasPermission("invoices.update")
@@ -137,8 +118,8 @@ export function InvoiceDetailPage() {
     )
   }
 
-  const pdfLines: InvoiceDisplayLine[] =
-    (row.lines ?? []).map((l: any) => {
+  const pdfLines: InvoiceDisplayLine[] = [
+    ...((row.lines ?? []).map((l: any) => {
       const taxable = Number(l.taxable_value ?? l.amount ?? 0)
       const tp = l.tax_pct != null ? Number(l.tax_pct) : 0
       const taxAmt = l.tax_amount != null ? Number(l.tax_amount) : Number.isFinite(tp) && tp > 0 ? taxable * (tp / 100) : 0
@@ -152,7 +133,7 @@ export function InvoiceDetailPage() {
         description:
           (l.work_order_number ? `${l.work_order_number} · ` : "") +
           (l.job_description ? `${l.job_description} · ` : "") +
-          `Item #${l.work_order_item_id}`,
+          `Item ${l.work_order_item_id}`,
         qty: Number(l.quantity ?? 0),
         weightKg:
           l.weight_per_piece_kg != null && Number.isFinite(Number(l.weight_per_piece_kg))
@@ -165,7 +146,23 @@ export function InvoiceDetailPage() {
         taxAmount: taxAmt,
         totalInclTax: incl,
       }
-    }) ?? []
+    }) ?? []),
+    ...((row.extra_lines ?? []).map((l: any) => {
+      const qty = l.quantity != null && Number.isFinite(Number(l.quantity)) && Number(l.quantity) > 0 ? Number(l.quantity) : 1
+      const taxable = Number(l.amount_ex_vat ?? 0)
+      const unitPrice =
+        l.unit_price != null && Number.isFinite(Number(l.unit_price)) ? Number(l.unit_price) : taxable
+      return {
+        description: String(l.description ?? "Extra line"),
+        qty,
+        unit: l.unit ?? "—",
+        unitPrice,
+        taxable,
+        taxAmount: 0,
+        totalInclTax: taxable,
+      }
+    }) ?? []),
+  ]
 
   const taxPctHeader = 0
 
@@ -174,36 +171,47 @@ export function InvoiceDetailPage() {
     invoiceDate: String(row.invoice_date ?? "—"),
     dueDate: undefined,
     issuedTo: {
-      name: row.contractor_name?.trim() || `Contractor #${row.contractor_id}`,
-      address: row.org_unit_name?.trim() || `Plant #${row.org_unit_id}`,
+      name: row.contractor_name?.trim() || `Contractor ${row.contractor_id}`,
+      address: row.org_unit_name?.trim() || `Plant ${row.org_unit_id}`,
     },
     payTo: { name: "Ultra Workspace", bank: "—", accountName: "—", accountNoMasked: "—" },
     currencySymbol: "₹",
     taxPct: taxPctHeader,
     lines: pdfLines,
   }
+  const invoiceFilename = `${String(row.invoice_number ?? "invoice").replace(/\s+/g, "_")}.pdf`
 
   const invoiceValidationDone = Boolean(row.last_validated_at ?? row.validation_status)
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-1">
+          <PageBackLink
+            to="/dashboard/invoices"
+            label={String(row.invoice_number ?? "Invoices")}
+            className="font-mono"
+          />
           <h2 className="text-base font-medium">{row.invoice_number}</h2>
-          <p className="text-sm text-muted-foreground">
-            {row.contractor_name?.trim() || `Contractor #${row.contractor_id}`} · {row.org_unit_name?.trim() || `Plant #${row.org_unit_id}`}
-          </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Badge variant={invoiceDisplayStatusBadgeVariant(invoiceDisplayStatus(row))}>
             {invoiceDisplayStatusLabel(invoiceDisplayStatus(row))}
           </Badge>
-          <Button asChild variant="outline" size="default" className="min-h-10 bg-background shadow-sm">
-            <Link to="/dashboard/invoices">Back</Link>
+          <Button
+            type="button"
+            variant="outline"
+            size="default"
+            className="min-h-10 gap-1.5 bg-background shadow-sm"
+            onClick={() => setShowInvoicePreview(true)}
+            disabled={pdfLines.length === 0}
+          >
+            <Eye className="size-4" />
+            Preview
           </Button>
           <InvoicePdfDownloadButton
             data={pdfData}
-            filename={`${String(row.invoice_number ?? "invoice").replace(/\s+/g, "_")}.pdf`}
+            filename={invoiceFilename}
             variant="outline"
             size="default"
             className="min-h-10 bg-background shadow-sm"
@@ -230,75 +238,35 @@ export function InvoiceDetailPage() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Lines</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[88px]">Status</TableHead>
-                <TableHead className="w-[110px]">Work Order</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right w-[72px]">Qty</TableHead>
-                <TableHead className="text-right w-[80px]">WT (kg)</TableHead>
-                <TableHead className="w-[56px]">Unit</TableHead>
-                <TableHead className="text-right">Unit rate</TableHead>
-                <TableHead className="text-right">Taxable</TableHead>
-                <TableHead className="text-right">Incl. tax</TableHead>
-                <TableHead className="text-right w-[64px]">Var %</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(row.lines ?? []).map((l: any) => (
-                <TableRow
-                  key={l.id}
-                  className={
-                    invoiceLineValidationDisplay(l, invoiceValidationDone) === "blocked"
-                      ? "bg-destructive/10"
-                      : undefined
-                  }
-                >
-                  <TableCell className="align-middle">
-                    <InvoiceLineStatusBadge line={l} validated={invoiceValidationDone} />
-                  </TableCell>
-                  <TableCell className="text-xs font-mono whitespace-nowrap">{l.work_order_number ?? "—"}</TableCell>
-                  <TableCell className="text-xs max-w-[200px]">
-                    <div className="font-medium">#{l.work_order_item_id}</div>
-                    <div className="text-muted-foreground truncate">{l.job_description ?? ""}</div>
-                    {l.part_code || l.part_name ? (
-                      <div className="text-[11px] text-muted-foreground truncate">
-                        {[l.part_code, l.part_name].filter(Boolean).join(" · ")}
-                      </div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-xs">{String(l.quantity)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
-                    {l.weight_per_piece_kg != null && Number.isFinite(Number(l.weight_per_piece_kg))
-                      ? Number(l.weight_per_piece_kg).toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
-                      : "—"}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{l.unit_label ?? l.unit_type ?? "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums text-xs">{String(l.unit_rate ?? l.rate)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-xs">
-                    {String(l.taxable_value ?? l.amount ?? "—")}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-xs">
-                    {l.amount_including_tax != null ? String(l.amount_including_tax) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
-                    {l.variance_pct_hint != null ? `${l.variance_pct_hint.toFixed(2)}%` : "—"}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <InvoiceLinesTableCard
+        title="Lines"
+        // description="Work-order-backed commercial lines with billed quantity, rate, taxable amount, and tax-inclusive totals."
+        lines={row.lines ?? []}
+        validated={invoiceValidationDone}
+        showVariance={true}
+        emptyMessage="No invoice lines available."
+      />
+
+      <Dialog open={showInvoicePreview} onOpenChange={setShowInvoicePreview}>
+        <DialogContent
+          className="flex max-h-[min(92vh,960px)] w-[calc(100vw-1.5rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(56rem,calc(100vw-1.5rem))]"
+          showCloseButton
+        >
+          <DialogHeader className="flex shrink-0 flex-row items-center justify-between gap-3 border-b px-5 py-4 pr-12">
+            <DialogTitle>Invoice preview</DialogTitle>
+            <InvoicePdfDownloadButton
+              data={pdfData}
+              filename={invoiceFilename}
+              variant="outline"
+              size="sm"
+              disabled={pdfLines.length === 0}
+            />
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-auto bg-zinc-100/80 p-4 sm:p-6">
+            <InvoicePreview data={pdfData} className="shadow-md" />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* <Card>
         <CardHeader className="pb-2">
@@ -388,7 +356,7 @@ export function InvoiceDetailPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Audit Log</CardTitle>
-          <CardDescription>Immutable timeline of actions on this invoice.</CardDescription>
+          {/* <CardDescription>Immutable timeline of actions on this invoice.</CardDescription> */}
         </CardHeader>
         <CardContent className="space-y-2">
           {audit.length === 0 ? (

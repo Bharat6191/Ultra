@@ -29,10 +29,19 @@ function pathMatches(pathname: string, to: string) {
 export type AppSidebarProps = {
   items?: SidebarNavItem[]
   collapsed?: boolean
+  mode?: "desktop" | "mobile"
+  onNavigate?: () => void
 }
 
-export function AppSidebar({ items = defaultItems, collapsed = false }: AppSidebarProps) {
+export function AppSidebar({
+  items = defaultItems,
+  collapsed = false,
+  mode = "desktop",
+  onNavigate,
+}: AppSidebarProps) {
   const location = useLocation()
+  const isMobile = mode === "mobile"
+  const isCollapsed = !isMobile && collapsed
   const groupedItems = items.reduce<Array<{ group: string; items: SidebarNavItem[] }>>((acc, item) => {
     const group = item.group ?? "Menu"
     const existing = acc.find((entry) => entry.group === group)
@@ -47,15 +56,18 @@ export function AppSidebar({ items = defaultItems, collapsed = false }: AppSideb
   return (
     <aside
       className={cn(
-        "hidden h-svh min-h-0 shrink-0 flex-col border-r border-gray-200 transition-[width] duration-200 lg:flex print:hidden",
-        collapsed ? "w-20" : "w-64",
+        "min-h-0 shrink-0 flex-col border-r border-gray-200 print:hidden",
+        isMobile
+          ? "flex h-full w-full"
+          : "hidden h-svh transition-[width] duration-200 lg:flex",
+        !isMobile && (isCollapsed ? "w-20" : "w-64"),
       )}
       style={APP_PAGE_BACKGROUND_STYLE}
     >
-      <div className={cn("shrink-0 py-5", collapsed ? "px-3" : "px-4")}>
+      <div className={cn("shrink-0 py-5", isCollapsed ? "px-3" : "px-4")}>
         <AppLogo
-          className={cn("mx-auto overflow-hidden", collapsed ? "w-10 justify-start" : "w-[176px]")}
-          imageClassName={cn(collapsed ? "w-[176px] max-w-none object-left" : undefined)}
+          className={cn("mx-auto overflow-hidden", isCollapsed ? "w-10 justify-start" : "w-[176px]")}
+          imageClassName={cn(isCollapsed ? "w-[176px] max-w-none object-left" : undefined)}
         />
       </div>
 
@@ -64,13 +76,13 @@ export function AppSidebar({ items = defaultItems, collapsed = false }: AppSideb
       <nav
         className={cn(
           "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain py-4",
-          collapsed ? "px-2" : "px-3",
+          isCollapsed ? "px-2" : "px-3",
         )}
         aria-label="Workspace"
       >
         {groupedItems.map((section) => (
           <div key={section.group} className="space-y-1">
-            {!collapsed ? (
+            {!isCollapsed ? (
               <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
                 {section.group}
               </div>
@@ -85,15 +97,15 @@ export function AppSidebar({ items = defaultItems, collapsed = false }: AppSideb
                   size="sm"
                   className={cn(
                     "h-9 w-full rounded-lg text-left font-normal text-zinc-950 hover:bg-muted",
-                    collapsed ? "justify-center px-0" : "justify-start gap-2 px-3",
+                    isCollapsed ? "justify-center px-0" : "justify-start gap-2 px-3",
                     isActive && "bg-muted"
                   )}
                   title={item.label}
                   asChild
                 >
-                  <Link to={item.to}>
+                  <Link to={item.to} onClick={onNavigate}>
                     <Icon className="size-4 shrink-0 opacity-70" aria-hidden />
-                    {!collapsed ? <span className="truncate">{item.label}</span> : null}
+                    {!isCollapsed ? <span className="truncate">{item.label}</span> : null}
                   </Link>
                 </Button>
               )

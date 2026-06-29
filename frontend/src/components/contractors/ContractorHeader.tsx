@@ -1,6 +1,6 @@
-import { ArrowLeft, MoreHorizontal } from "lucide-react"
-import { Link } from "react-router-dom"
+import { MoreHorizontal } from "lucide-react"
 
+import { PageBackLink } from "@/components/layout/page-back-link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -64,13 +64,14 @@ export function ContractorHeader(props: ContractorHeaderProps) {
   const display = legalName || name
   return (
     <div className="rounded-2xl border bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-4">
-          <Button asChild variant="ghost" size="icon-sm" className="rounded-lg" aria-label="Back to list">
-            <Link to="/dashboard/contractors">
-              <ArrowLeft className="size-4 opacity-70" aria-hidden />
-            </Link>
-          </Button>
+      <div className="space-y-4">
+        <PageBackLink
+          to="/dashboard/contractors"
+          label={contractorCode?.trim() || display}
+          className={contractorCode ? "font-mono" : undefined}
+        />
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-4">
           <Avatar className="h-12 w-12 rounded-2xl">
             <AvatarFallback className="rounded-2xl bg-emerald-50 text-sm font-semibold text-emerald-700">
               {initials(display)}
@@ -103,65 +104,66 @@ export function ContractorHeader(props: ContractorHeaderProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {canEdit && onEdit ? (
-            <Button size="sm" variant="outline" onClick={onEdit}>
-              Edit
-            </Button>
-          ) : null}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline">
-                <MoreHorizontal className="mr-2 size-4 opacity-70" aria-hidden />
-                Actions
+          <div className="flex items-center gap-2">
+            {canEdit && onEdit ? (
+              <Button size="sm" variant="outline" onClick={onEdit}>
+                Edit
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Lifecycle</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={!canActivate || !onActivate || status === "active"}
-                onSelect={(e) => {
-                  e.preventDefault()
-                  onActivate?.()
-                }}
-              >
-                Activate
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!canActivate || !onSuspend || status === "suspended"}
-                onSelect={(e) => {
-                  e.preventDefault()
-                  onSuspend?.()
-                }}
-              >
-                Suspend
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!canActivate || !onBlacklist || status === "blacklisted"}
-                onSelect={(e) => {
-                  e.preventDefault()
-                  onBlacklist?.()
-                }}
-                className="text-destructive focus:text-destructive"
-              >
-                Blacklist
-              </DropdownMenuItem>
-              {onViewAudit ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onSelect={(e) => {
-                      e.preventDefault()
-                      onViewAudit?.()
-                    }}
-                  >
-                    View Audit Log
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            ) : null}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <MoreHorizontal className="mr-2 size-4 opacity-70" aria-hidden />
+                  Actions
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Lifecycle</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={!canActivate || !onActivate || status === "active"}
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    onActivate?.()
+                  }}
+                >
+                  Activate
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canActivate || !onSuspend || status === "suspended"}
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    onSuspend?.()
+                  }}
+                >
+                  Suspend
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canActivate || !onBlacklist || status === "blacklisted"}
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    onBlacklist?.()
+                  }}
+                  className="text-destructive focus:text-destructive"
+                >
+                  Blacklist
+                </DropdownMenuItem>
+                {onViewAudit ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault()
+                        onViewAudit?.()
+                      }}
+                    >
+                      View Audit Log
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
     </div>

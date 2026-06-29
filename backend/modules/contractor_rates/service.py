@@ -970,34 +970,48 @@ class ContractorRateService:
 
         wf = get_workflow_for_action(self._db, ACTION_CODE_CREATE)
         approval_request_id: int | None = None
+        prior_status = str(row.status)
+        payload = {
+            "action_code": ACTION_CODE_CREATE,
+            "contractor_rate_id": int(row.id),
+            "contractor_id": int(row.contractor_id),
+            "part_master_id": int(row.part_master_id),
+            "negotiated_rate": str(row.negotiated_rate),
+            "previous_rate": str(row.previous_rate)
+            if row.previous_rate is not None
+            else None,
+            "savings_amount": str(row.savings_amount)
+            if row.savings_amount is not None
+            else None,
+            "savings_percentage": str(row.savings_percentage)
+            if row.savings_percentage is not None
+            else None,
+            "effective_from": row.effective_from.isoformat(),
+            "effective_to": row.effective_to.isoformat() if row.effective_to else None,
+        }
 
         if wf is not None:
             before_status = row.status
             row.status = "pending_approval"
-            req = ApprovalEngineService(self._db).create_request_for_entity(
-                workflow=wf,
-                entity_type=APPROVAL_ENTITY_TYPE,
-                entity_id=int(row.id),
-                payload={
-                    "action_code": ACTION_CODE_CREATE,
-                    "contractor_rate_id": int(row.id),
-                    "contractor_id": int(row.contractor_id),
-                    "part_master_id": int(row.part_master_id),
-                    "negotiated_rate": str(row.negotiated_rate),
-                    "previous_rate": str(row.previous_rate)
-                    if row.previous_rate is not None
-                    else None,
-                    "savings_amount": str(row.savings_amount)
-                    if row.savings_amount is not None
-                    else None,
-                    "savings_percentage": str(row.savings_percentage)
-                    if row.savings_percentage is not None
-                    else None,
-                    "effective_from": row.effective_from.isoformat(),
-                    "effective_to": row.effective_to.isoformat() if row.effective_to else None,
-                },
-                created_by=actor_user_id,
-            )
+            approval_engine = ApprovalEngineService(self._db)
+            if prior_status == "rejected" and row.approval_request_id is not None:
+                resubmit_actor_user_id = actor_user_id if actor_user_id is not None else row.created_by
+                if resubmit_actor_user_id is None:
+                    raise ConflictError("Actor is required to resubmit a rejected rate for approval.")
+                req, _new_task_id = approval_engine.resubmit_rejected_request(
+                    request_id=int(row.approval_request_id),
+                    actor_user_id=int(resubmit_actor_user_id),
+                    payload=payload,
+                    allow_pending=True,
+                )
+            else:
+                req = approval_engine.create_request_for_entity(
+                    workflow=wf,
+                    entity_type=APPROVAL_ENTITY_TYPE,
+                    entity_id=int(row.id),
+                    payload=payload,
+                    created_by=actor_user_id,
+                )
             approval_request_id = int(req.id) if req is not None else None
             row.approval_request_id = approval_request_id
 
@@ -1048,7 +1062,12 @@ class ContractorRateService:
     # --- finalize hooks (called by approval engine) ---
 
     def finalize_approval(
-        self, rate_id: int, *, approver_user_id: int | None, approval_request_id: int | None
+        self,
+        rate_id: int,
+        *,
+        approver_user_id: int | None,
+        approval_request_id: int | None,
+        commit: bool = True,
     ) -> ContractorRate:
         """Called by the approval engine when the final step approves the request."""
         row = self.get_rate(rate_id)
@@ -1061,7 +1080,8 @@ class ContractorRateService:
             via="approval_finalized",
             approval_request_id=approval_request_id,
         )
-        self._db.commit()
+        if commit:
+            self._db.commit()
         self._notify("CONTRACTOR_RATE_APPROVED", row)
         return self.get_rate(int(row.id))
 
@@ -1072,6 +1092,7 @@ class ContractorRateService:
         rejector_user_id: int | None,
         approval_request_id: int | None,
         comment: str | None,
+        commit: bool = True,
     ) -> ContractorRate:
         """Called by the approval engine when an approver rejects the request."""
         row = self.get_rate(rate_id)
@@ -1094,7 +1115,8 @@ class ContractorRateService:
                 "via": "approval_rejected",
             },
         )
-        self._db.commit()
+        if commit:
+            self._db.commit()
         self._notify("CONTRACTOR_RATE_REJECTED", row, extra={"reason": comment})
         return self.get_rate(int(row.id))
 
@@ -1238,7 +1260,7 @@ class ContractorRateService:
     def _notify(
         self, event_code: str, row: ContractorRate, *, extra: dict[str, Any] | None = None
     ) -> None:
-        """Trigger an email event. Failures are swallowed so the API call still succeeds."""
+        """Trigger an email event without blocking the request thread."""
         try:
             from modules.emails.service import EmailNotificationService
 
@@ -1261,7 +1283,7 @@ class ContractorRateService:
             }
             if extra:
                 payload.update(extra)
-            EmailNotificationService(self._db).trigger_event(event_code=event_code, payload=payload)
+            EmailNotificationService(self._db).trigger_event_async(event_code=event_code, payload=payload)
         except Exception:
             # Non-fatal: missing template or transport must not break the workflow.
             pass
@@ -1325,12 +1347,37 @@ class ContractorRateService:
     # --- aggregations / dashboard ---
 
     def aggregate_summary(
-        self, *, scope_contractor_id: int | None = None
+        self,
+        *,
+        scope_contractor_id: int | None = None,
+        scope_org_unit_id: int | None = None,
     ) -> dict[str, Any]:
         """Return KPI counters for a single contractor or globally for the dashboard."""
+        plant_ids: list[int] | None = None
+        if scope_org_unit_id is not None:
+            plant_ids = collect_plant_ids_under_scope(self._db, int(scope_org_unit_id))
+            if not plant_ids:
+                return {
+                    "total_negotiations": 0,
+                    "pending_approvals": 0,
+                    "approved": 0,
+                    "rejected": 0,
+                    "total_savings": Decimal("0.00"),
+                    "avg_savings_percentage": Decimal("0.00"),
+                    "total_premium_above_base": Decimal("0.00"),
+                    "total_below_base_savings": Decimal("0.00"),
+                    "approved_above_base": 0,
+                    "approved_below_base": 0,
+                    "approved_at_base": 0,
+                }
         base = select(ContractorRate)
         if scope_contractor_id is not None:
             base = base.where(ContractorRate.contractor_id == int(scope_contractor_id))
+        if plant_ids is not None:
+            base = (
+                base.join(PartMaster, PartMaster.id == ContractorRate.part_master_id)
+                .where(PartMaster.org_unit_id.in_(plant_ids))
+            )
 
         total = int(self._db.scalar(select(func.count()).select_from(base.subquery())) or 0)
         pending = int(
@@ -1366,6 +1413,10 @@ class ContractorRateService:
             savings_stmt = savings_stmt.where(
                 ContractorRate.contractor_id == int(scope_contractor_id)
             )
+        if plant_ids is not None:
+            savings_stmt = savings_stmt.join(PartMaster, PartMaster.id == ContractorRate.part_master_id).where(
+                PartMaster.org_unit_id.in_(plant_ids)
+            )
         total_savings = self._db.scalar(savings_stmt) or 0
         try:
             total_savings_dec = Decimal(total_savings)
@@ -1380,6 +1431,10 @@ class ContractorRateService:
         if scope_contractor_id is not None:
             avg_pct_stmt = avg_pct_stmt.where(
                 ContractorRate.contractor_id == int(scope_contractor_id)
+            )
+        if plant_ids is not None:
+            avg_pct_stmt = avg_pct_stmt.join(PartMaster, PartMaster.id == ContractorRate.part_master_id).where(
+                PartMaster.org_unit_id.in_(plant_ids)
             )
         avg_pct = self._db.scalar(avg_pct_stmt) or 0
         try:
@@ -1407,6 +1462,8 @@ class ContractorRateService:
             approved_with_rm_stmt = approved_with_rm_stmt.where(
                 ContractorRate.contractor_id == int(scope_contractor_id)
             )
+        if plant_ids is not None:
+            approved_with_rm_stmt = approved_with_rm_stmt.where(PartMaster.org_unit_id.in_(plant_ids))
         approved_above_base = 0
         approved_below_base = 0
         approved_at_base = 0

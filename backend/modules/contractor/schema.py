@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import date, datetime
 import re
 from typing import Any, Literal, Annotated
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, BeforeValidator, EmailStr, Field
+from pydantic import BaseModel, BeforeValidator, EmailStr, Field, field_validator, model_validator
 
 from modules.contractor.models import (
     CONTRACTOR_PLANT_ROLES,
@@ -16,6 +17,22 @@ from modules.contractor.models import (
 
 # ---------- Contractor ----------
 
+PAN_PATTERN = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
+GSTIN_PATTERN = re.compile(r"^\d{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$")
+CIN_PATTERN = re.compile(r"^[A-Z][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$")
+INDIA_POSTAL_CODE_PATTERN = re.compile(r"^\d{6}$")
+
+
+def _before_optional_uppercase_identifier(v: object) -> str | None:
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise TypeError("identifier must be a string or null")
+    value = re.sub(r"\s+", "", v).upper()
+    if not value:
+        return None
+    return value
+
 
 def _before_optional_contractor_phone(v: object) -> str | None:
     if v is None:
@@ -25,12 +42,13 @@ def _before_optional_contractor_phone(v: object) -> str | None:
     phone = v.strip()
     if not phone:
         return None
-    if not re.fullmatch(r"\d{10}", phone):
-        raise ValueError("Contact number must be exactly 10 digits")
+    if not re.fullmatch(r"[6-9]\d{9}", phone):
+        raise ValueError("Contact number must start with 6, 7, 8, or 9 and be exactly 10 digits")
     return phone
 
 
 OptionalContractorPhone = Annotated[str | None, BeforeValidator(_before_optional_contractor_phone)]
+OptionalUppercaseIdentifier = Annotated[str | None, BeforeValidator(_before_optional_uppercase_identifier)]
 
 
 class ContractorCreate(BaseModel):
@@ -38,9 +56,9 @@ class ContractorCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     legal_name: str | None = Field(default=None, max_length=255)
     trade_name: str | None = Field(default=None, max_length=255)
-    pan: str | None = Field(default=None, max_length=16)
-    gstin: str | None = Field(default=None, max_length=32)
-    cin: str | None = Field(default=None, max_length=32)
+    pan: OptionalUppercaseIdentifier = Field(default=None, max_length=16)
+    gstin: OptionalUppercaseIdentifier = Field(default=None, max_length=32)
+    cin: OptionalUppercaseIdentifier = Field(default=None, max_length=32)
     contractor_type: str | None = Field(default=None, max_length=32)
 
     contact_person: str | None = Field(default=None, max_length=255)
@@ -56,12 +74,78 @@ class ContractorCreate(BaseModel):
     postal_code: str | None = Field(default=None, max_length=32)
 
     # Legacy aliases — service layer keeps gst_number/pan_number in sync with gstin/pan.
-    gst_number: str | None = Field(default=None, max_length=32)
-    pan_number: str | None = Field(default=None, max_length=16)
+    gst_number: OptionalUppercaseIdentifier = Field(default=None, max_length=32)
+    pan_number: OptionalUppercaseIdentifier = Field(default=None, max_length=16)
 
     registration_number: str | None = Field(default=None, max_length=64)
     website: str | None = Field(default=None, max_length=255)
     notes: str | None = None
+
+    @field_validator("contractor_type")
+    @classmethod
+    def _validate_contractor_type(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if not normalized:
+            return None
+        if normalized not in CONTRACTOR_TYPES:
+            raise ValueError(f"contractor_type must be one of: {', '.join(CONTRACTOR_TYPES)}")
+        return normalized
+
+    @field_validator("website")
+    @classmethod
+    def _validate_website(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            return None
+        parsed = urlparse(trimmed)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("website must be a valid http:// or https:// URL")
+        return trimmed
+
+    @model_validator(mode="after")
+    def _validate_business_fields(self) -> ContractorCreate:
+        pan = self.pan or self.pan_number
+        gstin = self.gstin or self.gst_number
+        required_fields = {
+            "contractor_type": self.contractor_type,
+            "contact_person": self.contact_person,
+            "email": self.email,
+            "phone": self.phone,
+            "address": self.address,
+            "city": self.city,
+            "state": self.state,
+            "country": self.country,
+            "postal_code": self.postal_code,
+            "pan": pan,
+            "gstin": gstin,
+        }
+        missing_fields = [
+            field_name
+            for field_name, field_value in required_fields.items()
+            if field_value is None or (isinstance(field_value, str) and not field_value.strip())
+        ]
+        if missing_fields:
+            raise ValueError(f"Missing required contractor fields: {', '.join(missing_fields)}")
+        if pan and not PAN_PATTERN.fullmatch(pan):
+            raise ValueError("PAN must be in format ABCDE1234F")
+        if gstin and not GSTIN_PATTERN.fullmatch(gstin):
+            raise ValueError("GSTIN must be a valid 15-character GSTIN")
+        if self.cin and not CIN_PATTERN.fullmatch(self.cin):
+            raise ValueError("CIN must be a valid 21-character company identification number")
+        if pan and gstin and gstin[2:12] != pan:
+            raise ValueError("GSTIN must contain the same PAN as the PAN field")
+        if (
+            self.country
+            and self.country.strip().lower() == "india"
+            and self.postal_code
+            and not INDIA_POSTAL_CODE_PATTERN.fullmatch(self.postal_code.strip())
+        ):
+            raise ValueError("Postal code must be exactly 6 digits for India")
+        return self
 
 
 class ContractorUpdate(BaseModel):
@@ -69,9 +153,9 @@ class ContractorUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     legal_name: str | None = Field(default=None, max_length=255)
     trade_name: str | None = Field(default=None, max_length=255)
-    pan: str | None = Field(default=None, max_length=16)
-    gstin: str | None = Field(default=None, max_length=32)
-    cin: str | None = Field(default=None, max_length=32)
+    pan: OptionalUppercaseIdentifier = Field(default=None, max_length=16)
+    gstin: OptionalUppercaseIdentifier = Field(default=None, max_length=32)
+    cin: OptionalUppercaseIdentifier = Field(default=None, max_length=32)
     contractor_type: str | None = Field(default=None, max_length=32)
 
     contact_person: str | None = Field(default=None, max_length=255)
@@ -85,12 +169,58 @@ class ContractorUpdate(BaseModel):
     state: str | None = Field(default=None, max_length=128)
     country: str | None = Field(default=None, max_length=128)
     postal_code: str | None = Field(default=None, max_length=32)
-    gst_number: str | None = Field(default=None, max_length=32)
-    pan_number: str | None = Field(default=None, max_length=16)
+    gst_number: OptionalUppercaseIdentifier = Field(default=None, max_length=32)
+    pan_number: OptionalUppercaseIdentifier = Field(default=None, max_length=16)
     registration_number: str | None = Field(default=None, max_length=64)
     website: str | None = Field(default=None, max_length=255)
     notes: str | None = None
     is_active: bool | None = None
+
+    @field_validator("contractor_type")
+    @classmethod
+    def _validate_update_contractor_type(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if not normalized:
+            return None
+        if normalized not in CONTRACTOR_TYPES:
+            raise ValueError(f"contractor_type must be one of: {', '.join(CONTRACTOR_TYPES)}")
+        return normalized
+
+    @field_validator("website")
+    @classmethod
+    def _validate_update_website(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            return None
+        parsed = urlparse(trimmed)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("website must be a valid http:// or https:// URL")
+        return trimmed
+
+    @model_validator(mode="after")
+    def _validate_update_business_fields(self) -> ContractorUpdate:
+        pan = self.pan or self.pan_number
+        gstin = self.gstin or self.gst_number
+        if pan and not PAN_PATTERN.fullmatch(pan):
+            raise ValueError("PAN must be in format ABCDE1234F")
+        if gstin and not GSTIN_PATTERN.fullmatch(gstin):
+            raise ValueError("GSTIN must be a valid 15-character GSTIN")
+        if self.cin and not CIN_PATTERN.fullmatch(self.cin):
+            raise ValueError("CIN must be a valid 21-character company identification number")
+        if pan and gstin and gstin[2:12] != pan:
+            raise ValueError("GSTIN must contain the same PAN as the PAN field")
+        if (
+            self.country
+            and self.country.strip().lower() == "india"
+            and self.postal_code
+            and not INDIA_POSTAL_CODE_PATTERN.fullmatch(self.postal_code.strip())
+        ):
+            raise ValueError("Postal code must be exactly 6 digits for India")
+        return self
 
 
 class ContractorStatusChange(BaseModel):

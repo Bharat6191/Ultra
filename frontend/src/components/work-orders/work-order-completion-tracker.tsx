@@ -64,6 +64,14 @@ function parseEntry(s: string): number {
   return Number(t)
 }
 
+function userLabel(userId: number | null | undefined): string {
+  return userId != null ? `User ${userId}` : "—"
+}
+
+function itemLabel(item: LineWithCompletion): string {
+  return item.part_code?.trim() || `Item ${item.id}`
+}
+
 /** WO completion is always tracked in line quantity (pieces), not billing weight UOM (e.g. kg). */
 const COMPLETION_QTY_UNIT = "qty"
 
@@ -221,7 +229,7 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
         {(c.last_updated_at || c.last_updated_by_name) ? (
           <p className="text-[11px] text-muted-foreground">
             Last update:{" "}
-            {c.last_updated_by_name ?? (c.last_updated_by != null ? `#${c.last_updated_by}` : "—")}
+            {c.last_updated_by_name ?? userLabel(c.last_updated_by)}
             {c.last_updated_at ? ` · ${new Date(c.last_updated_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}` : ""}
           </p>
         ) : null}
@@ -247,7 +255,7 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
                 <DialogHeader className="space-y-1 text-left">
                   <DialogTitle className="text-base">Completion history</DialogTitle>
                   <DialogDescription>
-                    SR {lineSr} · {item.part_code ?? `Item #${item.id}`} · {contractorLabel}
+                    SR {lineSr} · {itemLabel(item)} · {contractorLabel}
                   </DialogDescription>
                 </DialogHeader>
               </div>
@@ -266,7 +274,7 @@ export function WorkOrderLineCompletionEditor({ item, contractorLabel, lineSr, o
                         <li key={`${h.id}-${idx}`} className="rounded-lg border border-border/60 bg-card px-3 py-2.5 shadow-sm">
                           <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
                             <span className="font-medium text-foreground">
-                              {h.updated_by_name ?? `#${h.updated_by ?? ""}`}
+                              {h.updated_by_name ?? userLabel(h.updated_by)}
                             </span>
                             <span className="tabular-nums">
                               {h.updated_at ? new Date(h.updated_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—"}
@@ -379,7 +387,7 @@ export function WorkOrderLineCompletionInline({ item, contractorLabel, lineSr, o
       data-completion-dirty={dirty ? "true" : undefined}
       role="group"
       aria-label={`Completion line ${lineSr}`}
-      className="flex w-full min-w-0 items-center justify-end gap-0"
+      className="flex w-full min-w-0 items-center justify-start gap-0"
       onKeyDown={(e) => {
         if (e.key !== "Enter" || e.nativeEvent.isComposing || qtyBlocked) return
         e.preventDefault()
@@ -387,13 +395,13 @@ export function WorkOrderLineCompletionInline({ item, contractorLabel, lineSr, o
       }}
     >
       {qtyBlocked ? (
-        <span className="text-sm text-muted-foreground">—</span>
+        <span className="text-[1.02rem] font-medium text-zinc-500">—</span>
       ) : (
-        <div className="inline-flex h-11 max-w-full overflow-hidden rounded-lg border-2 border-border/80 bg-background shadow-md">
-          <div className="relative flex min-w-0 items-stretch border-r border-border/60">
+        <div className="inline-flex h-10 max-w-full overflow-hidden rounded-[0.95rem] border border-zinc-200 bg-white shadow-[0_14px_24px_-20px_rgba(15,23,42,0.36)]">
+          <div className="relative flex min-w-0 items-stretch border-r border-zinc-200">
             <Input
               inputMode="decimal"
-              className="h-11 w-[5.5rem] min-w-[4rem] rounded-none border-0 bg-transparent py-0 px-2 text-center text-base font-semibold tabular-nums leading-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="h-10 w-[4.6rem] min-w-[4rem] rounded-none border-0 bg-transparent px-2.5 py-0 text-center text-[0.98rem] font-semibold tabular-nums leading-none text-zinc-950 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
               value={qtyStr}
               onChange={(e) => setQtyStr(e.target.value)}
               onKeyDown={(e) => {
@@ -413,18 +421,18 @@ export function WorkOrderLineCompletionInline({ item, contractorLabel, lineSr, o
               placeholder="0"
               aria-label={`Completed quantity in ${COMPLETION_QTY_UNIT}`}
             />
-            <span className="pointer-events-none absolute right-1 top-1/2 max-w-[2.5rem] -translate-y-1/2 truncate text-[10px] font-medium text-muted-foreground">
+            <span className="pointer-events-none absolute right-1.5 top-1/2 max-w-[2.3rem] -translate-y-1/2 truncate text-[9px] font-semibold uppercase tracking-wide text-zinc-400">
               {COMPLETION_QTY_UNIT}
             </span>
           </div>
           <Button
             type="button"
             variant="default"
-            className="h-11 shrink-0 rounded-none border-0 px-4 text-sm font-semibold shadow-none"
+            className="h-10 min-w-[5.5rem] shrink-0 rounded-none border-0 bg-emerald-500 px-3.5 text-sm font-semibold text-white shadow-none hover:bg-emerald-600 disabled:bg-emerald-200 disabled:text-white"
             onClick={() => void save()}
             disabled={saveDisabled}
           >
-            {saving ? <Loader2 className="size-5 animate-spin" aria-label="Saving" /> : "Save"}
+            {saving ? <Loader2 className="size-4 animate-spin" aria-label="Saving" /> : "Save"}
           </Button>
           <Dialog
             open={historyOpen}
@@ -437,11 +445,11 @@ export function WorkOrderLineCompletionInline({ item, contractorLabel, lineSr, o
               <Button
                 type="button"
                 variant="secondary"
-                className="size-11 shrink-0 rounded-none border-0 border-l border-border/60 bg-muted/40 p-0 hover:bg-muted/70"
+                className="size-10 shrink-0 rounded-none border-0 border-l border-zinc-200 bg-zinc-50 p-0 hover:bg-zinc-100"
                 title="Completion history"
                 aria-label="Open completion history"
               >
-                <History className="size-5 text-muted-foreground" />
+                <History className="size-4 text-zinc-500" />
               </Button>
             </DialogTrigger>
             <DialogContent className={completionHistoryDialogClass} showCloseButton={true}>
@@ -449,7 +457,7 @@ export function WorkOrderLineCompletionInline({ item, contractorLabel, lineSr, o
                 <DialogHeader className="space-y-1 text-left">
                   <DialogTitle className="text-base">Completion history</DialogTitle>
                   <DialogDescription>
-                    SR {lineSr} · {item.part_code ?? `Item #${item.id}`}
+                    SR {lineSr} · {itemLabel(item)}
                     {contractorLabel ? ` · ${contractorLabel}` : ""}
                   </DialogDescription>
                 </DialogHeader>
@@ -469,7 +477,7 @@ export function WorkOrderLineCompletionInline({ item, contractorLabel, lineSr, o
                         <li key={h.id} className="rounded-lg border border-border/60 bg-card px-3 py-2.5 text-sm shadow-sm">
                           <div className="flex flex-wrap items-start justify-between gap-2 text-xs text-muted-foreground">
                             <span className="font-medium text-foreground">
-                              {h.updated_by_name ?? (h.updated_by != null ? `#${h.updated_by}` : "—")}
+                              {h.updated_by_name ?? userLabel(h.updated_by)}
                             </span>
                             <span className="tabular-nums">
                               {h.updated_at

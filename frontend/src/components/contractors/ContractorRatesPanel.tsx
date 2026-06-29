@@ -488,7 +488,7 @@ export function ContractorRatesPanel({
               <TableRow>
                 <TableHead>Part</TableHead>
                 <TableHead>Plant</TableHead>
-                <TableHead className="text-right">Should cost</TableHead>
+                <TableHead className="text-right">Should Cost</TableHead>
                 <TableHead className="text-right">Negotiated</TableHead>
                 <TableHead className="text-right">Savings</TableHead>
                 <TableHead>Effective</TableHead>
@@ -669,7 +669,7 @@ function ActiveRateCard({
           </div>
         </div>
         <div className="text-right">
-          <div className="text-xs font-bold text-zinc-950">Should cost</div>
+          <div className="text-xs font-bold text-zinc-950">Should Cost</div>
           <div className="text-sm font-normal text-zinc-950">{formatMoney(rate.base_rate)}</div>
         </div>
       </div>
@@ -868,23 +868,7 @@ export function RateDetailPanel({
   return (
     <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
       <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">
-                <span className="font-mono text-sm">{rate.part_code ?? "—"}</span>
-                <span className="text-muted-foreground"> · </span>
-                {rate.part_name ?? "—"}
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                {rate.org_unit_name ?? "—"} · {(rate.pricing_method ?? "").replace(/_/g, " ")} ·{" "}
-                {rate.unit_type ?? "—"}
-              </p>
-            </div>
-            <Badge variant={rateStatusVariant(rate.status)}>{rateStatusLabel(rate.status)}</Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-4">
+        <CardContent className="grid gap-4 pt-6">
           {/* Stepper */}
           <ol className="flex items-center gap-1">
             {RATE_STEPPER_STEPS.map((step, i) => {
@@ -936,7 +920,7 @@ export function RateDetailPanel({
 
           {/* Rate facts */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Fact label="Should cost" value={formatMoney(rate.base_rate)} />
+            <Fact label="Should Cost" value={formatMoney(rate.base_rate)} />
             <Fact label="Initial ask" value={formatMoney(rate.initial_rate)} />
             <Fact label="Agreed rate" value={formatMoney(rate.negotiated_rate)} strong />
             {rate.vs_base_percentage != null && rate.vs_base_percentage !== "" ? (

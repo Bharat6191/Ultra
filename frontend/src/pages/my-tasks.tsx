@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ListPagination } from "@/components/shared/ListPagination"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError, getJson } from "@/lib/api"
@@ -20,14 +21,31 @@ type UnifiedTaskRow = {
 
 type InboxTableProps = {
   rows: UnifiedTaskRow[] | null
+  total: number
   loading: boolean
   canView: boolean
   emptyMessage: string
   onOpen: (taskId: number) => void
+  page: number
+  pageSize: number
+  onPageChange: (page: number) => void
   title?: string | null
 }
 
-function InboxTable({ rows, loading, canView, emptyMessage, onOpen, title = null }: InboxTableProps) {
+const TASKS_PAGE_SIZE = 20
+
+function InboxTable({
+  rows,
+  total,
+  loading,
+  canView,
+  emptyMessage,
+  onOpen,
+  page,
+  pageSize,
+  onPageChange,
+  title = null,
+}: InboxTableProps) {
   const hasRows = (rows ?? []).length > 0
   const statusMessage = !canView
     ? "Missing a My Tasks permission on your role."
@@ -48,7 +66,6 @@ function InboxTable({ rows, loading, canView, emptyMessage, onOpen, title = null
             <TableHeader>
               <TableRow>
                 <TableHead>Title</TableHead>
-                <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -57,7 +74,6 @@ function InboxTable({ rows, loading, canView, emptyMessage, onOpen, title = null
               {(rows ?? []).map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">{r.title ?? "(untitled)"}</TableCell>
-                  <TableCell className="text-sm capitalize">{r.task_type}</TableCell>
                   <TableCell className="text-sm capitalize">{r.status}</TableCell>
                   <TableCell className="text-right space-x-2">
                     <Button type="button" size="sm" variant="default" onClick={() => onOpen(r.id)}>
@@ -73,6 +89,9 @@ function InboxTable({ rows, loading, canView, emptyMessage, onOpen, title = null
             {statusMessage}
           </div>
         )}
+        {hasRows ? (
+          <ListPagination page={page} pageSize={pageSize} total={total} loading={loading} onPageChange={onPageChange} />
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -97,6 +116,7 @@ export function MyTasksPage() {
   const [loading, setLoading] = React.useState(true)
   const [inbox, setInbox] = React.useState<"active" | "done">("active")
   const [section, setSection] = React.useState<TaskSectionKey>("negotiation")
+  const [page, setPage] = React.useState(0)
   const navigate = useNavigate()
 
   const [, forcePermRefresh] = React.useReducer((x: number) => x + 1, 0)
@@ -116,7 +136,7 @@ export function MyTasksPage() {
     setLoading(true)
     setRows(null)
     try {
-      const data = await getJson<UnifiedTaskRow[]>(`/tasks/my-tasks?inbox=${inbox}`)
+      const data = await getJson<UnifiedTaskRow[]>(`/tasks/my-tasks?inbox=${inbox}&limit=200`)
       setRows(data)
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "Could not load tasks."
@@ -154,6 +174,14 @@ export function MyTasksPage() {
 
   const activeSection = sections.find((item) => item.key === section) ?? sections[0]
   const sectionedRows = activeSection?.rows ?? []
+  const paginatedRows = React.useMemo(
+    () => sectionedRows.slice(page * TASKS_PAGE_SIZE, (page + 1) * TASKS_PAGE_SIZE),
+    [page, sectionedRows],
+  )
+
+  React.useEffect(() => {
+    setPage(0)
+  }, [inbox, section])
 
   function renderInboxView(emptyMessage: string) {
     return (
@@ -173,11 +201,15 @@ export function MyTasksPage() {
         </Tabs>
 
         <InboxTable
-          rows={sectionedRows}
+          rows={paginatedRows}
+          total={sectionedRows.length}
           loading={loading}
           canView={canView}
           onOpen={(id) => void navigate(`/dashboard/tasks/${id}`)}
           emptyMessage={emptyMessage}
+          page={page}
+          pageSize={TASKS_PAGE_SIZE}
+          onPageChange={setPage}
         />
       </div>
     )
@@ -189,23 +221,27 @@ export function MyTasksPage() {
         <PageHeader
           title="My Tasks"
           action={
-            <TabsList className="grid h-11 w-full min-w-[172px] grid-cols-2 rounded-full border border-zinc-200 bg-zinc-50 p-1 shadow-sm sm:w-auto">
+            <TabsList className="inline-flex h-12 rounded-full border border-zinc-200 bg-white p-1 shadow-sm">
               <TabsTrigger
                 value="active"
-                className="rounded-full border border-transparent px-5 text-sm font-semibold text-zinc-500 shadow-none transition-colors hover:text-zinc-900 data-[state=active]:bg-white data-[state=active]:text-zinc-950 data-[state=active]:shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
+                className="rounded-full px-8 text-sm font-semibold text-zinc-500 transition-all
+                data-[state=active]:bg-white data-[state=active]:text-zinc-950
+                data-[state=active]:shadow-md"
               >
                 Active
               </TabsTrigger>
+
               <TabsTrigger
                 value="done"
-                className="rounded-full border border-transparent px-5 text-sm font-semibold text-zinc-500 shadow-none transition-colors hover:text-zinc-900 data-[state=active]:bg-white data-[state=active]:text-zinc-950 data-[state=active]:shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
+                className="rounded-full px-8 text-sm font-semibold text-zinc-500 transition-all
+                data-[state=active]:bg-white data-[state=active]:text-zinc-950
+                data-[state=active]:shadow-md"
               >
                 Done
               </TabsTrigger>
             </TabsList>
           }
         />
-
         <TabsContent value="active" className="mt-0">
           {renderInboxView("No active tasks. Approvals and manual items that need you appear here.")}
         </TabsContent>

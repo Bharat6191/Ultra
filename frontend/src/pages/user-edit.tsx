@@ -2,9 +2,10 @@ import * as React from "react"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
+import { PageBackLink } from "@/components/layout/page-back-link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -69,6 +70,8 @@ const editUserSchema = z.object({
   org_unit_id: z.string().min(1, "Plant is required"),
   is_active: z.boolean(),
 })
+
+const DUPLICATE_EMPLOYEE_CODE_MESSAGE = "Employee Code already exists. Please enter a unique Employee Code."
 
 type EditUserValues = z.infer<typeof editUserSchema>
 
@@ -176,6 +179,7 @@ export function UserEditPage() {
     if (!user) return
     toast.loading("Saving user…", { id: "edit-user" })
     setError(null)
+    form.clearErrors("employee_code")
     try {
       const email = values.email.trim()
       const orgUnitId = Number(values.org_unit_id)
@@ -204,6 +208,9 @@ export function UserEditPage() {
       navigate(`../${user.id}`, { replace: true })
     } catch (e) {
       const message = e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to update user"
+      if (message === DUPLICATE_EMPLOYEE_CODE_MESSAGE) {
+        form.setError("employee_code", { type: "server", message })
+      }
       toast.error(message, { id: "edit-user" })
       setError(message)
     }
@@ -212,14 +219,12 @@ export function UserEditPage() {
   if (loading) {
     return (
       <div className="w-full space-y-4">
-        <div className="flex items-center justify-between gap-4">
+        <div className="space-y-1">
+          <PageBackLink to=".." label="Users" />
           <div className="space-y-1">
             <h2 className="text-lg font-semibold tracking-tight">Edit user</h2>
             <p className="text-sm text-muted-foreground">Loading…</p>
           </div>
-          <Button asChild variant="outline" size="sm">
-            <Link to="..">Back</Link>
-          </Button>
         </div>
       </div>
     )
@@ -227,11 +232,13 @@ export function UserEditPage() {
 
   return (
     <div className="w-full space-y-3">
-      <div className="flex items-center justify-between gap-4">
+      <div className="space-y-1">
+        <PageBackLink
+          to=".."
+          label={user?.username?.trim() || "Users"}
+          className={user?.username ? "font-mono" : undefined}
+        />
         <h2 className="text-base font-semibold tracking-tight">Edit user</h2>
-        <Button asChild variant="outline" size="xs">
-          <Link to="..">Back</Link>
-        </Button>
       </div>
 
       {error ? (

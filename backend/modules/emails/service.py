@@ -3,13 +3,14 @@ from __future__ import annotations
 import re
 import os
 import smtplib
+import threading
 from dataclasses import dataclass
 from typing import Any
 
 from jinja2 import Environment, StrictUndefined, TemplateError
 from email.mime.text import MIMEText
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from modules.emails.constants import EVENT_CODES
 from modules.emails.model import EmailLog, EmailTemplate, EmailTemplateMapping
@@ -99,6 +100,51 @@ class EmailNotificationService:
     def __init__(self, db: Session, *, sender: EmailSender | None = None) -> None:
         self._db = db
         self._sender = sender or EmailSender()
+
+    def _should_run_inline_for_bind(self) -> bool:
+        bind = self._db.get_bind()
+        url = getattr(bind, "url", None)
+        dialect_name = getattr(bind.dialect, "name", "")
+        database_name = getattr(url, "database", None)
+        return dialect_name == "sqlite" and (database_name is None or database_name == ":memory:")
+
+    def trigger_event_async(self, *, event_code: str, payload: dict[str, Any]) -> None:
+        self.trigger_events_async(events=[(event_code, payload)])
+
+    def trigger_events_async(self, *, events: list[tuple[str, dict[str, Any]]]) -> None:
+        queued = [(str(code), dict(payload or {})) for code, payload in events if str(code).strip()]
+        if not queued:
+            return
+
+        if self._should_run_inline_for_bind():
+            for event_code, payload in queued:
+                try:
+                    self.trigger_event(event_code=event_code, payload=payload)
+                except Exception:
+                    self._db.rollback()
+            return
+
+        bind = self._db.get_bind()
+        SessionLocal = sessionmaker(
+            bind=bind,
+            autocommit=False,
+            autoflush=False,
+            expire_on_commit=False,
+        )
+
+        def runner() -> None:
+            db = SessionLocal()
+            try:
+                svc = EmailNotificationService(db)
+                for event_code, payload in queued:
+                    try:
+                        svc.trigger_event(event_code=event_code, payload=payload)
+                    except Exception:
+                        db.rollback()
+            finally:
+                db.close()
+
+        threading.Thread(target=runner, name="email-dispatch", daemon=True).start()
 
     def trigger_event(self, *, event_code: str, payload: dict[str, Any]) -> TriggerResult:
         code = (event_code or "").strip().upper()
@@ -231,4 +277,3 @@ class EmailNotificationService:
         )
         self._db.commit()
         return TriggerResult(status=status, missing_variables=missing_variables or [], error=error_message)
-

@@ -19,7 +19,7 @@ export type DocumentVerification = "pending" | "verified" | "rejected"
 
 export const CONTRACTOR_STATUS_OPTIONS: { value: ContractorStatus; label: string }[] = [
   { value: "draft", label: "Draft" },
-  { value: "pending", label: "Pending approval" },
+  { value: "pending", label: "Pending Approval" },
   { value: "active", label: "Active" },
   { value: "non_compliant", label: "Non-compliant" },
   { value: "expired", label: "Expired" },

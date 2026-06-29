@@ -38,3 +38,18 @@ dist-ssr/
 # Local uploads (seed scripts write placeholders here; do not version binaries)
 backend/uploads/
 
+
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+.venv/
+venv/
+engin/
+__pycache__/
+*.pyc
+dist/
+build/
+.env
+.env.*
+.DS_Store
+*.log

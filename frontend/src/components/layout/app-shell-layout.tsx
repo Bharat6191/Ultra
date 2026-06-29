@@ -18,6 +18,7 @@ import { useLocation } from "react-router-dom"
 
 import { AppNavbar } from "@/components/layout/AppNavbar"
 import { AppSidebar } from "@/components/layout/AppSidebar"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { APP_PAGE_BACKGROUND_STYLE } from "@/lib/appearance"
 import { hasPermission, TASK_INBOX_PERMISSION_CODES } from "@/lib/permissions"
 import type { SidebarNavItem } from "@/components/layout/AppSidebar"
@@ -160,6 +161,7 @@ export function AppShellLayout({
 }: AppShellLayoutProps) {
   const location = useLocation()
   const mainRef = React.useRef<HTMLElement | null>(null)
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState<boolean>(() => {
     if (typeof window === "undefined") return false
     return window.localStorage.getItem("ultra-sidebar-collapsed") === "true"
@@ -178,6 +180,7 @@ export function AppShellLayout({
 
   React.useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" })
+    setMobileNavOpen(false)
   }, [location.pathname])
 
   React.useEffect(() => {
@@ -200,6 +203,17 @@ export function AppShellLayout({
       style={APP_PAGE_BACKGROUND_STYLE}
     >
       <AppSidebar items={sidebarItems} collapsed={sidebarCollapsed} />
+      <Dialog open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <DialogContent
+          className="left-0 top-0 h-svh w-[min(20rem,calc(100vw-1rem))] max-w-[20rem] translate-x-0 translate-y-0 gap-0 rounded-l-none rounded-r-2xl border-r p-0 sm:max-w-[20rem]"
+          showCloseButton
+        >
+          <DialogHeader className="sr-only">
+            <DialogTitle>Navigation</DialogTitle>
+          </DialogHeader>
+          <AppSidebar items={sidebarItems} mode="mobile" onNavigate={() => setMobileNavOpen(false)} />
+        </DialogContent>
+      </Dialog>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden print:block print:overflow-visible">
         <AppNavbar
@@ -210,6 +224,7 @@ export function AppShellLayout({
           onRefreshProfile={onRefreshProfile}
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
+          onOpenMobileNav={() => setMobileNavOpen(true)}
         />
 
         <main

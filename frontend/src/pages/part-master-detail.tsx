@@ -1,10 +1,12 @@
 import * as React from "react"
+import { ChevronRight, Sparkles } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
+import { PageBackLink } from "@/components/layout/page-back-link"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { CollapsibleAuditList } from "@/components/shared/collapsible-audit-list"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -12,7 +14,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { SectionHint } from "@/components/ui/section-hint"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError, getJson, patchJson } from "@/lib/api"
+import { humanizeFieldKey } from "@/lib/field-labels"
 import { canListOrgUnitsForAssignments, hasPermission, isSuperuser } from "@/lib/permissions"
+import { cn } from "@/lib/utils"
 import { RateVersionHistoryButton } from "@/components/contractors/RateVersionHistoryDrawer"
 import { PartAnalyticsDashboard } from "@/components/parts/analytics/PartAnalyticsDashboard"
 import type { PartMasterPublic } from "@/pages/part-master"
@@ -67,8 +71,11 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
   notes: "Notes",
 }
 
+const PART_MASTER_DESCRIPTION_MAX_LENGTH = 200
+const PART_MASTER_NOTES_MAX_LENGTH = 200
+
 function humanizeAuditField(key: string): string {
-  return AUDIT_FIELD_LABELS[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  return humanizeFieldKey(key, AUDIT_FIELD_LABELS)
 }
 
 function formatAuditCell(v: unknown): string {
@@ -110,12 +117,6 @@ function auditChangeRows(a: PartMasterAuditEntry): { key: string; field: string;
   return rows
 }
 
-function auditAccentBorder(action: string): string {
-  const u = action.toUpperCase()
-  if (u === "DEACTIVATED" || u === "SUPERSEDED") return "border-l-rose-500"
-  return "border-l-emerald-500"
-}
-
 function formatAuditDateTime(iso: string): { date: string; time: string } {
   try {
     const d = new Date(iso)
@@ -127,6 +128,18 @@ function formatAuditDateTime(iso: string): { date: string; time: string } {
   } catch {
     return { date: iso, time: "" }
   }
+}
+
+function initialsFromName(name: string): string {
+  const tokens = String(name)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+  if (tokens.length === 0 || name === "—") return "—"
+  return tokens
+    .slice(0, 2)
+    .map((token) => token.charAt(0).toUpperCase())
+    .join("")
 }
 
 function emptyEditForm(): {
@@ -213,11 +226,15 @@ function computeRatePerKg(weightKg: string, labourCost: string, manDays: string)
 export function PartMasterDetailPage() {
   const { partMasterId } = useParams()
   const id = Number(partMasterId)
+  const auditPreviewCount = 4
   const [mainTab, setMainTab] = React.useState("intelligence")
   const [row, setRow] = React.useState<PartMasterPublic | null>(null)
   const [audits, setAudits] = React.useState<PartMasterAuditEntry[]>([])
   const [plants, setPlants] = React.useState<OrgUnitLite[]>([])
   const [form, setForm] = React.useState(() => emptyEditForm())
+  const [saving, setSaving] = React.useState(false)
+  const [showAllAuditEntries, setShowAllAuditEntries] = React.useState(false)
+  const [expandedAuditIds, setExpandedAuditIds] = React.useState<number[]>([])
 
   const canView = hasPermission("part_master.view") || isSuperuser()
   const canUpdate = hasPermission("part_master.update") || isSuperuser()
@@ -275,6 +292,13 @@ export function PartMasterDetailPage() {
     [audits],
   )
 
+  React.useEffect(() => {
+    setShowAllAuditEntries(false)
+    setExpandedAuditIds([])
+  }, [activityEntries.length])
+
+  const visibleAuditEntries = showAllAuditEntries ? activityEntries : activityEntries.slice(0, auditPreviewCount)
+
   const weightBased = form.pricing_method === "weight_based"
   const derivedRatePerKg = React.useMemo(
     () => (weightBased ? computeRatePerKg(form.weight_per_piece, form.labour_cost, form.man_days) : null),
@@ -325,7 +349,16 @@ export function PartMasterDetailPage() {
       toast.error("Effective from date is required")
       return
     }
+    if (form.description.length > PART_MASTER_DESCRIPTION_MAX_LENGTH) {
+      toast.error(`Description cannot exceed ${PART_MASTER_DESCRIPTION_MAX_LENGTH} characters`)
+      return
+    }
+    if (form.notes.trim().length > PART_MASTER_NOTES_MAX_LENGTH) {
+      toast.error(`Notes cannot exceed ${PART_MASTER_NOTES_MAX_LENGTH} characters`)
+      return
+    }
     const wb = form.pricing_method === "weight_based"
+    setSaving(true)
     try {
       const updated = await patchJson<PartMasterPublic>(`/part-master/${row.id}`, {
         org_unit_id: Number(form.org_unit_id),
@@ -351,7 +384,15 @@ export function PartMasterDetailPage() {
       await loadAudits()
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Save failed")
+    } finally {
+      setSaving(false)
     }
+  }
+
+  function toggleAuditEntry(entryId: number) {
+    setExpandedAuditIds((current) =>
+      current.includes(entryId) ? current.filter((id) => id !== entryId) : [...current, entryId],
+    )
   }
 
   if (!canView) {
@@ -404,13 +445,11 @@ export function PartMasterDetailPage() {
     <div className="w-full min-w-0 space-y-6 pb-8">
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border/70 pb-6">
         <div className="min-w-0 space-y-1">
-          <div className="text-xs text-muted-foreground">
-            <Link to="/dashboard/part-master" className="underline-offset-2 hover:underline">
-              Part Master
-            </Link>
-            <span className="mx-1">/</span>
-            <span>Detail</span>
-          </div>
+          <PageBackLink
+            to="/dashboard/part-master"
+            label={row.part_code || "Part Master"}
+            className={row.part_code ? "font-mono" : undefined}
+          />
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{form.part_name || row.part_name}</h1>
             <SectionHint text={metadataHint} />
@@ -438,7 +477,7 @@ export function PartMasterDetailPage() {
           <PartAnalyticsDashboard partMasterId={row.id} />
         </TabsContent>
 
-        <TabsContent value="master" className="mt-6 min-w-0 space-y-6 pb-28 outline-none">
+        <TabsContent value="master" className="mt-6 min-w-0 space-y-6 pb-8 outline-none">
           <div className="grid w-full min-w-0 grid-cols-1 gap-6 lg:grid-cols-3 lg:items-stretch">
             <Card className="flex min-h-0 min-w-0 flex-col rounded-2xl border-border/50 shadow-sm">
               <CardHeader className="shrink-0 space-y-0 pb-3">
@@ -472,7 +511,7 @@ export function PartMasterDetailPage() {
                 </div>
                 <div className="grid min-w-0 gap-1.5">
                   <Label htmlFor="pm-code" showRequired>
-                    Part code
+                    Part Code
                   </Label>
                   <Input
                     id="pm-code"
@@ -485,7 +524,7 @@ export function PartMasterDetailPage() {
                 </div>
                 <div className="grid min-w-0 gap-1.5">
                   <Label htmlFor="pm-name" showRequired>
-                    Part name
+                    Part Name
                   </Label>
                   <Input
                     id="pm-name"
@@ -502,9 +541,18 @@ export function PartMasterDetailPage() {
                     rows={4}
                     className="min-h-[96px] flex-1 resize-y rounded-xl border-border/60 bg-background/80"
                     value={form.description}
-                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                    maxLength={PART_MASTER_DESCRIPTION_MAX_LENGTH}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        description: e.target.value.slice(0, PART_MASTER_DESCRIPTION_MAX_LENGTH),
+                      }))
+                    }
                     disabled={!canUpdate}
                   />
+                  <div className="flex justify-end text-[11px] text-muted-foreground">
+                    {form.description.length}/{PART_MASTER_DESCRIPTION_MAX_LENGTH}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -519,7 +567,7 @@ export function PartMasterDetailPage() {
               <CardContent className="flex flex-1 flex-col gap-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="grid min-w-0 gap-1.5">
-                    <Label showRequired>Pricing method</Label>
+                    <Label showRequired>Pricing Method</Label>
                     <select
                       className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none disabled:opacity-60"
                       value={form.pricing_method}
@@ -546,12 +594,12 @@ export function PartMasterDetailPage() {
                       }}
                       disabled={!canUpdate}
                     >
-                      <option value="piece_based">Piece / time / other unit</option>
+                      <option value="piece_based">Piece / Time / Other Unit</option>
                       <option value="weight_based">Weight (kg)</option>
                     </select>
                   </div>
                   <div className="grid min-w-0 gap-1.5">
-                    <Label showRequired>Unit type (billing UOM)</Label>
+                    <Label showRequired>Unit Type (UOM)</Label>
                     <Input
                       value={form.unit_type}
                       onChange={(e) => setForm((f) => ({ ...f, unit_type: e.target.value }))}
@@ -565,7 +613,7 @@ export function PartMasterDetailPage() {
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="grid min-w-0 gap-1.5">
                       <Label htmlFor="pm-labour-cost" showRequired>
-                        Labour cost
+                        Labour Cost
                       </Label>
                       <Input
                         id="pm-labour-cost"
@@ -581,7 +629,7 @@ export function PartMasterDetailPage() {
                     </div>
                     <div className="grid min-w-0 gap-1.5">
                       <Label htmlFor="pm-man-days" showRequired>
-                        Man days
+                        Man Days
                       </Label>
                       <Input
                         id="pm-man-days"
@@ -610,7 +658,7 @@ export function PartMasterDetailPage() {
                       />
                     </div>
                     <div className="grid min-w-0 gap-1.5">
-                      <Label htmlFor="pm-rate-kg">Rate per kg (calculated)</Label>
+                      <Label htmlFor="pm-rate-kg">Rate/kg</Label>
                       <Input
                         id="pm-rate-kg"
                         readOnly
@@ -625,7 +673,7 @@ export function PartMasterDetailPage() {
                   <>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div className="grid min-w-0 gap-1.5">
-                        <Label htmlFor="pm-wt-opt">Weight per piece (kg, optional)</Label>
+                        <Label htmlFor="pm-wt-opt">Weight/Piece(kg,optional)</Label>
                         <Input
                           id="pm-wt-opt"
                           inputMode="decimal"
@@ -639,23 +687,23 @@ export function PartMasterDetailPage() {
                         />
                       </div>
                       <div className="grid min-w-0 gap-1.5">
-                        <Label showRequired>Rate unit</Label>
+                        <Label showRequired>Rate Unit</Label>
                         <select
                           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none disabled:opacity-60"
                           value={form.rate_unit_type}
                           onChange={(e) => setForm((f) => ({ ...f, rate_unit_type: e.target.value }))}
                           disabled={!canUpdate}
                         >
-                          <option value="per_piece">Per piece</option>
-                          <option value="per_unit">Per unit</option>
-                          <option value="per_box">Per box</option>
-                          <option value="per_nos">Per nos</option>
+                          <option value="per_piece">Per Piece</option>
+                          <option value="per_unit">Per Unit</option>
+                          <option value="per_box">Per Box</option>
+                          <option value="per_nos">Per Nos</option>
                         </select>
                       </div>
                     </div>
                     <div className="grid min-w-0 gap-1.5 sm:max-w-sm">
                       <Label htmlFor="pm-base" showRequired>
-                        Should cost
+                        Should Cost
                       </Label>
                       <Input
                         id="pm-base"
@@ -676,7 +724,7 @@ export function PartMasterDetailPage() {
             <Card className="flex min-h-0 min-w-0 flex-col rounded-2xl border-border/50 shadow-sm">
               <CardHeader className="shrink-0 space-y-0 pb-3">
                 <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="text-base leading-tight">Validity & record</CardTitle>
+                  <CardTitle className="text-base leading-tight">Validity & Record</CardTitle>
                   <SectionHint text="Plant/code changes check overlap with other active rows." />
                 </div>
               </CardHeader>
@@ -684,7 +732,7 @@ export function PartMasterDetailPage() {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="grid min-w-0 gap-1.5">
                     <Label htmlFor="pm-ef" showRequired>
-                      Effective from
+                      Effective From
                     </Label>
                     <Input
                       id="pm-ef"
@@ -696,7 +744,9 @@ export function PartMasterDetailPage() {
                     />
                   </div>
                   <div className="grid min-w-0 gap-1.5">
-                    <Label htmlFor="pm-et">Effective to (optional)</Label>
+                    <Label htmlFor="pm-et" showRequired>
+                      Effective To (optional)
+                    </Label>
                     <Input
                       id="pm-et"
                       type="date"
@@ -708,7 +758,7 @@ export function PartMasterDetailPage() {
                   </div>
                 </div>
                 <div className="grid min-w-0 gap-1.5 sm:max-w-xs">
-                  <Label showRequired>Record status</Label>
+                  <Label showRequired>Record Status</Label>
                   <select
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none disabled:opacity-60"
                     value={form.status}
@@ -728,14 +778,23 @@ export function PartMasterDetailPage() {
                     rows={2}
                     className="min-h-[72px] resize-y rounded-xl border-border/60 bg-background/80"
                     value={form.notes}
-                    onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                    maxLength={PART_MASTER_NOTES_MAX_LENGTH}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        notes: e.target.value.slice(0, PART_MASTER_NOTES_MAX_LENGTH),
+                      }))
+                    }
                     disabled={!canUpdate}
                   />
+                  <div className="flex justify-end text-[11px] text-muted-foreground">
+                    {form.notes.length}/{PART_MASTER_NOTES_MAX_LENGTH}
+                  </div>
                 </div>
                 <div className="mt-auto flex shrink-0 items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5">
                   <div className="min-w-0">
                     <p className="text-sm font-medium">Active</p>
-                    <p className="text-xs text-muted-foreground">Hidden from default lookups when off.</p>
+                    {/* <p className="text-xs text-muted-foreground">Hidden from default lookups when off.</p> */}
                   </div>
                   <Switch
                     checked={form.is_active}
@@ -745,70 +804,183 @@ export function PartMasterDetailPage() {
                 </div>
               </CardContent>
             </Card>
+            
           </div>
-
-          <section className="min-w-0 border-t border-border/70 pt-8" aria-labelledby="part-audit-heading">
-            <h2 id="part-audit-heading" className="mb-1 text-base font-semibold tracking-tight">
-              Audit Log
-            </h2>
-            <p className="mb-5 text-xs text-muted-foreground">
-              Who changed what and when. Full snapshots: <span className="font-medium text-foreground/80">View history</span>.
-            </p>
-
-            {activityEntries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No audit entries yet.</p>
-            ) : (
-              <CollapsibleAuditList
-                items={activityEntries}
-                className="space-y-5"
-                renderItem={(a) => {
-                  const changes = auditChangeRows(a)
-                  const { date, time } = formatAuditDateTime(a.created_at)
-                  const actor = a.changed_by_name ?? (a.changed_by != null ? `User #${a.changed_by}` : "—")
-                  return (
-                    <div key={a.id} className={`flex gap-4 border-l-2 pl-4 ${auditAccentBorder(a.action)}`}>
-                      <div className="w-28 shrink-0 text-right text-[11px] tabular-nums leading-snug text-muted-foreground sm:w-32">
-                        <time dateTime={a.created_at}>
-                          <div>{date}</div>
-                          {time ? <div>{time}</div> : null}
-                        </time>
-                      </div>
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <p className="text-sm text-muted-foreground">
-                          <span className="text-foreground">{auditActionLabel(a.action)}</span>
-                          {" by "}
-                          <span className="font-semibold text-foreground">{actor}</span>
-                        </p>
-                        {changes.length > 0 ? (
-                          <ul className="space-y-0.5">
-                            {changes.map((c) => (
-                              <li key={`${a.id}-${c.key}`} className="text-sm leading-relaxed text-muted-foreground">
-                                <span>{c.field}</span>
-                                <span> : </span>
-                                <span>{c.before}</span>
-                                <span> → </span>
-                                <span className="font-semibold text-foreground">{c.after}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">No field changes recorded for this event.</p>
-                        )}
-                      </div>
-                    </div>
-                  )
-                }}
-              />
-            )}
-          </section>
-
           {canUpdate ? (
-            <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-2 border-t border-border/70 bg-gray-50/95 px-4 py-4 backdrop-blur-sm sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-              <Button className="rounded-xl" onClick={() => void save()}>
-                Save Changes
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-muted/15 px-4 py-4 shadow-sm">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Save your updates</p>
+                {/* <p className="text-xs text-muted-foreground">
+                  Changes to master data are recorded in the audit log after save.
+                </p> */}
+              </div>
+              <Button className="min-w-32 rounded-xl" onClick={() => void save()} disabled={saving}>
+                {saving ? "Saving…" : "Save Changes"}
               </Button>
             </div>
           ) : null}
+
+          <Card className="min-w-0 overflow-hidden rounded-2xl border-border/50 shadow-sm" aria-labelledby="part-audit-heading">
+            <CardHeader className="border-b border-border/60 bg-muted/15 pb-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle id="part-audit-heading" className="text-base">
+                    Audit Log
+                  </CardTitle>
+                  {/* <CardDescription>
+                    Summary cards show the audit event, who performed it, when it happened, and expandable field changes.
+                  </CardDescription> */}
+                </div>
+                <Badge variant="outline" className="rounded-full px-2.5 py-1">
+                  {activityEntries.length} {activityEntries.length === 1 ? "entry" : "entries"}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-5">
+              {activityEntries.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
+                  No audit entries yet.
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-5">
+                    {visibleAuditEntries.map((entry) => {
+                      const actor = entry.changed_by_name ?? (entry.changed_by != null ? `User #${entry.changed_by}` : "—")
+                      const { date, time } = formatAuditDateTime(entry.created_at)
+                      const changes = auditChangeRows(entry)
+                      const expanded = expandedAuditIds.includes(entry.id)
+                      return (
+                        <div key={entry.id} className="flex gap-4">
+                          <div className="shrink-0 pt-3">
+                            <div className="flex size-12 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm sm:size-14">
+                              <Sparkles className="size-5 sm:size-6" aria-hidden />
+                            </div>
+                          </div>
+
+                          <div className="min-w-0 flex-1 rounded-[28px] border border-border/70 bg-background px-5 py-5 shadow-sm">
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="min-w-0 flex-1 space-y-4">
+                                <div className="flex flex-wrap items-center gap-3">
+                                  <h3 className="text-xl font-semibold tracking-tight text-foreground">
+                                    {auditActionLabel(entry.action)}
+                                  </h3>
+                                  <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide">
+                                    AUDIT
+                                  </Badge>
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-2 xl:max-w-2xl">
+                                  <div className="rounded-3xl border border-border/70 bg-muted/10 px-5 py-4">
+                                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                      Performed By
+                                    </div>
+                                    <div className="mt-2 flex items-center gap-3">
+                                      <div className="flex size-9 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
+                                        {initialsFromName(actor)}
+                                      </div>
+                                      <div className="min-w-0 text-base font-semibold text-foreground">{actor}</div>
+                                    </div>
+                                  </div>
+
+                                  <div className="rounded-3xl border border-border/70 bg-muted/10 px-5 py-4">
+                                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                      Time
+                                    </div>
+                                    <time dateTime={entry.created_at} className="mt-2 block text-base font-semibold text-foreground">
+                                      {date}
+                                      {time ? `, ${time}` : ""}
+                                    </time>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex shrink-0 items-start justify-end">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="h-auto rounded-full px-3 py-2 text-base font-semibold text-foreground hover:bg-transparent hover:text-foreground"
+                                  onClick={() => toggleAuditEntry(entry.id)}
+                                >
+                                  <ChevronRight
+                                    className={cn("mr-2 size-5 transition-transform duration-200", expanded && "rotate-90")}
+                                    aria-hidden
+                                  />
+                                  {expanded ? "Hide Changes" : "View Changes"}
+                                </Button>
+                              </div>
+                            </div>
+                            
+
+                            {expanded ? (
+                              <div className="mt-5 border-t border-border/60 pt-5">
+                                {changes.length > 0 ? (
+                                  <div className="overflow-hidden rounded-2xl border border-border/60">
+                                    <div className="hidden grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-border/60 bg-muted/20 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:grid">
+                                      <div>Updated Field</div>
+                                      <div>Before</div>
+                                      <div>After</div>
+                                    </div>
+                                    <div className="divide-y divide-border/60">
+                                      {changes.map((change) => (
+                                        <div
+                                          key={`${entry.id}-${change.key}`}
+                                          className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)]"
+                                        >
+                                          <div className="min-w-0">
+                                            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                                              Updated Field
+                                            </div>
+                                            <div className="text-sm font-medium text-foreground">{change.field}</div>
+                                          </div>
+                                          <div className="min-w-0">
+                                            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                                              Before
+                                            </div>
+                                            <div className="break-words text-sm text-muted-foreground">{change.before}</div>
+                                          </div>
+                                          <div className="min-w-0">
+                                            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                                              After
+                                            </div>
+                                            <div className="break-words text-sm font-semibold text-foreground">{change.after}</div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-4 text-sm text-muted-foreground">
+                                    No field changes recorded for this audit event.
+                                  </div>
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {activityEntries.length > auditPreviewCount ? (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-xs text-muted-foreground">
+                        Showing {visibleAuditEntries.length} of {activityEntries.length} audit entries.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto rounded-full px-0 text-sm font-semibold text-emerald-700 hover:bg-transparent hover:text-emerald-800"
+                        onClick={() => setShowAllAuditEntries((current) => !current)}
+                      >
+                        {showAllAuditEntries ? "Hide Older Audit Entries" : `View ${activityEntries.length - auditPreviewCount} More`}
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

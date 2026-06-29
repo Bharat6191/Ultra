@@ -110,7 +110,6 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
 
   const [rows, setRows] = React.useState<ContractorPlantMapping[] | null>(null)
   const [plants, setPlants] = React.useState<Plant[]>([])
-  const [plantQuery, setPlantQuery] = React.useState("")
 
   const [dialog, setDialog] = React.useState<
     | { mode: "add" }
@@ -153,7 +152,6 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
 
   function openAdd() {
     setForm(EMPTY_FORM)
-    setPlantQuery("")
     setDialog({ mode: "add" })
   }
 
@@ -165,18 +163,22 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
       end_date: mapping.end_date ?? "",
       notes: mapping.notes ?? "",
     })
-    setPlantQuery("")
     setDialog({ mode: "edit", mapping })
   }
 
   function closeDialog() {
     setDialog(null)
     setForm(EMPTY_FORM)
-    setPlantQuery("")
   }
 
   function validateForm(): string | null {
     if (dialog?.mode === "add" && !form.org_unit_id) return "Select a plant first."
+    if (
+      dialog?.mode === "add" &&
+      rows?.some((r) => String(r.org_unit_id) === String(form.org_unit_id))
+    ) {
+      return "This contractor is already mapped to that plant."
+    }
     if (form.start_date && form.end_date && form.end_date < form.start_date) {
       return "End date must be on or after start date."
     }
@@ -251,26 +253,15 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
     }
   }
 
-  // Hide plants that are already mapped at the SELECTED role to avoid violating the
-  // (contractor, plant, role) unique constraint. Other roles remain available.
+  // One contractor should only be mapped to a plant once. Hide already-mapped
+  // plants entirely so the dialog only offers valid new choices.
   const availablePlants = React.useMemo(() => {
-    const selectedRole = form.role
     return plants.filter((p) => {
-      const sameRoleMapped = rows?.some(
-        (r) => r.org_unit_id === p.id && r.role === selectedRole,
-      )
-      if (sameRoleMapped) return false
-      if (plantQuery.trim() && !p.name.toLowerCase().includes(plantQuery.trim().toLowerCase())) {
-        return false
-      }
+      const alreadyMapped = rows?.some((r) => r.org_unit_id === p.id)
+      if (alreadyMapped) return false
       return true
     })
-  }, [plants, rows, form.role, plantQuery])
-
-  const selectedPlant = React.useMemo(
-    () => plants.find((p) => String(p.id) === String(form.org_unit_id)) ?? null,
-    [plants, form.org_unit_id],
-  )
+  }, [plants, rows])
 
   const summary = React.useMemo(() => {
     if (!rows) return { total: 0, active: 0, expiring: 0, expired: 0, upcoming: 0 }
@@ -523,42 +514,22 @@ export function ContractorPlants({ contractorId }: { contractorId: number }) {
             {!isEditing ? (
               <div className="grid gap-2">
                 <div className="text-xs text-muted-foreground">Plant</div>
-                <Input
-                  value={plantQuery}
-                  onChange={(e) => {
-                    const nextQuery = e.target.value
-                    setPlantQuery(nextQuery)
-                    if (
-                      selectedPlant &&
-                      nextQuery.trim().toLowerCase() !== selectedPlant.name.trim().toLowerCase()
-                    ) {
-                      setForm((s) => ({ ...s, org_unit_id: "" }))
-                    }
-                  }}
-                  placeholder="Search plants…"
-                  autoFocus
-                />
                 <select
                   className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm"
                   value={form.org_unit_id}
-                  onChange={(e) => {
-                    const nextPlant =
-                      plants.find((p) => String(p.id) === e.target.value) ?? null
-                    setForm((s) => ({ ...s, org_unit_id: e.target.value }))
-                    setPlantQuery(nextPlant?.name ?? "")
-                  }}
-                  size={Math.min(6, Math.max(2, availablePlants.length))}
+                  onChange={(e) => setForm((s) => ({ ...s, org_unit_id: e.target.value }))}
+                  autoFocus
                 >
-                  {availablePlants.length === 0 ? (
-                    <option value="" disabled>
-                      No plants available
-                    </option>
-                  ) : null}
-                  {availablePlants.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
+                  <option value="" disabled>
+                    {availablePlants.length === 0 ? "All plants are already mapped" : "Select a plant"}
+                  </option>
+                  {availablePlants.length === 0 ? null : (
+                    availablePlants.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
             ) : (

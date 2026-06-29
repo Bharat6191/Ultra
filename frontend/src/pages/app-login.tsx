@@ -44,6 +44,10 @@ type PublicAuthPolicy = {
 const AUTH_POWERED_BY = "Powered by TiMAD"
 const AUTH_APP_VERSION = "V 0.0.0.0"
 
+function isInvalidCredentialsError(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.status === 401 && err.message.trim().toLowerCase() === "invalid credentials"
+}
+
 export function AppLoginPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -149,6 +153,11 @@ export function AppLoginPage() {
         else setError(err.message)
       } else if (err instanceof Error) setError(err.message)
       else setError("Login failed")
+      if (isInvalidCredentialsError(err)) {
+        setUsername("")
+        setPassword("")
+        setShowPassword(false)
+      }
     } finally {
       setIsSubmitting(false)
     }

@@ -3,6 +3,16 @@ export const API_BASE_URL =
 
 type Json = Record<string, unknown>
 
+function parseResponseBody(text: string): unknown {
+  if (!text) return undefined
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    const trimmed = text.trim()
+    return trimmed.length > 0 ? trimmed : undefined
+  }
+}
+
 function getAccessToken() {
   try {
     const t = localStorage.getItem("access_token")
@@ -25,6 +35,10 @@ export class ApiError extends Error {
 }
 
 function parseErrorMessage(data: unknown, status: number): string {
+  if (typeof data === "string") {
+    const trimmed = data.trim()
+    if (trimmed) return trimmed
+  }
   if (data && typeof data === "object") {
     const detail = (data as { detail?: unknown }).detail
     if (typeof detail === "string") return detail
@@ -66,7 +80,7 @@ export async function getJson<TResponse>(
   })
 
   const text = await res.text()
-  const data = text ? (JSON.parse(text) as unknown) : undefined
+  const data = parseResponseBody(text)
 
   if (!res.ok) {
     throw new ApiError(parseErrorMessage(data, res.status), res.status, data)
@@ -93,7 +107,7 @@ export async function getJsonList<TItem>(
   })
 
   const text = await res.text()
-  const data = text ? (JSON.parse(text) as unknown) : undefined
+  const data = parseResponseBody(text)
 
   if (!res.ok) {
     throw new ApiError(parseErrorMessage(data, res.status), res.status, data)
@@ -125,7 +139,7 @@ export async function postJson<TResponse>(
   })
 
   const text = await res.text()
-  const data = text ? (JSON.parse(text) as unknown) : undefined
+  const data = parseResponseBody(text)
 
   if (!res.ok) {
     throw new ApiError(parseErrorMessage(data, res.status), res.status, data)
@@ -152,7 +166,7 @@ export async function postForm<TResponse>(
   })
 
   const text = await res.text()
-  const data = text ? (JSON.parse(text) as unknown) : undefined
+  const data = parseResponseBody(text)
 
   if (!res.ok) {
     throw new ApiError(parseErrorMessage(data, res.status), res.status, data)
@@ -166,12 +180,7 @@ export async function getBlob(path: string): Promise<Blob> {
   const res = await authFetch(path)
   if (!res.ok) {
     const text = await res.text()
-    let data: unknown
-    try {
-      data = text ? JSON.parse(text) : undefined
-    } catch {
-      data = undefined
-    }
+    const data = parseResponseBody(text)
     throw new ApiError(parseErrorMessage(data, res.status), res.status, data)
   }
   return res.blob()
@@ -210,7 +219,7 @@ export async function patchJson<TResponse>(
   })
 
   const text = await res.text()
-  const data = text ? (JSON.parse(text) as unknown) : undefined
+  const data = parseResponseBody(text)
 
   if (!res.ok) {
     throw new ApiError(parseErrorMessage(data, res.status), res.status, data)
@@ -239,7 +248,7 @@ export async function putJson<TResponse>(
   })
 
   const text = await res.text()
-  const data = text ? (JSON.parse(text) as unknown) : undefined
+  const data = parseResponseBody(text)
 
   if (!res.ok) {
     throw new ApiError(parseErrorMessage(data, res.status), res.status, data)
@@ -265,7 +274,7 @@ export async function deleteJson<TResponse = void>(
   })
 
   const text = await res.text()
-  const data = text ? (JSON.parse(text) as unknown) : undefined
+  const data = parseResponseBody(text)
 
   if (!res.ok) {
     throw new ApiError(parseErrorMessage(data, res.status), res.status, data)

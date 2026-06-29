@@ -6,9 +6,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/layout/PageHeader"
+import { ListPagination } from "@/components/shared/ListPagination"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { getJson } from "@/lib/api"
+import { getJsonList } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
@@ -27,9 +28,13 @@ type UserPublic = {
   updated_at: string
 }
 
+const USERS_PAGE_SIZE = 20
+
 export function UsersPage() {
   const [users, setUsers] = React.useState<UserPublic[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const [page, setPage] = React.useState(0)
+  const [total, setTotal] = React.useState(0)
 
   const canUpdate = hasPermission("users.update")
   const canCreate = hasPermission("users.create")
@@ -38,18 +43,22 @@ export function UsersPage() {
   async function load() {
     setError(null)
     try {
-      const u = await getJson<UserPublic[]>("/admin/users?skip=0&limit=50")
-      setUsers(u)
+      const { items, total: userTotal } = await getJsonList<UserPublic>(
+        `/admin/users?skip=${page * USERS_PAGE_SIZE}&limit=${USERS_PAGE_SIZE}`,
+      )
+      setUsers(items)
+      setTotal(userTotal)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load users")
       setUsers([])
+      setTotal(0)
     }
   }
 
   React.useEffect(() => {
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [page])
 
   return (
     <div className="w-full space-y-6">
@@ -168,6 +177,13 @@ export function UsersPage() {
               )}
             </TableBody>
           </Table>
+          <ListPagination
+            page={page}
+            pageSize={USERS_PAGE_SIZE}
+            total={total}
+            loading={users === null}
+            onPageChange={setPage}
+          />
         </CardContent>
       </Card>
     </div>

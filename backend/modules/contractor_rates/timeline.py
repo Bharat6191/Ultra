@@ -27,15 +27,29 @@ from modules.users.model import User
 _SKIP_AUDIT = frozenset({"VERSION_CREATED", "NEGOTIATION_ADDED"})
 
 _FIELD_LABELS: dict[str, str] = {
+    "contractor_id": "Contractor ID",
+    "part_master_id": "Part Master ID",
     "negotiated_rate": "Negotiated rate",
-    "initial_rate": "Opening ask",
+    "initial_rate": "Initial Rate",
     "previous_rate": "Previous rate",
     "savings_amount": "Savings",
     "savings_percentage": "Savings %",
     "effective_from": "Effective from",
     "effective_to": "Effective to",
+    "approval_request_id": "Approval Request ID",
+    "current_round": "Current Round",
     "status": "Status",
     "remarks": "Remarks",
+}
+
+_FIELD_TOKEN_LABELS: dict[str, str] = {
+    "cin": "CIN",
+    "gstin": "GSTIN",
+    "id": "ID",
+    "pan": "PAN",
+    "po": "PO",
+    "uom": "UOM",
+    "wo": "WO",
 }
 
 _STATUS_LABELS: dict[str, str] = {
@@ -87,6 +101,18 @@ def _format_field_value(field: str, value: Any) -> str | None:
     if field == "status" and isinstance(value, str):
         return _STATUS_LABELS.get(value, value.replace("_", " ").title())
     return str(value)
+
+
+def _field_label(key: str) -> str:
+    explicit = _FIELD_LABELS.get(key)
+    if explicit:
+        return explicit
+    words = [
+        _FIELD_TOKEN_LABELS.get(part.lower(), part.capitalize())
+        for part in key.split("_")
+        if part
+    ]
+    return " ".join(words) if words else key
 
 
 def _build_vs_base_tolerance(negotiated: Any, base_rate: Any) -> dict[str, Any] | None:
@@ -304,7 +330,7 @@ def _build_changes(old: dict[str, Any] | None, new: dict[str, Any] | None) -> li
         changes.append(
             {
                 "field": key,
-                "label": _FIELD_LABELS.get(key, key.replace("_", " ").title()),
+                "label": _field_label(key),
                 "old": _format_field_value(key, ov),
                 "new": _format_field_value(key, nv),
             }

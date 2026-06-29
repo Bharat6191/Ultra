@@ -3,6 +3,7 @@ import { File, FileImage, FileText } from "lucide-react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
+import { PageBackLink } from "@/components/layout/page-back-link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -219,20 +220,11 @@ export function NegotiatedRateNegotiatePage() {
   return (
     <div className="w-full min-w-0 space-y-6">
       <header className="space-y-1 border-b border-border/70 pb-6">
-        <div className="text-xs text-muted-foreground">
-          <Link to="/dashboard/negotiated-rates" className="underline-offset-2 hover:underline">
-            Negotiation
-          </Link>
-          <span className="mx-1">/</span>
-          <Link
-            to={`/dashboard/negotiated-rates/${rate.id}`}
-            className="underline-offset-2 hover:underline"
-          >
-            {rate.part_code ?? `#${rate.id}`}
-          </Link>
-          <span className="mx-1">/</span>
-          <span>Negotiate</span>
-        </div>
+        <PageBackLink
+          to={`/dashboard/negotiated-rates/${rate.id}`}
+          label={rate.part_code ?? `#${rate.id}`}
+          className={rate.part_code ? "font-mono" : undefined}
+        />
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">Record a negotiation round</h1>
           <SectionHint text="Draft rates can still update round 1. Approved rates start the next round in a new draft, while pending approval stays locked." />
@@ -250,11 +242,11 @@ export function NegotiatedRateNegotiatePage() {
           </CardHeader>
           <CardContent className="grid gap-2 text-sm">
             <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Should cost</span>
+              <span className="text-muted-foreground">Should Cost</span>
               <span className="font-medium">{formatMoney(rate.base_rate)}</span>
             </div>
             <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Current agreed rate</span>
+              <span className="text-muted-foreground">Current Agreed Rate</span>
               <span className="font-medium">{formatMoney(rate.negotiated_rate)}</span>
             </div>
             {rate.initial_rate != null ? (

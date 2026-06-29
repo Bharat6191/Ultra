@@ -1,18 +1,16 @@
 import * as React from "react"
-import { Link, useParams } from "react-router-dom"
+import { useParams } from "react-router-dom"
 import { toast } from "sonner"
-import { ArrowLeft, Building2, CalendarDays, Send, X } from "lucide-react"
+import { Send, X } from "lucide-react"
 
+import { PageBackLink } from "@/components/layout/page-back-link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getJson, postJson } from "@/lib/api"
 import { canReadNegotiatedRates, hasPermission, isSuperuser } from "@/lib/permissions"
-import {
-  rateStatusLabel,
-  rateStatusVariant,
-} from "@/components/contractors/rateStatus"
+import { rateStatusLabel, rateStatusVariant } from "@/components/contractors/rateStatus"
 import {
   RateDetailPanel,
   type ContractorRatePublic,
@@ -97,12 +95,7 @@ export function NegotiatedRateDetailPage() {
   if (error && !rate) {
     return (
       <div className="space-y-3">
-        <Link
-          to="/dashboard/negotiated-rates"
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-3.5" /> Back to negotiated rates
-        </Link>
+        <PageBackLink to="/dashboard/negotiated-rates" label="Negotiations" />
         <Alert variant="destructive">
           <AlertTitle>Could not load this negotiation</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
@@ -122,7 +115,6 @@ export function NegotiatedRateDetailPage() {
     )
   }
 
-  const partSubtitle = [rate.pricing_method, rate.unit_type].filter(Boolean).join(" · ")
   const canSubmit = canCreate && (rate.status === "draft" || rate.status === "rejected")
   const canCancelNow =
     canUpdate && (rate.status === "draft" || rate.status === "pending_approval")
@@ -132,12 +124,11 @@ export function NegotiatedRateDetailPage() {
       {/* Header / breadcrumb */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <Link
+          <PageBackLink
             to="/dashboard/negotiated-rates"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="size-3.5" /> Back to negotiated rates
-          </Link>
+            label={rate.part_code ?? `#${rate.id}`}
+            className={rate.part_code ? "font-mono" : undefined}
+          />
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">
             <span className="font-mono text-xl">{rate.part_code ?? "—"}</span>
             {rate.part_name ? (
@@ -147,35 +138,19 @@ export function NegotiatedRateDetailPage() {
               </>
             ) : null}
           </h1>
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <span className="inline-flex items-center gap-1">
-              <Building2 className="size-3.5" />
-              {rate.contractor_name ? (
-                <Link
-                  to={`/dashboard/contractors/${rate.contractor_id}`}
-                  className="text-foreground underline-offset-2 hover:underline"
-                >
-                  {rate.contractor_name}
-                </Link>
-              ) : (
-                `Contractor #${rate.contractor_id}`
-              )}
-            </span>
-            <span>· {rate.org_unit_name ?? "—"}</span>
-            {partSubtitle ? <span className="capitalize">· {partSubtitle.replace(/_/g, " ")}</span> : null}
-            <span className="inline-flex items-center gap-1">
-              <CalendarDays className="size-3.5" />
-              {rate.effective_from}
-              {rate.effective_to ? ` → ${rate.effective_to}` : " → open"}
-            </span>
-          </div>
+           <p className="text-xs text-muted-foreground">
+                {rate.org_unit_name ?? "—"} · {(rate.pricing_method ?? "").replace(/_/g, " ")} ·{" "}
+                {rate.unit_type ?? "—"}
+              </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={rateStatusVariant(rate.status)}>{rateStatusLabel(rate.status)}</Badge>
           {canSubmit ? (
             <Button size="sm" onClick={submitForApproval} disabled={actionBusy}>
               <Send className="size-3.5" /> Submit for approval
             </Button>
+          ) : null}
+          {rate.status === "pending_approval" ? (
+            <Badge variant={rateStatusVariant(rate.status)}>{rateStatusLabel(rate.status)}</Badge>
           ) : null}
           {canCancelNow ? (
             <Button

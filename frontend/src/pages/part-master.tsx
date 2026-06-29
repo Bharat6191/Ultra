@@ -1,15 +1,27 @@
 import * as React from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
-import { Plus, Search, Upload } from "lucide-react"
+import { Filter, Plus, Search, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { ListPagination } from "@/components/shared/ListPagination"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission, isSuperuser } from "@/lib/permissions"
 
 type OrgUnitLite = { id: number; name: string; type: string; parent_id?: number | null }
+type PartStatusFilter = "all" | "active" | "inactive"
+
+const PART_MASTER_PAGE_SIZE = 20
 
 export type PartMasterPublic = {
   id: number
@@ -59,12 +71,14 @@ export function PartMasterPage() {
   const highlightId = searchParams.get("highlight")
 
   const [rows, setRows] = React.useState<PartMasterPublic[]>([])
+  const [page, setPage] = React.useState(0)
   const [orgCatalog, setOrgCatalog] = React.useState<OrgUnitLite[]>([])
   const plants = React.useMemo(
     () => orgCatalog.filter((o) => String(o.type).toUpperCase() === "PLANT"),
     [orgCatalog],
   )
   const [plantFilter, setPlantFilter] = React.useState<string>("")
+  const [statusFilter, setStatusFilter] = React.useState<PartStatusFilter>("all")
   const [search, setSearch] = React.useState("")
   const [loading, setLoading] = React.useState(true)
 
@@ -116,6 +130,35 @@ export function PartMasterPage() {
     return () => window.clearTimeout(t)
   }, [highlightId, rows])
 
+  React.useEffect(() => {
+    setPage(0)
+  }, [plantFilter, search, statusFilter])
+
+  const filteredRows = React.useMemo(
+    () =>
+      rows.filter((row) => {
+        if (statusFilter === "active") return row.is_active
+        if (statusFilter === "inactive") return !row.is_active
+        return true
+      }),
+    [rows, statusFilter],
+  )
+
+  const paginatedRows = React.useMemo(
+    () => filteredRows.slice(page * PART_MASTER_PAGE_SIZE, (page + 1) * PART_MASTER_PAGE_SIZE),
+    [filteredRows, page],
+  )
+
+  const clusters = React.useMemo(
+    () =>
+      orgCatalog
+        .filter((o) => String(o.type).toUpperCase() === "CLUSTER")
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [orgCatalog],
+  )
+
+  const activeFilterCount = (plantFilter ? 1 : 0) + (statusFilter !== "all" ? 1 : 0) + (search.trim() ? 1 : 0)
+
   if (!canView) {
     return (
       <Card>
@@ -154,46 +197,116 @@ export function PartMasterPage() {
         ) : null}
       </div>
 
-      <Card>
-        <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center">
-          <select
-            aria-label="Part master scope"
-            className="h-10 rounded-md border bg-white px-3 text-sm lg:w-[280px] lg:shrink-0"
-            value={plantFilter}
-            onChange={(e) => setPlantFilter(e.target.value)}
-          >
-            <option value="">All Plants & Clusters</option>
-            <optgroup label="Clusters">
-              {orgCatalog
-                .filter((o) => String(o.type).toUpperCase() === "CLUSTER")
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </option>
-                ))}
-            </optgroup>
-            <optgroup label="Plants">
-              {plants.map((p) => (
-                <option key={p.id} value={String(p.id)}>
-                  {p.name}
-                </option>
-              ))}
-            </optgroup>
-          </select>
+      <Card className="rounded-2xl">
+        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
           <div className="relative min-w-0 flex-1">
-            <Search className="absolute left-2 top-3 size-4 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 opacity-60" aria-hidden />
             <Input
               aria-label="Search part"
-              className="pl-8"
+              className="pl-9"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Code or name"
+              placeholder="Search by Part Code or Part Name…"
             />
           </div>
-          <Button variant="secondary" onClick={() => void load()} className="lg:shrink-0">
-            Apply
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Filter className="mr-2 size-4 opacity-70" aria-hidden />
+                  Status
+                  {statusFilter !== "all" ? (
+                    <span className="ml-2 rounded-md bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
+                      1
+                    </span>
+                  ) : null}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuLabel>Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem checked={statusFilter === "all"} onCheckedChange={() => setStatusFilter("all")}>
+                  All
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={statusFilter === "active"}
+                  onCheckedChange={() => setStatusFilter("active")}
+                >
+                  Active
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={statusFilter === "inactive"}
+                  onCheckedChange={() => setStatusFilter("inactive")}
+                >
+                  Inactive
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Plant
+                  {plantFilter ? (
+                    <span className="ml-2 rounded-md bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
+                      1
+                    </span>
+                  ) : null}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="max-h-64 w-56 overflow-auto">
+                <DropdownMenuLabel>Scope</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem checked={plantFilter === ""} onCheckedChange={() => setPlantFilter("")}>
+                  All Plants & Clusters
+                </DropdownMenuCheckboxItem>
+                {clusters.length > 0 ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Clusters</DropdownMenuLabel>
+                    {clusters.map((cluster) => (
+                      <DropdownMenuCheckboxItem
+                        key={cluster.id}
+                        checked={plantFilter === String(cluster.id)}
+                        onCheckedChange={() => setPlantFilter(String(cluster.id))}
+                      >
+                        {cluster.name}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </>
+                ) : null}
+                {plants.length > 0 ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Plants</DropdownMenuLabel>
+                    {plants.map((plant) => (
+                      <DropdownMenuCheckboxItem
+                        key={plant.id}
+                        checked={plantFilter === String(plant.id)}
+                        onCheckedChange={() => setPlantFilter(String(plant.id))}
+                      >
+                        {plant.name}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {activeFilterCount > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearch("")
+                  setPlantFilter("")
+                  setStatusFilter("all")
+                }}
+              >
+                Clear
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -206,7 +319,8 @@ export function PartMasterPage() {
           {loading ? (
             <div className="text-sm text-muted-foreground">Loading…</div>
           ) : (
-            <Table>
+            <>
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Code</TableHead>
@@ -222,14 +336,14 @@ export function PartMasterPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
-                      No parts match this filter.
+                  {filteredRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
+                        No parts match this filter.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  rows.map((r) => (
+                  paginatedRows.map((r) => (
                     <TableRow
                       key={r.id}
                       data-part-master-id={r.id}
@@ -315,7 +429,15 @@ export function PartMasterPage() {
                   ))
                 )}
               </TableBody>
-            </Table>
+              </Table>
+              <ListPagination
+                page={page}
+                pageSize={PART_MASTER_PAGE_SIZE}
+                total={filteredRows.length}
+                loading={loading}
+                onPageChange={setPage}
+              />
+            </>
           )}
         </CardContent>
       </Card>

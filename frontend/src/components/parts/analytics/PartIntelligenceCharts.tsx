@@ -39,7 +39,7 @@ function RateBarsLegend() {
       </div>
       <div className="flex items-center gap-1.5 text-foreground">
         <span className="size-3 rounded-sm" style={{ backgroundColor: SHOULD_COST_COLOR }} />
-        <span>Should cost</span>
+        <span>Should Cost</span>
       </div>
     </div>
   )
@@ -103,7 +103,7 @@ export function PartIntelligenceCharts({ contractors, workOrders }: Props) {
                 />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} content={() => <RateBarsLegend />} />
                 <Bar dataKey="negotiated" name="Negotiated" fill={NEGOTIATED_COLOR} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="base" name="Should cost" fill={SHOULD_COST_COLOR} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="base" name="Should Cost" fill={SHOULD_COST_COLOR} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

@@ -18,6 +18,7 @@ import re
 from typing import Any
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from modules.approvals.assignment_service import get_workflow_for_action
@@ -72,24 +73,49 @@ ACTION_CODE_ACTIVATE = "contractor.activate"
 # without a schema or API change.
 DOCUMENT_AUTO_VERIFY = True
 DEFAULT_NEW_DOCUMENT_STATUS = "verified" if DOCUMENT_AUTO_VERIFY else "pending"
+CONTRACTOR_CODE_DUPLICATE_MESSAGE = (
+    "Contractor Code already exists. Please enter a unique Contractor Code."
+)
 
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _strip_or_none(value: str | None, *, lower: bool = False) -> str | None:
+def _strip_or_none(value: str | None, *, lower: bool = False, upper: bool = False) -> str | None:
     if value is None:
         return None
     s = str(value).strip()
     if not s:
         return None
-    return s.lower() if lower else s
+    if lower:
+        return s.lower()
+    if upper:
+        return s.upper()
+    return s
 
 
 class ContractorService:
     def __init__(self, db: Session) -> None:
         self._db = db
+
+    @staticmethod
+    def _is_duplicate_contractor_code_integrity_error(exc: IntegrityError) -> bool:
+        return "contractor_code" in str(exc).lower()
+
+    def _ensure_unique_contractor_code(
+        self,
+        contractor_code: str,
+        *,
+        exclude_id: int | None = None,
+    ) -> None:
+        stmt = select(Contractor.id).where(
+            func.lower(Contractor.contractor_code) == str(contractor_code).lower()
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(Contractor.id != int(exclude_id))
+        if self._db.scalar(stmt) is not None:
+            raise ConflictError(CONTRACTOR_CODE_DUPLICATE_MESSAGE)
 
     # ---------- Read ----------
 
@@ -172,14 +198,15 @@ class ContractorService:
         self, payload: ContractorCreate, *, actor_user_id: int | None
     ) -> Contractor:
         # Resolve canonical statutory IDs from either canonical or legacy fields.
-        pan = _strip_or_none(payload.pan) or _strip_or_none(payload.pan_number)
-        gstin = _strip_or_none(payload.gstin) or _strip_or_none(payload.gst_number)
-        cin = _strip_or_none(payload.cin)
+        pan = _strip_or_none(payload.pan, upper=True) or _strip_or_none(payload.pan_number, upper=True)
+        gstin = _strip_or_none(payload.gstin, upper=True) or _strip_or_none(payload.gst_number, upper=True)
+        cin = _strip_or_none(payload.cin, upper=True)
         contractor_type = _strip_or_none(payload.contractor_type, lower=True)
 
         contractor_code = _strip_or_none(payload.contractor_code)
         if not contractor_code:
             raise ConflictError("contractor_code is required.")
+        self._ensure_unique_contractor_code(contractor_code)
         c = Contractor(
             contractor_code=contractor_code,
             name=payload.name.strip(),
@@ -213,7 +240,13 @@ class ContractorService:
             updated_by=actor_user_id,
         )
         self._db.add(c)
-        self._db.flush()
+        try:
+            self._db.flush()
+        except IntegrityError as exc:
+            self._db.rollback()
+            if self._is_duplicate_contractor_code_integrity_error(exc):
+                raise ConflictError(CONTRACTOR_CODE_DUPLICATE_MESSAGE) from None
+            raise
 
         # If a workflow exists for ``contractor.create``, hold contractor in pending state.
         wf = get_workflow_for_action(self._db, ACTION_CODE_CREATE)
@@ -250,7 +283,13 @@ class ContractorService:
             metadata={"approval_request_id": approval_request_id} if approval_request_id else None,
         )
 
-        self._db.commit()
+        try:
+            self._db.commit()
+        except IntegrityError as exc:
+            self._db.rollback()
+            if self._is_duplicate_contractor_code_integrity_error(exc):
+                raise ConflictError(CONTRACTOR_CODE_DUPLICATE_MESSAGE) from None
+            raise
         return self.get_contractor(int(c.id))
 
     # ---------- Update ----------
@@ -273,6 +312,7 @@ class ContractorService:
             contractor_code = _strip_or_none(upd["contractor_code"])
             if not contractor_code:
                 raise ConflictError("contractor_code is required.")
+            self._ensure_unique_contractor_code(contractor_code, exclude_id=int(c.id))
             c.contractor_code = contractor_code
         if "name" in upd and upd["name"] is not None:
             c.name = str(upd["name"]).strip()
@@ -281,15 +321,15 @@ class ContractorService:
         if "trade_name" in upd:
             c.trade_name = _strip_or_none(upd.get("trade_name"))
         if "pan" in upd or "pan_number" in upd:
-            new_pan = _strip_or_none(upd.get("pan")) or _strip_or_none(upd.get("pan_number"))
+            new_pan = _strip_or_none(upd.get("pan"), upper=True) or _strip_or_none(upd.get("pan_number"), upper=True)
             c.pan = new_pan
             c.pan_number = new_pan
         if "gstin" in upd or "gst_number" in upd:
-            new_gstin = _strip_or_none(upd.get("gstin")) or _strip_or_none(upd.get("gst_number"))
+            new_gstin = _strip_or_none(upd.get("gstin"), upper=True) or _strip_or_none(upd.get("gst_number"), upper=True)
             c.gstin = new_gstin
             c.gst_number = new_gstin
         if "cin" in upd:
-            c.cin = _strip_or_none(upd.get("cin"))
+            c.cin = _strip_or_none(upd.get("cin"), upper=True)
         if "contractor_type" in upd:
             c.contractor_type = _strip_or_none(upd.get("contractor_type"), lower=True)
         if "contact_person" in upd:
@@ -359,7 +399,13 @@ class ContractorService:
                         created_by=actor_user_id,
                     )
 
-        self._db.commit()
+        try:
+            self._db.commit()
+        except IntegrityError as exc:
+            self._db.rollback()
+            if self._is_duplicate_contractor_code_integrity_error(exc):
+                raise ConflictError(CONTRACTOR_CODE_DUPLICATE_MESSAGE) from None
+            raise
         return self.get_contractor(int(c.id))
 
     # ---------- Lifecycle ----------
@@ -771,11 +817,12 @@ class ContractorService:
             select(ContractorPlant).where(
                 ContractorPlant.contractor_id == int(contractor_id),
                 ContractorPlant.org_unit_id == int(payload.org_unit_id),
-                ContractorPlant.role == role,
             )
         )
         if existing is not None:
-            raise ConflictError("This contractor is already mapped to that plant for that role.")
+            raise ConflictError(
+                "This contractor is already mapped to that plant. Edit the existing mapping instead of adding a second one."
+            )
 
         row = ContractorPlant(
             contractor_id=int(contractor_id),

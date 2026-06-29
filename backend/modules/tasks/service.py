@@ -6,7 +6,11 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from modules.approvals.inbox_service import dedupe_approval_inbox_rows, should_show_approval_in_inbox
+from modules.approvals.inbox_service import (
+    dedupe_approval_inbox_rows,
+    effective_request_status,
+    should_show_approval_in_inbox,
+)
 from modules.approvals.model import (
     ApprovalAction,
     ApprovalRequest,
@@ -34,6 +38,22 @@ from modules.tasks.schema import (
 class TaskService:
     def __init__(self, db: Session) -> None:
         self._db = db
+
+    def _acted_role_task_ids_for_viewer(self, *, viewer_id: int, tasks: list[ApprovalTask]) -> set[int]:
+        task_ids = [
+            int(t.id)
+            for t in tasks
+            if str(t.task_type) == "approval"
+            and t.assigned_role_id is not None
+            and str(t.status) == "pending"
+        ]
+        if not task_ids:
+            return set()
+        stmt = select(ApprovalAction.task_id).where(
+            ApprovalAction.user_id == viewer_id,
+            ApprovalAction.task_id.in_(task_ids),
+        )
+        return {int(task_id) for task_id in self._db.scalars(stmt).all()}
 
     def my_tasks(
         self,
@@ -88,7 +108,10 @@ class TaskService:
         if done_mode:
             out = dedupe_approval_inbox_rows(raw)
             return out[: int(limit)]
+        acted_role_task_ids = self._acted_role_task_ids_for_viewer(viewer_id=viewer_id, tasks=raw)
         filtered = [t for t in raw if should_show_approval_in_inbox(t)]
+        if acted_role_task_ids:
+            filtered = [t for t in filtered if int(t.id) not in acted_role_task_ids]
         out = dedupe_approval_inbox_rows(filtered)
         return out[: int(limit)]
 
@@ -303,7 +326,7 @@ def _build_workflow_steps_for_request(db: Session, req: ApprovalRequest) -> list
 
     steps_sorted = sorted(wf.steps, key=lambda s: int(s.step_order))
     total_steps = len(steps_sorted)
-    req_status = str(req.status).lower()
+    req_status = effective_request_status(req)
     current = int(req.current_step)
 
     reject_step_order: int | None = None
@@ -404,6 +427,7 @@ def build_task_detail_public(db: Session, t: ApprovalTask) -> TaskDetailPublic:
     approval: TaskApprovalContextPublic | None = None
     if req is not None:
         payload: dict[str, Any] = dict(req.payload) if req.payload else {}
+        req_status = effective_request_status(req)
         if req.entity_type == "user_creation":
             rid = payload.get("role_id")
             oid = payload.get("org_unit_id")
@@ -430,7 +454,7 @@ def build_task_detail_public(db: Session, t: ApprovalTask) -> TaskDetailPublic:
             request_id=int(req.id),
             entity_type=str(req.entity_type),
             entity_id=int(req.entity_id),
-            status=str(req.status),
+            status=req_status,
             current_step=int(req.current_step),
             created_by=req.created_by,
             payload=payload,
@@ -503,4 +527,3 @@ def build_task_detail_public(db: Session, t: ApprovalTask) -> TaskDetailPublic:
         comments=comments,
         audit_logs=audit_rows,
     )
-

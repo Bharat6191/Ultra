@@ -14,6 +14,8 @@ import type { PartMasterPublic } from "@/pages/part-master"
 
 type OrgUnitLite = { id: number; name: string; type: string }
 
+const PART_MASTER_DESCRIPTION_MAX_LENGTH = 200
+
 function sanitizeDecimalString(raw: string): string {
   let t = raw.replace(/[^\d.]/g, "")
   const dot = t.indexOf(".")
@@ -88,7 +90,11 @@ export function PartMasterCreatePage() {
       return
     }
     if (!form.unit_type.trim()) {
-      toast.error("Unit type (billing UOM) is required")
+      toast.error("Unit Type (UOM) is required")
+      return
+    }
+    if (form.description.length > PART_MASTER_DESCRIPTION_MAX_LENGTH) {
+      toast.error(`Description cannot exceed ${PART_MASTER_DESCRIPTION_MAX_LENGTH} characters`)
       return
     }
 
@@ -206,11 +212,11 @@ export function PartMasterCreatePage() {
               </select>
             </div>
             <div className="grid min-w-0 gap-1 sm:col-span-2 xl:col-span-1">
-              <Label showRequired>Part code</Label>
+              <Label showRequired>Part Code</Label>
               <Input value={form.part_code} onChange={(e) => setForm((f) => ({ ...f, part_code: e.target.value }))} />
             </div>
             <div className="grid min-w-0 gap-1 sm:col-span-2 xl:col-span-1">
-              <Label showRequired>Part name</Label>
+              <Label showRequired>Part Name</Label>
               <Input value={form.part_name} onChange={(e) => setForm((f) => ({ ...f, part_name: e.target.value }))} />
             </div>
             <div className="grid min-w-0 gap-1 sm:col-span-2 xl:col-span-1">
@@ -219,8 +225,17 @@ export function PartMasterCreatePage() {
                 rows={5}
                 className="min-h-[120px] resize-y rounded-xl border-border/60 bg-background/80"
                 value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                maxLength={PART_MASTER_DESCRIPTION_MAX_LENGTH}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    description: e.target.value.slice(0, PART_MASTER_DESCRIPTION_MAX_LENGTH),
+                  }))
+                }
               />
+              <div className="flex justify-end text-[11px] text-muted-foreground">
+                {form.description.length}/{PART_MASTER_DESCRIPTION_MAX_LENGTH}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -232,7 +247,7 @@ export function PartMasterCreatePage() {
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2 space-y-5">
             <div className="grid gap-1">
-              <Label showRequired>Pricing method</Label>
+              <Label showRequired>Price Method</Label>
               <select
                 className="h-9 w-full rounded-md border bg-white px-2 text-sm"
                 value={form.pricing_method}
@@ -258,12 +273,12 @@ export function PartMasterCreatePage() {
                   })
                 }}
               >
-                <option value="piece_based">Piece / time / other unit</option>
+                <option value="piece_based">Piece / Time / Other Unit</option>
                 <option value="weight_based">Weight (kg)</option>
               </select>
             </div>
             <div className="grid gap-1">
-              <Label showRequired>Unit type (billing UOM)</Label>
+              <Label showRequired>Unit Type (UOM)</Label>
               <Input
                 value={form.unit_type}
                 onChange={(e) => setForm((f) => ({ ...f, unit_type: e.target.value }))}
@@ -307,7 +322,7 @@ export function PartMasterCreatePage() {
                   />
                 </div>
                 <div className="grid gap-1">
-                  <Label htmlFor="pm-create-rate-kg">Rate per kg (calculated)</Label>
+                  <Label htmlFor="pm-create-rate-kg">Rate/kg</Label>
                   <Input
                     id="pm-create-rate-kg"
                     readOnly
@@ -321,7 +336,7 @@ export function PartMasterCreatePage() {
             ) : (
               <>
                 <div className="grid gap-1">
-                  <Label>Weight per piece (kg, optional)</Label>
+                  <Label>Weight /Piece</Label>
                   <Input
                     inputMode="decimal"
                     value={form.weight_per_piece}
@@ -333,20 +348,20 @@ export function PartMasterCreatePage() {
                   />
                 </div>
                 <div className="grid gap-1">
-                  <Label showRequired>Rate unit</Label>
+                  <Label showRequired>Rate Unit</Label>
                   <select
                     className="h-9 w-full rounded-md border bg-white px-2 text-sm"
                     value={form.rate_unit_type}
                     onChange={(e) => setForm((f) => ({ ...f, rate_unit_type: e.target.value }))}
                   >
-                    <option value="per_piece">Per piece</option>
-                    <option value="per_unit">Per unit</option>
-                    <option value="per_box">Per box</option>
-                    <option value="per_nos">Per nos</option>
+                    <option value="per_piece">Per Piece</option>
+                    <option value="per_unit">Per Unit</option>
+                    <option value="per_box">Per Box</option>
+                    <option value="per_nos">Per Nos</option>
                   </select>
                 </div>
                 <div className="grid gap-1 sm:col-span-2">
-                  <Label showRequired>Should cost</Label>
+                  <Label showRequired>Should Cost</Label>
                   <Input
                     inputMode="decimal"
                     value={form.base_rate}

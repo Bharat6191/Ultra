@@ -8,6 +8,7 @@ import {
 } from "@react-pdf/renderer"
 
 import type { VariantProps } from "class-variance-authority"
+import { Download } from "lucide-react"
 
 import type { InvoiceDisplayLine } from "@/components/invoices/invoice-line-types"
 import { invoicePreviewTotals } from "@/components/invoices/invoice-line-types"
@@ -293,27 +294,24 @@ export function InvoicePdfDownloadButton({
     disabled && "pointer-events-none opacity-50",
     className,
   )
+  const buttonContent = (
+    <span className="inline-flex items-center gap-1">
+      <span>PDF</span>
+      <Download className="size-4" aria-hidden="true" />
+    </span>
+  )
 
   if (disabled) {
-    return <span className={btnClass}>Download PDF</span>
+    return <span className={btnClass}>{buttonContent}</span>
   }
 
   return (
-  <PDFDownloadLink
-    document={<InvoicePdfDocument data={data} />}
-    fileName={filename}
-    className={btnClass}>
-    {({ loading }) =>
-      loading ? (
-        "Preparing PDF..."
-      ) : (
-        <span className="inline-flex items-center gap-1">
-          
-          <span>PDF</span>
-          <span className="text-2xl ">⤓</span>
-        </span>
-      )
-    }
-  </PDFDownloadLink>
- )
+    <PDFDownloadLink
+      document={<InvoicePdfDocument data={data} />}
+      fileName={filename}
+      className={btnClass}
+    >
+      {({ loading }) => (loading ? "Preparing PDF..." : buttonContent)}
+    </PDFDownloadLink>
+  )
 }

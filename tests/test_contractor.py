@@ -12,6 +12,7 @@ Covers:
 from __future__ import annotations
 
 from datetime import date, timedelta
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -50,7 +51,9 @@ from modules.contractor.schema import (
     ContractorStatusChange,
     ContractorUpdate,
 )
+from modules.contractor.router_app import _parse_status_filter
 from modules.contractor.service import ContractorService
+from modules.errors import ConflictError
 from modules.features.model import Feature  # noqa: F401
 from modules.org_units.model import OrgUnit
 from modules.permissions.model import Permission
@@ -85,13 +88,104 @@ def actor(db: Session) -> User:
 def _make_contractor(db: Session, *, actor_id: int | None = None, name: str = "Acme Pvt Ltd") -> Contractor:
     svc = ContractorService(db)
     payload = ContractorCreate(
+        contractor_code=f"CTR-{uuid4().hex[:8].upper()}",
         name=name,
         legal_name=f"{name} Legal",
         pan="ABCDE1234F",
-        gstin="22AAAAA0000A1Z5",
+        gstin="22ABCDE1234F1Z5",
         contractor_type="vendor",
+        contact_person="Ops Admin",
+        email=f"{uuid4().hex[:8]}@example.com",
+        phone="9876543210",
+        address="123 Market Road",
+        city="Mumbai",
+        state="Maharashtra",
+        country="India",
+        postal_code="400001",
     )
     return svc.create_contractor(payload, actor_user_id=actor_id)
+
+
+def test_create_rejects_duplicate_contractor_code(db: Session, actor: User) -> None:
+    svc = ContractorService(db)
+    svc.create_contractor(
+        ContractorCreate(
+            contractor_code="CTR-DUP-001",
+            name="Acme Pvt Ltd",
+            legal_name="Acme Pvt Ltd Legal",
+            pan="ABCDE1234F",
+            gstin="22ABCDE1234F1Z5",
+            contractor_type="vendor",
+            contact_person="Ops Admin",
+            email="acme@example.com",
+            phone="9876543210",
+            address="123 Market Road",
+            city="Mumbai",
+            state="Maharashtra",
+            country="India",
+            postal_code="400001",
+        ),
+        actor_user_id=actor.id,
+    )
+
+    with pytest.raises(
+        ConflictError,
+        match="Contractor Code already exists. Please enter a unique Contractor Code.",
+    ):
+        svc.create_contractor(
+            ContractorCreate(
+                contractor_code="ctr-dup-001",
+                name="Beta Pvt Ltd",
+                legal_name="Beta Pvt Ltd Legal",
+                pan="BBBBB1111B",
+                gstin="27BBBBB1111B1Z6",
+                contractor_type="vendor",
+                contact_person="Ops Admin",
+                email="beta@example.com",
+                phone="9876543211",
+                address="456 Industrial Estate",
+                city="Pune",
+                state="Maharashtra",
+                country="India",
+                postal_code="411001",
+            ),
+            actor_user_id=actor.id,
+        )
+
+
+def test_update_rejects_duplicate_contractor_code(db: Session, actor: User) -> None:
+    first = _make_contractor(db, actor_id=actor.id, name="Alpha Pvt Ltd")
+    second = _make_contractor(db, actor_id=actor.id, name="Beta Pvt Ltd")
+    svc = ContractorService(db)
+
+    with pytest.raises(
+        ConflictError,
+        match="Contractor Code already exists. Please enter a unique Contractor Code.",
+    ):
+        svc.update_contractor(
+            int(second.id),
+            ContractorUpdate(contractor_code=str(first.contractor_code).lower()),
+            actor_user_id=actor.id,
+        )
+
+
+def test_status_active_filter_uses_lifecycle_status_not_active_flag(db: Session, actor: User) -> None:
+    active = _make_contractor(db, actor_id=actor.id, name="Active Contractor")
+    flagged = _make_contractor(db, actor_id=actor.id, name="Non-compliant Contractor")
+    flagged.status = "non_compliant"
+    flagged.is_active = True
+    db.commit()
+
+    svc = ContractorService(db)
+    parsed_status, parsed_active = _parse_status_filter("active")
+    rows, total = svc.list_contractors(status=parsed_status, is_active=parsed_active)
+
+    assert (parsed_status, parsed_active) == ("active", None)
+    assert [row.id for row in rows] == [int(active.id)]
+    assert rows[0].status == "active"
+    assert total == 1
+    assert _parse_status_filter("true") == (None, True)
+    assert _parse_status_filter("inactive") == (None, False)
 
 
 # ---------- Compliance ----------
@@ -544,7 +638,7 @@ def test_plant_mapping_rejects_non_plant_org_unit(db: Session, actor: User) -> N
     assert "plant" in str(exc_info.value).lower()
 
 
-def test_plant_mapping_blocks_duplicate_role(db: Session, actor: User) -> None:
+def test_plant_mapping_blocks_duplicate_plant_even_with_different_role(db: Session, actor: User) -> None:
     from modules.errors import ConflictError
 
     plant = OrgUnit(name="Plant C", type="PLANT")
@@ -563,13 +657,12 @@ def test_plant_mapping_blocks_duplicate_role(db: Session, actor: User) -> None:
             ContractorPlantCreate(org_unit_id=int(plant.id), role="approved_vendor"),
             actor_user_id=actor.id,
         )
-    # Same plant + different role is allowed (e.g. dual engagement).
-    second = svc.add_plant_mapping(
-        int(contractor.id),
-        ContractorPlantCreate(org_unit_id=int(plant.id), role="restricted"),
-        actor_user_id=actor.id,
-    )
-    assert second.role == "restricted"
+    with pytest.raises(ConflictError):
+        svc.add_plant_mapping(
+            int(contractor.id),
+            ContractorPlantCreate(org_unit_id=int(plant.id), role="restricted"),
+            actor_user_id=actor.id,
+        )
 
 
 def test_plant_mapping_soft_end_via_update_keeps_row(db: Session, actor: User) -> None:

@@ -1,11 +1,12 @@
 import * as React from "react"
-import { Building2, FolderTree, MoreVertical, Pencil, Plus, Search } from "lucide-react"
+import { Building2, FolderTree, Pencil, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ListPagination } from "@/components/shared/ListPagination"
 import {
   Dialog,
   DialogContent,
@@ -14,14 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -38,6 +31,8 @@ type OrgUnitPublic = {
   updated_at: string
 }
 
+const ORG_UNITS_PAGE_SIZE = 10
+
 const SELECT_CLASS = cn(
   "h-10 w-full min-w-0 rounded-lg border border-gray-200 bg-white px-3 text-base transition-colors outline-none focus-visible:border-emerald-500/40 focus-visible:ring-2 focus-visible:ring-emerald-500/20 md:text-sm dark:bg-input/30",
 )
@@ -50,7 +45,10 @@ export function PlantsPage() {
   const [plants, setPlants] = React.useState<OrgUnitPublic[] | null>(null)
   const [clusters, setClusters] = React.useState<OrgUnitPublic[]>([])
   const [error, setError] = React.useState<string | null>(null)
-  const [search, setSearch] = React.useState("")
+  const [clusterSearch, setClusterSearch] = React.useState("")
+  const [plantSearch, setPlantSearch] = React.useState("")
+  const [clusterPage, setClusterPage] = React.useState(0)
+  const [plantPage, setPlantPage] = React.useState(0)
 
   const [createClusterOpen, setCreateClusterOpen] = React.useState(false)
   const [clusterName, setClusterName] = React.useState("")
@@ -115,20 +113,34 @@ export function PlantsPage() {
   }, [clusterSubtreeIds, editTarget, sortedClusters])
 
   const filteredClusters = React.useMemo(() => {
-    if (!search.trim()) return sortedClusters
+    if (!clusterSearch.trim()) return sortedClusters
     return sortedClusters.filter((row) => {
       const parentName = row.parent_id != null ? clusterById.get(row.parent_id)?.name ?? "" : ""
-      return includesSearch(row.name, search) || includesSearch(parentName, search) || includesSearch("cluster", search)
+      return (
+        includesSearch(row.name, clusterSearch) ||
+        includesSearch(parentName, clusterSearch) ||
+        includesSearch("cluster", clusterSearch)
+      )
     })
-  }, [clusterById, search, sortedClusters])
+  }, [clusterById, clusterSearch, sortedClusters])
 
   const filteredPlants = React.useMemo(() => {
-    if (!search.trim()) return sortedPlants
+    if (!plantSearch.trim()) return sortedPlants
     return sortedPlants.filter((row) => {
       const clusterName = row.parent_id != null ? clusterById.get(row.parent_id)?.name ?? "" : ""
-      return includesSearch(row.name, search) || includesSearch(clusterName, search) || includesSearch("plant", search)
+      return includesSearch(row.name, plantSearch) || includesSearch(clusterName, plantSearch) || includesSearch("plant", plantSearch)
     })
-  }, [clusterById, search, sortedPlants])
+  }, [clusterById, plantSearch, sortedPlants])
+
+  const paginatedClusters = React.useMemo(
+    () => filteredClusters.slice(clusterPage * ORG_UNITS_PAGE_SIZE, (clusterPage + 1) * ORG_UNITS_PAGE_SIZE),
+    [clusterPage, filteredClusters],
+  )
+
+  const paginatedPlants = React.useMemo(
+    () => filteredPlants.slice(plantPage * ORG_UNITS_PAGE_SIZE, (plantPage + 1) * ORG_UNITS_PAGE_SIZE),
+    [filteredPlants, plantPage],
+  )
 
   async function load() {
     setError(null)
@@ -150,6 +162,14 @@ export function PlantsPage() {
   React.useEffect(() => {
     void load()
   }, [])
+
+  React.useEffect(() => {
+    setClusterPage(0)
+  }, [clusterSearch])
+
+  React.useEffect(() => {
+    setPlantPage(0)
+  }, [plantSearch])
 
   function openCreateCluster() {
     setClusterName("")
@@ -288,7 +308,7 @@ export function PlantsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Clusters & Plants"
-        subtitle="Manage your organization's cluster and plant hierarchy."
+        // subtitle="Manage your organization's cluster and plant hierarchy."
         action={actionButtons}
       />
 
@@ -299,61 +319,50 @@ export function PlantsPage() {
         </Alert>
       ) : null}
 
-      <Card className="rounded-3xl border-zinc-200 bg-white shadow-sm">
-        <CardHeader className="space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-1">
-              <CardTitle className="text-base">Organization hierarchy</CardTitle>
-              <CardDescription>
-                Create clusters or plants in popups. Use the row actions to edit names or change cluster placement.
-              </CardDescription>
+      <div className="space-y-6">
+        <Card className="rounded-3xl border-zinc-200 bg-white shadow-sm">
+          <CardHeader className="space-y-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                  <FolderTree className="size-4" aria-hidden />
+                </div>
+                <div className="space-y-1">
+                  <CardTitle className="text-base">Clusters</CardTitle>
+                  <CardDescription>Root and nested grouping structure.</CardDescription>
+                </div>
+              </div>
+              <div className="relative w-full max-w-sm">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={clusterSearch}
+                  onChange={(e) => setClusterSearch(e.target.value)}
+                  placeholder="Search clusters…"
+                  className="pl-9"
+                />
+              </div>
             </div>
-            <div className="relative w-full max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search clusters or plants…"
-                className="pl-9"
-              />
-            </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-            <span>
-              <span className="font-medium text-zinc-950">{clusters.length}</span> clusters
-            </span>
-            <span>
-              <span className="font-medium text-zinc-950">{plants?.length ?? 0}</span> plants
-            </span>
-            {search.trim() ? (
+            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
               <span>
-                Searching for <span className="font-medium text-zinc-950">{search.trim()}</span>
+                <span className="font-medium text-zinc-950">{clusters.length}</span> clusters
               </span>
-            ) : null}
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-6 p-6 pt-0">
-          <section className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-                <FolderTree className="size-4" aria-hidden />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-zinc-950">Clusters</div>
-                <div className="text-xs text-muted-foreground">Root and nested grouping structure.</div>
-              </div>
+              {clusterSearch.trim() ? (
+                <span>
+                  Searching for <span className="font-medium text-zinc-950">{clusterSearch.trim()}</span>
+                </span>
+              ) : null}
             </div>
+          </CardHeader>
 
+          <CardContent className="p-6 pt-0">
             <div className="overflow-hidden rounded-2xl border border-zinc-200">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Name</TableHead>
                     <TableHead>Parent Cluster</TableHead>
-                    <TableHead className="w-[100px]">Type</TableHead>
-                    {showActions ? <TableHead className="w-[72px] text-right">Actions</TableHead> : null}
+                    {showActions ? <TableHead className="w-[120px] text-right">Actions</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -366,34 +375,22 @@ export function PlantsPage() {
                   ) : filteredClusters.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={showActions ? 4 : 3} className="py-8 text-center text-sm text-muted-foreground">
-                        {search.trim() ? "No matching clusters found." : "No clusters yet."}
+                        {clusterSearch.trim() ? "No matching clusters found." : "No clusters yet."}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredClusters.map((row) => {
+                    paginatedClusters.map((row) => {
                       const parent = row.parent_id != null ? clusterById.get(row.parent_id) : null
                       return (
                         <TableRow key={row.id}>
                           <TableCell className="text-sm font-medium text-zinc-950">{row.name}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{parent?.name ?? "Root cluster"}</TableCell>
-                          <TableCell className="text-xs font-medium tracking-wide text-zinc-600">{row.type}</TableCell>
                           {showActions ? (
                             <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button type="button" variant="ghost" size="icon-sm" className="rounded-lg">
-                                    <MoreVertical className="size-4 opacity-70" aria-hidden />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-44">
-                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onSelect={() => openEdit(row, "CLUSTER")}>
-                                    <Pencil className="mr-2 size-4" aria-hidden />
-                                    Edit cluster
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              <Button type="button" variant="outline" size="sm" onClick={() => openEdit(row, "CLUSTER")}>
+                                <Pencil className="mr-1 size-3.5 opacity-80" aria-hidden />
+                                Edit
+                              </Button>
                             </TableCell>
                           ) : null}
                         </TableRow>
@@ -402,28 +399,60 @@ export function PlantsPage() {
                   )}
                 </TableBody>
               </Table>
+              <ListPagination
+                page={clusterPage}
+                pageSize={ORG_UNITS_PAGE_SIZE}
+                total={filteredClusters.length}
+                loading={plants === null}
+                onPageChange={setClusterPage}
+              />
             </div>
-          </section>
+          </CardContent>
+        </Card>
 
-          <section className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="flex size-9 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
-                <Building2 className="size-4" aria-hidden />
+        <Card className="rounded-3xl border-zinc-200 bg-white shadow-sm">
+          <CardHeader className="space-y-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
+                  <Building2 className="size-4" aria-hidden />
+                </div>
+                <div className="space-y-1">
+                  <CardTitle className="text-base">Plants</CardTitle>
+                  <CardDescription>Operational plants and the cluster they belong to.</CardDescription>
+                </div>
               </div>
-              <div>
-                <div className="text-sm font-semibold text-zinc-950">Plants</div>
-                <div className="text-xs text-muted-foreground">Operational plants and the cluster they belong to.</div>
+              <div className="relative w-full max-w-sm">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={plantSearch}
+                  onChange={(e) => setPlantSearch(e.target.value)}
+                  placeholder="Search plants…"
+                  className="pl-9"
+                />
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+              <span>
+                <span className="font-medium text-zinc-950">{plants?.length ?? 0}</span> plants
+              </span>
+              {plantSearch.trim() ? (
+                <span>
+                  Searching for <span className="font-medium text-zinc-950">{plantSearch.trim()}</span>
+                </span>
+              ) : null}
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-6 pt-0">
             <div className="overflow-hidden rounded-2xl border border-zinc-200">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Name</TableHead>
                     <TableHead>Cluster</TableHead>
-                    <TableHead className="w-[100px]">Type</TableHead>
-                    {showActions ? <TableHead className="w-[72px] text-right">Actions</TableHead> : null}
+                    {showActions ? <TableHead className="w-[120px] text-right">Actions</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -436,34 +465,22 @@ export function PlantsPage() {
                   ) : filteredPlants.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={showActions ? 4 : 3} className="py-8 text-center text-sm text-muted-foreground">
-                        {search.trim() ? "No matching plants found." : "No plants found."}
+                        {plantSearch.trim() ? "No matching plants found." : "No plants found."}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredPlants.map((row) => {
+                    paginatedPlants.map((row) => {
                       const parent = row.parent_id != null ? clusterById.get(row.parent_id) : null
                       return (
                         <TableRow key={row.id}>
                           <TableCell className="text-sm font-medium text-zinc-950">{row.name}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{parent?.name ?? "Unassigned"}</TableCell>
-                          <TableCell className="text-xs font-medium tracking-wide text-zinc-600">{row.type}</TableCell>
                           {showActions ? (
                             <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button type="button" variant="ghost" size="icon-sm" className="rounded-lg">
-                                    <MoreVertical className="size-4 opacity-70" aria-hidden />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-44">
-                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onSelect={() => openEdit(row, "PLANT")}>
-                                    <Pencil className="mr-2 size-4" aria-hidden />
-                                    Edit plant
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              <Button type="button" variant="outline" size="sm" onClick={() => openEdit(row, "PLANT")}>
+                                <Pencil className="mr-1 size-3.5 opacity-80" aria-hidden />
+                                Edit
+                              </Button>
                             </TableCell>
                           ) : null}
                         </TableRow>
@@ -472,10 +489,17 @@ export function PlantsPage() {
                   )}
                 </TableBody>
               </Table>
+              <ListPagination
+                page={plantPage}
+                pageSize={ORG_UNITS_PAGE_SIZE}
+                total={filteredPlants.length}
+                loading={plants === null}
+                onPageChange={setPlantPage}
+              />
             </div>
-          </section>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
       <Dialog open={createClusterOpen} onOpenChange={(open) => (open ? setCreateClusterOpen(true) : closeCreateCluster())}>
         <DialogContent className="sm:max-w-md">

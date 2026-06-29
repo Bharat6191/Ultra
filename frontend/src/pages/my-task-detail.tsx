@@ -2,6 +2,7 @@ import * as React from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
+import { PageBackLink } from "@/components/layout/page-back-link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -18,13 +19,14 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { ApprovalWorkflowTimeline, type TaskApprovalStepLine } from "@/components/approval-workflow-timeline"
-import { formatMoney, formatPercent, rateStatusLabel } from "@/components/contractors/rateStatus"
+import { formatMoney, formatPercent } from "@/components/contractors/rateStatus"
 import {
   WorkOrderApprovalReview,
   WorkOrderRateOverrideApprovalReview,
 } from "@/components/tasks/work-order-task-review"
 import { InvoiceExceptionApprovalReview } from "@/components/tasks/invoice-task-review"
 import { ApiError, getJson, postJson } from "@/lib/api"
+import { humanizeFieldKey } from "@/lib/field-labels"
 import {
   canReadNegotiatedRates,
   hasPermission,
@@ -146,6 +148,42 @@ function taskStatusBadgeVariant(status: string): React.ComponentProps<typeof Bad
   }
 }
 
+function approvalRequestStatusLabel(status: string | null | undefined, currentStep?: number | null): string {
+  switch (String(status ?? "").trim().toLowerCase()) {
+    case "pending":
+      return currentStep != null && Number(currentStep) > 1 ? "In Progress" : "Pending"
+    case "approved":
+      return "Approved"
+    case "rejected":
+      return "Rejected"
+    case "in_rework":
+      return "Rework Required"
+    default:
+      return String(status ?? "—") || "—"
+  }
+}
+
+function approvalRequestStatusBadgeVariant(
+  status: string | null | undefined,
+): React.ComponentProps<typeof Badge>["variant"] {
+  switch (String(status ?? "").trim().toLowerCase()) {
+    case "pending":
+      return "warning"
+    case "approved":
+      return "success"
+    case "rejected":
+      return "destructive"
+    case "in_rework":
+      return "secondary"
+    default:
+      return "outline"
+  }
+}
+
+function userFallbackLabel(userId: number | null | undefined): string {
+  return userId != null ? `User ${userId}` : "—"
+}
+
 function entityLabel(task: UnifiedTaskDetail): string {
   const a = task.approval
   const et = a?.entity_type ?? task.entity_type
@@ -162,7 +200,8 @@ function entityLabel(task: UnifiedTaskDetail): string {
     invoice_exception_approval: "Invoice exception",
     user_creation: "New user account",
   }
-  return `${pretty[et] ?? et} #${eid ?? "—"}`
+  if (eid == null) return pretty[et] ?? et
+  return `${pretty[et] ?? et} ID ${eid}`
 }
 
 /**
@@ -284,7 +323,7 @@ function approvalPayloadEntries(payload: Record<string, unknown>, entityType: st
   return Object.keys(p)
     .filter((k) => p[k] != null && String(p[k]).trim() !== "")
     .sort((a, b) => a.localeCompare(b))
-    .map((k) => ({ key: k, label: k.replace(/_/g, " "), value: formatPayloadValue(p[k]) }))
+    .map((k) => ({ key: k, label: humanizeFieldKey(k), value: formatPayloadValue(p[k]) }))
 }
 
 function ContractorRateApprovalReviewCard({ task }: { task: UnifiedTaskDetail }) {
@@ -292,17 +331,13 @@ function ContractorRateApprovalReviewCard({ task }: { task: UnifiedTaskDetail })
   if (!approval || approval.entity_type !== "contractor_rate_approval") return null
 
   const payload = approval.payload ?? {}
-  const taskStatusText = String(task.status ?? "—")
-  const approvalStatusText = rateStatusLabel(approval.status)
-  const showApprovalStatusBadge =
-    approvalStatusText.trim().toLowerCase() !== taskStatusText.trim().toLowerCase()
-  const submittedBy =
-    approval.created_by_display_name ?? (approval.created_by != null ? `User #${approval.created_by}` : "—")
+  const requestStatusText = approvalRequestStatusLabel(approval.status, approval.current_step)
+  const submittedBy = approval.created_by_display_name ?? userFallbackLabel(approval.created_by)
   const detailRows: Array<{ label: string; value: string }> = [
     { label: "Action code", value: String(payloadPrimitive(payload, "action_code") ?? "—") },
     { label: "Contractor ID", value: String(payloadPrimitive(payload, "contractor_id") ?? "—") },
     { label: "Part master ID", value: String(payloadPrimitive(payload, "part_master_id") ?? "—") },
-    { label: "Rate record", value: `#${approval.entity_id}` },
+    { label: "Rate record ID", value: String(approval.entity_id) },
     { label: "Effective from", value: String(payloadPrimitive(payload, "effective_from") ?? "—") },
     {
       label: "Effective to",
@@ -314,10 +349,10 @@ function ContractorRateApprovalReviewCard({ task }: { task: UnifiedTaskDetail })
   ]
 
   const originRows: Array<{ label: string; value: string }> = [
-    { label: "Request #", value: `#${approval.request_id}` },
+    { label: "Request ID", value: String(approval.request_id) },
     { label: "Submitted by", value: submittedBy },
-    { label: "Entity", value: entityLabel(task) },
-    { label: "Task status", value: task.status ?? "—" },
+    { label: "Related Records", value: entityLabel(task) },
+    { label: "Request Status", value: requestStatusText },
   ]
 
   return (
@@ -333,8 +368,7 @@ function ContractorRateApprovalReviewCard({ task }: { task: UnifiedTaskDetail })
             </CardTitle>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant={taskStatusBadgeVariant(task.status)}>{taskStatusText}</Badge>
-            {showApprovalStatusBadge ? <Badge variant="outline">{approvalStatusText}</Badge> : null}
+            <Badge variant={approvalRequestStatusBadgeVariant(approval.status)}>{requestStatusText}</Badge>
           </div>
         </div>
       </CardHeader>
@@ -390,7 +424,7 @@ function ContractorRateApprovalReviewCard({ task }: { task: UnifiedTaskDetail })
 
           <div className="rounded-2xl border border-border/70 bg-muted/10">
             <div className="border-b border-border/60 px-4 py-3">
-              <div className="text-sm font-semibold text-zinc-950">Request origin</div>
+              <div className="text-sm font-semibold text-zinc-950">Request Details</div>
               <div className="mt-1 text-xs text-muted-foreground">Who submitted this request and how it is tracked.</div>
             </div>
             <dl className="space-y-0 px-4 py-2">
@@ -413,8 +447,7 @@ function ApprovalSummaryCard({ task }: { task: UnifiedTaskDetail }) {
   if (!approval) return null
 
   const isRateApproval = approval.entity_type === "contractor_rate_approval"
-  const approvalStatus =
-    isRateApproval ? rateStatusLabel(approval.status) : (approval.status ?? "—")
+  const approvalStatus = approvalRequestStatusLabel(approval.status, approval.current_step)
   const workflowStep =
     approval.step_order != null
       ? `Step ${approval.step_order}`
@@ -430,18 +463,17 @@ function ApprovalSummaryCard({ task }: { task: UnifiedTaskDetail }) {
             label: "Required approvals",
             value: approval.required_approvals != null ? String(approval.required_approvals) : "—",
           },
-          { label: "Approval status", value: approvalStatus },
-          { label: "Task status", value: task.status ?? "—" },
+          { label: "Request status", value: approvalStatus },
         ]
       : []
 
   const rows: Array<{ label: string; value: string }> = [
-    { label: "Entity", value: entityLabel(task) },
-    { label: "Request #", value: `#${approval.request_id}` },
+    { label: "Related Records", value: entityLabel(task) },
+    { label: "Request ID", value: String(approval.request_id) },
     { label: "Approver role", value: approval.approver_role_name ?? "—" },
     {
       label: "Submitted by",
-      value: approval.created_by_display_name ?? (approval.created_by != null ? `User #${approval.created_by}` : "—"),
+      value: approval.created_by_display_name ?? userFallbackLabel(approval.created_by),
     },
     { label: "Due date", value: task.due_date ? formatDateTime(task.due_date) : "—" },
   ]
@@ -460,8 +492,7 @@ function ApprovalSummaryCard({ task }: { task: UnifiedTaskDetail }) {
       </CardHeader>
       <CardContent className="space-y-4 pt-4">
         <div className="flex flex-wrap gap-2">
-          <Badge variant={taskStatusBadgeVariant(task.status)}>{task.status}</Badge>
-          <Badge variant="outline">{approvalStatus}</Badge>
+          <Badge variant={approvalRequestStatusBadgeVariant(approval.status)}>{approvalStatus}</Badge>
         </div>
 
         {metrics.length > 0 ? (
@@ -502,6 +533,7 @@ export function MyTaskDetailPage() {
   const [actionComment, setActionComment] = React.useState("")
   const [decisionDialogOpen, setDecisionDialogOpen] = React.useState(false)
   const [decisionAction, setDecisionAction] = React.useState<"approve" | "reject" | null>(null)
+  const trimmedActionComment = actionComment.trim()
 
   const [, forcePermRefresh] = React.useReducer((x: number) => x + 1, 0)
   const approvalActionCodes = React.useMemo(() => {
@@ -535,10 +567,12 @@ export function MyTaskDetailPage() {
   }, [])
 
   const load = React.useCallback(
-    async (id: number) => {
+    async (id: number, options?: { reset?: boolean }) => {
       setLoading(true)
       setError(null)
-      setTask(null)
+      if (options?.reset) {
+        setTask(null)
+      }
       try {
         const t = await getJson<UnifiedTaskDetail>(`/tasks/${id}`)
         setTask(t)
@@ -560,7 +594,7 @@ export function MyTaskDetailPage() {
     }
     void (async () => {
       await syncMe()
-      await load(id)
+      await load(id, { reset: true })
     })()
   }, [taskId, navigate, load, syncMe])
 
@@ -611,19 +645,38 @@ export function MyTaskDetailPage() {
 
   async function approveOrReject(action: "approve" | "reject") {
     if (!task || task.task_type !== "approval") return
+    if (!trimmedActionComment) {
+      toast.error("Reason is required to approve or reject this task.")
+      return
+    }
     setActing(true)
     try {
       await postJson(`/approvals/tasks/${task.id}/action`, {
         action,
-        comment: actionComment.trim() ? actionComment.trim() : null,
+        comment: trimmedActionComment,
       })
       toast.success(action === "approve" ? "Approved." : "Rejected.")
       setDecisionDialogOpen(false)
       setDecisionAction(null)
       setActionComment("")
-      await load(task.id)
+      void load(task.id)
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "Action failed."
+      if (
+        e instanceof ApiError &&
+        [
+          "You have already acted on this task.",
+          "This task has already been acted on.",
+          "This task has already been completed.",
+          "This approval request is no longer pending.",
+        ].includes(msg)
+      ) {
+        setDecisionDialogOpen(false)
+        setDecisionAction(null)
+        setActionComment("")
+        void load(task.id)
+        return
+      }
       toast.error(msg)
     } finally {
       setActing(false)
@@ -661,12 +714,33 @@ export function MyTaskDetailPage() {
       task.approval.entity_type !== "work_order_rate_override" &&
       task.approval.entity_type !== "invoice_exception_approval",
   )
+  const viewerDecisionOnTask = React.useMemo<"approve" | "reject" | null>(() => {
+    if (!task || task.task_type !== "approval" || viewerUserId == null) return null
+    const ownDecision = task.audit_logs.find(
+      (entry) =>
+        entry.actor_user_id != null &&
+        Number(entry.actor_user_id) === Number(viewerUserId) &&
+        (entry.action === "approved" || entry.action === "rejected"),
+    )
+    if (!ownDecision) return null
+    return ownDecision.action === "approved" ? "approve" : "reject"
+  }, [task, viewerUserId])
+  const viewerAlreadyActedOnApprovalTask = viewerDecisionOnTask !== null
+  const waitingForOtherApprovers = Boolean(
+    task &&
+      task.task_type === "approval" &&
+      task.approval &&
+      task.approval.status === "pending" &&
+      viewerAlreadyActedOnApprovalTask &&
+      (task.status === "pending" || task.status === "open" || task.status === "in_progress"),
+  )
   const approvalStepNeedsDecision = Boolean(
     task &&
       task.task_type === "approval" &&
       task.approval &&
       task.approval.status === "pending" &&
-      (task.status === "pending" || task.status === "open" || task.status === "in_progress"),
+      (task.status === "pending" || task.status === "open" || task.status === "in_progress") &&
+      !viewerAlreadyActedOnApprovalTask,
   )
 
   function handleDecisionDialogOpenChange(open: boolean) {
@@ -679,7 +753,7 @@ export function MyTaskDetailPage() {
   }
 
   function openDecisionDialog(action: "approve" | "reject") {
-    if (!canApprovalAct || acting) return
+    if (!canApprovalAct || acting || viewerAlreadyActedOnApprovalTask) return
     setDecisionAction(action)
     setDecisionDialogOpen(true)
   }
@@ -695,7 +769,7 @@ export function MyTaskDetailPage() {
             </p>
           ) : compact ? null : (
             <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
-              Add a reason or note in the popup before you finish this decision.
+              Add a reason before you finish this decision. Approval and rejection both require it.
             </p>
           )}
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
@@ -752,7 +826,8 @@ export function MyTaskDetailPage() {
   return (
     <div className="w-full space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 space-y-0.5">
+        <div className="min-w-0 space-y-1">
+          <PageBackLink to=".." label="Tasks" />
           <h2 className="text-lg font-semibold tracking-tight">
             {task && !loading && isApprovalLike ? "Review Request" : "Task details"}
           </h2>
@@ -798,9 +873,6 @@ export function MyTaskDetailPage() {
               <Link to={recordOpen.href}>{recordOpen.label}</Link>
             </Button>
           ) : null}
-          <Button asChild variant="outline" size="sm">
-            <Link to="..">Back</Link>
-          </Button>
         </div>
       </div>
 
@@ -862,33 +934,35 @@ export function MyTaskDetailPage() {
         </Alert>
       ) : null}
 
+      {waitingForOtherApprovers && !loading ? (
+        <Alert className="border-sky-200/80 bg-sky-50/80 dark:border-sky-900/50 dark:bg-sky-950/30">
+          <AlertTitle className="text-sky-950 dark:text-sky-50">Decision already recorded</AlertTitle>
+          <AlertDescription className="text-sky-950/90 dark:text-sky-100/90">
+            You already {viewerDecisionOnTask === "approve" ? "approved" : "acted on"} this step. No further action is needed from you while the remaining approvers finish this stage.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <Dialog open={decisionDialogOpen} onOpenChange={handleDecisionDialogOpenChange}>
         <DialogContent className="sm:max-w-lg" showCloseButton={!acting}>
           <DialogHeader>
             <DialogTitle>{decisionAction === "reject" ? "Reject this step" : "Approve this step"}</DialogTitle>
             <DialogDescription>
-              {decisionAction === "reject"
-                ? "Add the rejection reason or any note you want stored with this action."
-                : "Add an approval note if you want it saved with this action."}
+              Add the reason that should be stored with this action. This field is mandatory.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2">
-            <Label htmlFor="approval-comment-dialog">
-              {decisionAction === "reject" ? "Reason or note" : "Note"}
-            </Label>
+            <Label htmlFor="approval-comment-dialog">Reason / Note *</Label>
             <Textarea
               id="approval-comment-dialog"
               value={actionComment}
               onChange={(e) => setActionComment(e.target.value)}
-              placeholder={
-                decisionAction === "reject"
-                  ? "Add rejection reason..."
-                  : "Optional note for the approver record..."
-              }
+              placeholder={decisionAction === "reject" ? "Add rejection reason..." : "Add approval reason..."}
               className="min-h-[140px] resize-y"
               disabled={acting}
             />
+            <p className="text-xs text-muted-foreground">Reason is required to approve or reject this task.</p>
           </div>
 
           <DialogFooter>
@@ -908,7 +982,7 @@ export function MyTaskDetailPage() {
                   void approveOrReject(decisionAction)
                 }
               }}
-              disabled={acting || !decisionAction}
+              disabled={acting || !decisionAction || !trimmedActionComment}
             >
               {acting ? "Saving…" : decisionAction === "reject" ? "Reject" : "Approve"}
             </Button>
@@ -936,9 +1010,11 @@ export function MyTaskDetailPage() {
                 {task.approval.entity_type === "contractor_rate_approval" ? (
                   <ContractorRateApprovalReviewCard task={task} />
                 ) : (
-                  <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
-                    <CardHeader className="space-y-1 border-b border-border/60 bg-muted/20 py-3">
-                      <CardTitle className="text-base">What you&apos;re approving</CardTitle>
+                    <Card className="min-w-0 overflow-hidden border-border/80 shadow-sm">
+                      <CardHeader className="space-y-1 border-b border-border/60 bg-muted/20 py-3">
+                      <CardTitle className="text-base">
+                        {task.approval.entity_type === "invoice_exception_approval" ? "Approval Details" : "What you&apos;re approving"}
+                      </CardTitle>
                       {task.approval.entity_type === "work_order_approval" ? (
                         <CardDescription className="text-xs">
                           Full work order detail — same execution sheet as the work order screen (live record when available).
@@ -949,7 +1025,6 @@ export function MyTaskDetailPage() {
                         </CardDescription>
                       ) : task.approval.entity_type === "invoice_exception_approval" ? (
                         <CardDescription className="text-xs">
-                          Live invoice data with the exact blocker reasons, work order references, and invoice preview.
                         </CardDescription>
                       ) : null}
                     </CardHeader>
@@ -989,8 +1064,8 @@ export function MyTaskDetailPage() {
                       <p className="mt-6 border-t border-border/60 pt-3 text-xs text-muted-foreground">
                         Submitted by{" "}
                         {task.approval!.created_by_display_name ??
-                          (task.approval!.created_by != null ? `User #${task.approval!.created_by}` : "—")}{" "}
-                        · Request #{task.approval!.request_id}
+                          userFallbackLabel(task.approval!.created_by)}{" "}
+                        · Request ID {task.approval!.request_id}
                       </p>
                     </CardContent>
                   </Card>
@@ -1009,7 +1084,7 @@ export function MyTaskDetailPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-start">
               <Card>
                 <CardHeader className="space-y-1 pb-2">
-                  <CardTitle className="text-base">Task status</CardTitle>
+                  <CardTitle className="text-base">Status</CardTitle>
                   <CardDescription className="text-xs">Status and actions.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
@@ -1043,13 +1118,14 @@ export function MyTaskDetailPage() {
                     </div>
                     {entityLabel(task) !== "—" ? (
                       <div>
-                        <span className="text-muted-foreground">Entity: </span>
+                        <span className="text-muted-foreground">Related Records: </span>
                         {entityLabel(task)}
                       </div>
                     ) : null}
                     {task.request_id ? (
                       <div>
-                        <span className="text-muted-foreground">Approval request: </span>#{task.request_id}
+                        <span className="text-muted-foreground">Approval request: </span>
+                        {task.request_id}
                       </div>
                     ) : null}
                   </div>
@@ -1062,7 +1138,7 @@ export function MyTaskDetailPage() {
                 </CardHeader>
                 <CardContent className="space-y-1.5 text-sm">
                   <div>
-                    <span className="text-muted-foreground">Entity: </span>
+                    <span className="text-muted-foreground">Related Records: </span>
                     {entityLabel(task)}
                   </div>
                   <div>
@@ -1071,7 +1147,7 @@ export function MyTaskDetailPage() {
                   </div>
                   <div>
                     <span className="text-muted-foreground">Created by: </span>
-                    {task.created_by != null ? `User #${task.created_by}` : "—"}
+                    {userFallbackLabel(task.created_by)}
                   </div>
                   <div className="text-xs text-muted-foreground">Due: {task.due_date ? formatDateTime(task.due_date) : "—"}</div>
                 </CardContent>

@@ -148,17 +148,61 @@ function toneClasses(tone: string) {
 
 function fieldLabel(key: string) {
   const labels: Record<string, string> = {
-    org_unit_name: "Plant / org unit",
+    action: "Action",
+    address: "Address",
+    alternate_email: "Alternate Email",
+    alternate_phone: "Alternate Phone",
+    approval_request_id: "Approval Request ID",
+    city: "City",
+    cin: "CIN",
+    contact_person: "Contact Person",
+    contact_person_title: "Contact Title",
+    contractor_code: "Contractor Code",
+    contractor_type: "Contractor Type",
+    country: "Country",
+    current_step: "Current Step",
+    email: "Email",
+    entity_type: "Entity Type",
+    gst_number: "GST Number",
+    gstin: "GSTIN",
+    is_active: "Active",
+    legal_name: "Legal Name",
+    name: "Contractor Name",
+    org_unit_name: "Plant / Org Unit",
+    org_unit_id: "Org Unit ID",
+    pan: "PAN Number",
+    pan_number: "PAN Number",
+    phone: "Phone",
+    postal_code: "Postal Code",
+    registration_number: "Registration Number",
+    request_id: "Request ID",
     role: "Role",
-    start_date: "Start date",
-    end_date: "End date",
+    start_date: "Start Date",
+    end_date: "End Date",
+    state: "State",
     notes: "Notes",
     status: "Status",
     document_name: "Document",
-    document_type: "Document type",
+    document_type: "Document Type",
+    task_id: "Task ID",
+    trade_name: "Trade Name",
+    website: "Website",
   }
   if (labels[key]) return labels[key]
-  return key.replace(/_/g, " ")
+  const wordOverrides: Record<string, string> = {
+    cin: "CIN Number",
+    gstin: "GSTIN Number",
+    id: "ID",
+    pan: "PAN Number",
+    po: "PO",
+    uom: "UOM",
+    wo: "WO",
+  }
+  return key
+    .split("_")
+    .filter(Boolean)
+    .map((part) => wordOverrides[part.toLowerCase()] ?? `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(" ")
 }
 
 function renderFieldValue(value: unknown) {

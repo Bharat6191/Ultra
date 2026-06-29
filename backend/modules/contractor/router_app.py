@@ -72,6 +72,20 @@ def get_contractor_analytics_service(db: Session = Depends(get_db)) -> Contracto
     return ContractorAnalyticsService(db)
 
 
+def _parse_status_filter(status_filter: str | None) -> tuple[str | None, bool | None]:
+    """Split lifecycle status filters from legacy active-flag aliases."""
+    if not status_filter:
+        return None, None
+    parsed = status_filter.strip().lower()
+    if parsed in ("", "all"):
+        return None, None
+    if parsed in ("1", "true"):
+        return None, True
+    if parsed in ("0", "false", "inactive"):
+        return None, False
+    return parsed, None
+
+
 def analytics_filter_params(
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
@@ -129,16 +143,7 @@ def contractor_lookup(
     Returns only ``{id, name}`` to avoid leaking full contractor master data to roles that
     can legitimately create rates/work orders/invoices but should not browse the contractor module.
     """
-    parsed_status = status_filter.strip().lower() if status_filter else None
-    is_active: bool | None = None
-    if parsed_status in ("active", "1", "true"):
-        parsed_status = None
-        is_active = True
-    elif parsed_status in ("inactive", "0", "false"):
-        parsed_status = None
-        is_active = False
-    elif parsed_status in ("all", ""):
-        parsed_status = None
+    parsed_status, is_active = _parse_status_filter(status_filter)
     rows, _total = svc.list_contractors(
         offset=0,
         limit=int(limit),
@@ -165,19 +170,7 @@ def list_contractors(
     plant_id: int | None = Query(None, alias="plant_id"),
 ) -> list[ContractorPublic]:
     """Filter contractors by search/status/type/plant."""
-    is_active: bool | None = None
-    parsed_status: str | None = None
-    if status_filter:
-        s = status_filter.strip().lower()
-        # Accept both legacy active/inactive markers and new lifecycle values.
-        if s in ("active", "1", "true"):
-            parsed_status = None
-            is_active = True
-        elif s in ("inactive", "0", "false"):
-            parsed_status = None
-            is_active = False
-        else:
-            parsed_status = s
+    parsed_status, is_active = _parse_status_filter(status_filter)
     rows, total = svc.list_contractors(
         offset=offset,
         limit=limit,

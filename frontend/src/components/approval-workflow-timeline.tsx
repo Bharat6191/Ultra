@@ -1,4 +1,4 @@
-import { Check, Circle, CircleUserRound, Clock, Mail, User, X } from "lucide-react"
+import { Check, Circle, Clock, X } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -22,9 +22,7 @@ export type TaskApprovalStepLine = {
   approved_count: number
   actions: TaskApprovalActionLine[]
   status_label: string
-  /** Active users in the approver role (can act on this step). */
   pool_size?: number
-  /** Sample of names in that pool (capped on server; may be shorter than pool_size). */
   pool_member_names?: string[]
 }
 
@@ -37,55 +35,51 @@ type Props = {
 function phaseIcon(phase: WorkflowStepPhase) {
   switch (phase) {
     case "completed":
-      return <Check className="size-3.5" strokeWidth={2.5} />
+      return <Check className="size-4" strokeWidth={2.5} />
     case "current":
-      return <Clock className="size-3.5" strokeWidth={2.5} />
+      return <Clock className="size-4" strokeWidth={2.25} />
     case "rejected":
-      return <X className="size-3.5" strokeWidth={2.5} />
+      return <X className="size-4" strokeWidth={2.5} />
     default:
-      return <Circle className="size-2.5 fill-current opacity-50" />
+      return <Circle className="size-3 fill-current opacity-60" />
   }
 }
 
-function phaseStyles(phase: WorkflowStepPhase): { ring: string; fill: string; line: string } {
+function phaseStyles(phase: WorkflowStepPhase): { ring: string; line: string } {
   switch (phase) {
     case "completed":
       return {
-        ring: "border-emerald-500/80 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200",
-        fill: "text-emerald-600 dark:text-emerald-400",
-        line: "bg-emerald-200/80 dark:bg-emerald-800/50",
+        ring: "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
+        line: "bg-emerald-200 dark:bg-emerald-900/60",
       }
     case "current":
       return {
-        ring: "border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-100",
-        fill: "text-amber-500 dark:text-amber-400",
-        line: "bg-amber-200/80 dark:bg-amber-800/50",
+        ring: "border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100",
+        line: "bg-amber-200 dark:bg-amber-900/60",
       }
     case "rejected":
       return {
-        ring: "border-red-400 bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-200",
-        fill: "text-red-500 dark:text-red-400",
-        line: "bg-border",
+        ring: "border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200",
+        line: "bg-red-200 dark:bg-red-900/60",
       }
     default:
       return {
-        ring: "border-border/60 bg-muted/40 text-muted-foreground/50",
-        fill: "text-muted-foreground/25",
-        line: "bg-border/60",
+        ring: "border-border/70 bg-muted/30 text-muted-foreground",
+        line: "bg-border/70",
       }
   }
 }
 
-function rowTextStyles(phase: WorkflowStepPhase): string {
+function segmentClassForPhase(phase: WorkflowStepPhase): string {
   switch (phase) {
     case "completed":
-      return "text-muted-foreground"
+      return "bg-emerald-200 dark:bg-emerald-900/60"
     case "current":
-      return "text-amber-950 dark:text-amber-50"
+      return "bg-amber-200 dark:bg-amber-900/60"
     case "rejected":
-      return "text-foreground/80"
+      return "bg-red-200 dark:bg-red-900/60"
     default:
-      return "text-muted-foreground/40"
+      return "bg-border/70"
   }
 }
 
@@ -95,7 +89,7 @@ function phaseStateBadge(phase: WorkflowStepPhase) {
       return (
         <Badge
           variant="outline"
-          className="h-5 border-emerald-300/80 bg-emerald-50/90 font-semibold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+          className="rounded-full border-emerald-300 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
         >
           Completed
         </Badge>
@@ -104,264 +98,276 @@ function phaseStateBadge(phase: WorkflowStepPhase) {
       return (
         <Badge
           variant="outline"
-          className="h-5 border-amber-400/80 bg-amber-50/90 font-semibold text-amber-900 dark:border-amber-600 dark:bg-amber-950/50 dark:text-amber-100"
+          className="rounded-full border-amber-400 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100"
         >
           In progress
         </Badge>
       )
     case "rejected":
       return (
-        <Badge variant="outline" className="h-5 border-red-200 bg-red-50 font-semibold text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200">
+        <Badge
+          variant="outline"
+          className="rounded-full border-red-300 bg-red-50 px-3 py-1 text-[11px] font-semibold text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
+        >
           Rejected
         </Badge>
       )
     default:
       return (
-        <Badge variant="outline" className="h-5 font-normal text-muted-foreground">
+        <Badge
+          variant="outline"
+          className="rounded-full border-border/70 bg-muted/20 px-3 py-1 text-[11px] font-semibold text-muted-foreground"
+        >
           Not started
         </Badge>
       )
   }
 }
 
-/** Vertical segment below this node (to the next step). */
-function segmentClassForPhase(phase: WorkflowStepPhase): string {
+function phaseBusinessLabel(phase: WorkflowStepPhase): string {
   switch (phase) {
     case "completed":
-      return "bg-emerald-300/90 dark:bg-emerald-800/50"
+      return "Completed"
     case "current":
-      return "bg-amber-200/80 dark:bg-amber-800/50"
+      return "In Progress"
     case "rejected":
-      return "bg-border"
+      return "Rejected"
     default:
-      return "bg-border/40"
+      return "Not Started"
   }
 }
 
-function poolText(step: TaskApprovalStepLine): string {
-  const n = step.pool_size ?? 0
+function actionBusinessLabel(action: string | null | undefined): string {
+  switch (String(action ?? "").trim().toLowerCase()) {
+    case "approve":
+    case "approved":
+      return "Approved"
+    case "reject":
+    case "rejected":
+      return "Rejected"
+    default: {
+      const raw = String(action ?? "").trim()
+      return raw ? raw.charAt(0).toUpperCase() + raw.slice(1).replace(/_/g, " ") : "—"
+    }
+  }
+}
+
+function actionActorLabel(action: string | null | undefined): string {
+  switch (String(action ?? "").trim().toLowerCase()) {
+    case "approve":
+    case "approved":
+      return "Approved by"
+    case "reject":
+    case "rejected":
+      return "Rejected by"
+    default:
+      return "Updated by"
+  }
+}
+
+function pendingActorLabel(step: TaskApprovalStepLine): string {
+  switch (step.phase) {
+    case "current":
+      return "Pending with"
+    case "upcoming":
+      return "Next approver"
+    case "rejected":
+      return "Rejected by"
+    default:
+      return "Approved by"
+  }
+}
+
+function pendingActorValue(step: TaskApprovalStepLine): string {
+  if (step.phase === "upcoming") return step.approver_role_name
   const names = step.pool_member_names ?? []
-  const cap = names.length
-  if (n <= 0) return "No eligible approvers found for this role (configuration issue)."
-  if (cap === 0) return `${n} people are in the approver group for this step (names not loaded).`
-  const more = n > cap ? ` · showing ${cap} of ${n} names` : ""
-  return `${n} people can approve in this step${more}: ${names.join(", ")}`
+  const total = step.pool_size ?? 0
+  if (names.length > 0) {
+    const suffix = total > names.length ? ` +${total - names.length} more` : ""
+    return `${names.join(", ")}${suffix}`
+  }
+  if (total > 0) return `${total} approver${total === 1 ? "" : "s"} in ${step.approver_role_name}`
+  return step.approver_role_name
+}
+
+function actionCommentText(comment: string | null | undefined): string {
+  return comment && comment.trim() ? comment.trim() : "No comment added."
+}
+
+function phaseActionText(step: TaskApprovalStepLine): string {
+  switch (step.phase) {
+    case "completed":
+      return "Approved"
+    case "rejected":
+      return "Rejected"
+    case "current":
+      return "Awaiting approval"
+    default:
+      return "Waiting for earlier approvals"
+  }
+}
+
+function actionActorText(
+  actorDisplayName: string | null | undefined,
+  viewerUserId: number | null,
+  actorUserId: number | null | undefined,
+): string {
+  const name = actorDisplayName && actorDisplayName.trim() ? actorDisplayName.trim() : "—"
+  return viewerUserId != null && actorUserId != null && Number(actorUserId) === Number(viewerUserId)
+    ? `${name} (You)`
+    : name
+}
+
+function SummaryChip({
+  children,
+  className,
+}: {
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+function FieldLine({
+  label,
+  value,
+}: {
+  label: string
+  value: React.ReactNode
+}) {
+  return (
+    <p className="text-sm leading-6 text-foreground">
+      <span className="font-semibold text-foreground">{label}:</span>{" "}
+      <span className="whitespace-pre-wrap break-words text-foreground">{value}</span>
+    </p>
+  )
 }
 
 export function ApprovalWorkflowTimeline({ steps, viewerUserId, formatWhen }: Props) {
   if (steps.length === 0) return null
 
-  const nCompleted = steps.filter((s) => s.phase === "completed").length
-  const nCurrent = steps.filter((s) => s.phase === "current").length
-  const nUpcoming = steps.filter((s) => s.phase === "upcoming").length
-  const nRejected = steps.filter((s) => s.phase === "rejected").length
+  const totalSteps = steps[0]?.total_steps ?? steps.length
+  const nCompleted = steps.filter((step) => step.phase === "completed").length
+  const nCurrent = steps.filter((step) => step.phase === "current").length
+  const nUpcoming = steps.filter((step) => step.phase === "upcoming").length
+  const nRejected = steps.filter((step) => step.phase === "rejected").length
 
   return (
     <div className="rounded-xl border border-border/80 bg-card text-card-foreground shadow-sm">
-      <div className="border-b border-border/60 bg-muted/15 px-4 py-2.5">
-        <h3 className="text-sm font-semibold">Approval Progress</h3>
-        <p className="text-xs text-muted-foreground">
-          {steps[0].total_steps} {steps[0].total_steps === 1 ? "level" : "levels"} in this workflow
+      <div className="border-b border-border/60 px-4 py-4 sm:px-6">
+        <h3 className="text-lg font-semibold text-foreground">Approval Progress</h3>
+        <p className="text-sm text-muted-foreground">
+          {totalSteps} level{totalSteps === 1 ? "" : "s"} in this workflow
         </p>
-        <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {nCompleted > 0 ? (
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
-              <Check className="size-2.5" />
+            <SummaryChip className="bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
               {nCompleted} completed
-            </span>
+            </SummaryChip>
           ) : null}
           {nCurrent > 0 ? (
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100">
-              <Clock className="size-2.5" />
+            <SummaryChip className="bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+              <Clock className="size-3.5" />
               {nCurrent} in progress
-            </span>
+            </SummaryChip>
           ) : null}
           {nUpcoming > 0 ? (
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-muted/60 px-1.5 py-0.5 text-muted-foreground">
+            <SummaryChip className="bg-muted/30 text-muted-foreground">
               {nUpcoming} not started
-            </span>
+            </SummaryChip>
           ) : null}
           {nRejected > 0 ? (
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-red-50 px-1.5 py-0.5 text-red-800 dark:bg-red-950/40 dark:text-red-200">
+            <SummaryChip className="bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-200">
               {nRejected} rejected
-            </span>
+            </SummaryChip>
           ) : null}
-        </p>
+        </div>
       </div>
-      <ol className="relative px-4 py-3">
-        {steps.map((step, i) => {
-          const st = phaseStyles(step.phase)
-          const isLast = i === steps.length - 1
-          const segClass = segmentClassForPhase(step.phase)
-          const approvals = step.actions.filter((a) => a.action === "approve" || a.action === "approved")
-          const rejections = step.actions.filter((a) => a.action === "reject" || a.action === "rejected")
-          const showMulti = step.required_approvals > 1
+
+      <ol className="relative px-4 py-5 sm:px-6">
+        {steps.map((step, index) => {
+          const isLast = index === steps.length - 1
+          const styles = phaseStyles(step.phase)
+          const detailRows =
+            step.actions.length > 0
+              ? step.actions
+              : [
+                  {
+                    actor_user_id: -1,
+                    actor_display_name: pendingActorValue(step),
+                    action: phaseActionText(step),
+                    comment: step.phase === "rejected" ? "No rejection note added." : "—",
+                    created_at: null,
+                  } satisfies TaskApprovalActionLine,
+                ]
+
           return (
-            <li key={step.step_order} className="relative flex gap-3 pb-6 last:pb-0">
+            <li key={step.step_order} className="relative flex gap-4 pb-6 last:pb-0">
               {!isLast ? (
                 <div
-                  className={cn("absolute left-[15px] top-8 h-[calc(100%-0.25rem)] w-px", segClass)}
+                  className={cn("absolute left-[17px] top-10 h-[calc(100%-0.5rem)] w-px", segmentClassForPhase(step.phase))}
                   aria-hidden
                 />
               ) : null}
+
               <div
                 className={cn(
-                  "relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 bg-background",
-                  st.ring,
+                  "relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 bg-background",
+                  styles.ring,
                 )}
               >
                 {phaseIcon(step.phase)}
               </div>
-              <div className="min-w-0 flex-1 space-y-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  {phaseStateBadge(step.phase)}
-                  <p className={cn("text-sm leading-tight", rowTextStyles(step.phase))}>
-                    <span className="font-bold text-foreground">Step {step.step_order}</span>
-                    <span className="font-semibold"> of {step.total_steps}</span>
-                    <span className="font-medium"> — {step.approver_role_name}</span>
-                  </p>
-                </div>
-                {step.phase === "completed" ? (
-                  <p className="text-xs text-emerald-800/90 dark:text-emerald-200/90">
-                    This step is <strong>finished</strong>. {step.approved_count} of {step.required_approvals} required
-                    approval(s) were recorded before the request moved on.
-                  </p>
-                ) : null}
-                {step.phase === "current" ? (
-                  <p className="text-xs text-amber-900/90 dark:text-amber-100/90">
-                    <strong>Pending on this step</strong> — approvers in this group must act before the request can
-                    continue.
-                    {showMulti
-                      ? ` ${step.approved_count} of ${step.required_approvals} required approval(s) so far.`
-                      : ` (${step.approved_count ? `${step.approved_count} action(s) so far` : "no action yet"})`}
-                  </p>
-                ) : null}
-                {step.phase === "upcoming" ? (
-                  <p className="text-xs text-muted-foreground/80">
-                    <strong>Not started</strong> — this step will begin after earlier steps are fully completed.
-                  </p>
-                ) : null}
-                {step.phase === "rejected" ? (
-                  <p className="text-xs text-red-800/90 dark:text-red-200/90">The process stopped on this step.</p>
-                ) : null}
-                {step.phase !== "completed" && step.phase !== "rejected" ? (
-                  <p className="text-xs text-muted-foreground">
-                    Rule: needs{" "}
-                    <span className="font-medium text-foreground/80">
-                      {step.required_approvals}{" "}
-                      {step.required_approvals === 1 ? "approval" : "distinct approvals"}
-                    </span>{" "}
-                    {showMulti
-                      ? `(any combination of up to ${step.pool_size} people in the approver group)`
-                      : step.pool_size
-                        ? `(from the ${step.pool_size}-person approver group)`
-                        : null}
-                  </p>
-                ) : null}
-                {step.phase === "completed" && step.approved_count > 0 ? (
-                  <p className="text-[11px] text-muted-foreground">Who already approved (this step) is listed below.</p>
-                ) : null}
-                {step.phase !== "completed" && (step.pool_size ?? 0) > 0 ? (
-                  <div
-                    className={cn(
-                      "flex gap-1.5 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-xs text-muted-foreground",
-                      step.phase === "upcoming" && "opacity-70",
-                    )}
-                  >
-                    <CircleUserRound className="mt-0.5 size-3.5 shrink-0 opacity-60" aria-hidden />
-                    <span className="min-w-0 leading-snug">{poolText(step)}</span>
-                  </div>
-                ) : null}
-                <p className={cn("text-xs", step.phase === "upcoming" ? "text-muted-foreground/50" : "text-muted-foreground")}>
-                  {step.status_label}
-                </p>
 
-                {step.actions.length > 0 ? (
-                  <div className="mt-2 space-y-3 border-t border-border/50 pt-2">
-                    {approvals.length > 0 ? (
-                      <div>
-                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          {showMulti
-                            ? `Approvals (step ${step.step_order} · ${approvals.length} of up to ${step.required_approvals} required slot(s) filled)`
-                            : `Who approved (step ${step.step_order})`}
+              <div className="min-w-0 flex-1 space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  {phaseStateBadge(step.phase)}
+                  <h4 className="text-lg font-semibold leading-tight text-foreground">
+                    Step {step.step_order} of {step.total_steps} — {step.approver_role_name}
+                  </h4>
+                </div>
+
+                <div className="space-y-3">
+                  {detailRows.map((action, actionIndex) => (
+                    <div
+                      key={`${step.step_order}-${action.actor_user_id}-${action.action}-${action.created_at ?? actionIndex}`}
+                      className={cn(
+                        "space-y-1.5",
+                        actionIndex > 0 && "border-t border-border/50 pt-3",
+                      )}
+                    >
+                      {detailRows.length > 1 ? (
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Approval {actionIndex + 1}
                         </p>
-                        <ul className="space-y-2">
-                          {approvals.map((a, j) => {
-                            const isYou = viewerUserId != null && a.actor_user_id === viewerUserId
-                            const n = j + 1
-                            return (
-                              <li
-                                key={`${step.step_order}-a-${a.actor_user_id}-${j}-${a.created_at ?? j}`}
-                                className="rounded-md border border-emerald-200/60 bg-emerald-50/50 px-2 py-1.5 dark:border-emerald-900/50 dark:bg-emerald-950/20"
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                                  <span className="inline-flex flex-wrap items-center gap-1.5 font-medium text-emerald-900 dark:text-emerald-100">
-                                    {showMulti ? (
-                                      <span className="rounded bg-emerald-600/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 dark:text-emerald-200">
-                                        #{n}
-                                      </span>
-                                    ) : null}
-                                    <User className="size-3 shrink-0 opacity-70" aria-hidden />
-                                    {a.actor_display_name}
-                                    {isYou ? <span className="text-emerald-700/80">(You)</span> : null}
-                                    <span className="rounded-sm bg-white/80 px-1.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
-                                      approved
-                                    </span>
-                                  </span>
-                                  <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-                                    {a.created_at ? formatWhen(a.created_at) : "—"}
-                                  </span>
-                                </div>
-                                {a.comment ? (
-                                  <div className="mt-1 flex gap-1.5 pl-0.5 text-xs text-emerald-900/80 dark:text-emerald-200/90">
-                                    <Mail className="mt-0.5 size-3 shrink-0 opacity-50" aria-hidden />
-                                    <span className="whitespace-pre-wrap leading-snug">{a.comment}</span>
-                                  </div>
-                                ) : null}
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {rejections.length > 0 ? (
-                      <div>
-                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-destructive/90">
-                          Rejection (step {step.step_order})
-                        </p>
-                        <ul className="space-y-2">
-                          {rejections.map((a, j) => {
-                            const isYou = viewerUserId != null && a.actor_user_id === viewerUserId
-                            return (
-                              <li
-                                key={`${step.step_order}-r-${a.actor_user_id}-${j}`}
-                                className="rounded-md border border-red-200/70 bg-red-50/50 px-2 py-1.5 dark:border-red-900/50 dark:bg-red-950/20"
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                                  <span className="inline-flex items-center gap-1.5 font-medium text-red-800 dark:text-red-200">
-                                    <User className="size-3 shrink-0" aria-hidden />
-                                    {a.actor_display_name}
-                                    {isYou ? <span className="text-red-600/80">(You)</span> : null}
-                                    <span className="text-[10px] font-semibold uppercase">rejected</span>
-                                  </span>
-                                  <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-                                    {a.created_at ? formatWhen(a.created_at) : "—"}
-                                  </span>
-                                </div>
-                                {a.comment ? (
-                                  <div className="mt-1 flex gap-1.5 text-xs text-red-800/90 dark:text-red-200/90">
-                                    <Mail className="mt-0.5 size-3 shrink-0" aria-hidden />
-                                    <span className="whitespace-pre-wrap leading-snug">{a.comment}</span>
-                                  </div>
-                                ) : null}
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                      ) : null}
+                      <FieldLine label="Status" value={phaseBusinessLabel(step.phase)} />
+                      <FieldLine
+                        label={step.actions.length > 0 ? actionActorLabel(action.action) : pendingActorLabel(step)}
+                        value={
+                          step.actions.length > 0
+                            ? actionActorText(action.actor_display_name, viewerUserId, action.actor_user_id)
+                            : action.actor_display_name
+                        }
+                      />
+                      <FieldLine
+                        label="Action"
+                        value={step.actions.length > 0 ? actionBusinessLabel(action.action) : phaseActionText(step)}
+                      />
+                      <FieldLine label="Comment / Note" value={actionCommentText(action.comment)} />
+                      <FieldLine label="Date & Time" value={action.created_at ? formatWhen(action.created_at) : "—"} />
+                    </div>
+                  ))}
+                </div>
               </div>
             </li>
           )

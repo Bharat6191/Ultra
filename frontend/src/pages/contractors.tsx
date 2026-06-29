@@ -16,6 +16,7 @@ import { ContractorListStats, type ContractorListStatsData } from "@/components/
 import { PageHeader } from "@/components/layout/PageHeader"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { DataTable } from "@/components/shared/DataTable"
+import { ListPagination } from "@/components/shared/ListPagination"
 import { getJson } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
 import {
@@ -26,6 +27,8 @@ import { BriefcaseBusiness, Filter, Plus, Search, SlidersHorizontal } from "luci
 import { useNavigate, useSearchParams } from "react-router-dom"
 
 type Plant = { id: number; name: string }
+
+const CONTRACTOR_PAGE_SIZE = 20
 
 function contractorStatusFromQuery(value: string | null): string | "all" {
   return CONTRACTOR_STATUS_OPTIONS.some((option) => option.value === value) ? (value as string) : "all"
@@ -45,6 +48,7 @@ export function ContractorsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [rows, setRows] = React.useState<ContractorRow[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const [page, setPage] = React.useState(0)
   const [q, setQ] = React.useState(() => searchParams.get("q") ?? "")
   const [statusFilter, setStatusFilter] = React.useState<string | "all">(() =>
     contractorStatusFromQuery(searchParams.get("status")),
@@ -75,12 +79,17 @@ export function ContractorsPage() {
     return { total, active, nonCompliant, expiringSoon }
   }, [displayRows])
 
+  const paginatedRows = React.useMemo(
+    () => displayRows.slice(page * CONTRACTOR_PAGE_SIZE, (page + 1) * CONTRACTOR_PAGE_SIZE),
+    [displayRows, page],
+  )
+
   async function load() {
     setError(null)
     try {
       const qs = new URLSearchParams()
       qs.set("offset", "0")
-      qs.set("limit", "100")
+      qs.set("limit", "200")
       if (q.trim()) qs.set("q", q.trim())
       if (statusFilter !== "all") qs.set("status", statusFilter)
       if (typeFilter !== "all") qs.set("type", typeFilter)
@@ -124,6 +133,10 @@ export function ContractorsPage() {
     if (expiringOnly) next.set("expiring", "soon")
     setSearchParams(next, { replace: true })
   }, [expiringOnly, plantFilter, q, setSearchParams, statusFilter, typeFilter])
+
+  React.useEffect(() => {
+    setPage(0)
+  }, [expiringOnly, plantFilter, q, statusFilter, typeFilter])
 
   const activeFilterCount =
     (statusFilter !== "all" ? 1 : 0) +
@@ -176,7 +189,7 @@ export function ContractorsPage() {
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by name, code, PAN, GSTIN or email…"
+              placeholder="Search by name, code, PAN Number, GSTIN Number or email…"
               className="pl-9"
             />
           </div>
@@ -331,7 +344,14 @@ export function ContractorsPage() {
         </DataTable>
       ) : (
         <DataTable>
-          <ContractorTable rows={displayRows} loading={rows === null} />
+          <ContractorTable rows={paginatedRows} loading={rows === null} />
+          <ListPagination
+            page={page}
+            pageSize={CONTRACTOR_PAGE_SIZE}
+            total={displayRows.length}
+            loading={rows === null}
+            onPageChange={setPage}
+          />
         </DataTable>
       )}
     </div>

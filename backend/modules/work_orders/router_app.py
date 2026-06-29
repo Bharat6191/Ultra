@@ -120,6 +120,7 @@ def list_work_orders(
     svc: Annotated[WorkOrderService, Depends(_svc)],
     db: Session = Depends(get_db),
     org_unit_id: int | None = Query(None),
+    q: str | None = Query(None),
     active: bool | None = Query(True, description="Set false to list archived work orders only."),
     status_filter: str | None = Query(None, alias="status"),
     statuses: list[str] | None = Query(
@@ -130,8 +131,14 @@ def list_work_orders(
     limit: int = Query(20, ge=1, le=200),
 ) -> list[WorkOrderPublic]:
     allowed = set(WORK_ORDER_STATUSES)
-    list_kw: dict[str, Any] = {"org_unit_id": org_unit_id, "active": active, "offset": offset, "limit": limit}
-    count_kw: dict[str, Any] = {"org_unit_id": org_unit_id, "active": active}
+    list_kw: dict[str, Any] = {
+        "org_unit_id": org_unit_id,
+        "search": q,
+        "active": active,
+        "offset": offset,
+        "limit": limit,
+    }
+    count_kw: dict[str, Any] = {"org_unit_id": org_unit_id, "search": q, "active": active}
 
     if statuses is not None:
         cleaned = [s.strip().lower() for s in statuses if s and str(s).strip()]

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { toast } from "sonner"
-import { Eye, History, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react"
+import { ChevronDown, Eye, History, Pencil, Trash2, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,7 +17,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
@@ -288,13 +287,15 @@ export function ContractorDocuments({
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Upload document</DialogTitle>
-                <DialogDescription>
+                {/* <DialogDescription>
                   Re-uploading the same name and type will create a new version automatically.
-                </DialogDescription>
+                </DialogDescription> */}
               </DialogHeader>
               <div className="grid gap-4">
                 <div className="grid gap-2">
-                  <div className="text-xs text-muted-foreground">Document name</div>
+                  <div className="text-sm font-bold text-foreground">
+                    Document Name <span className="text-destructive">*</span>
+                  </div>
                   <Input
                     value={uploadForm.document_name}
                     onChange={(e) =>
@@ -304,7 +305,9 @@ export function ContractorDocuments({
                   />
                 </div>
                 <div className="grid gap-2">
-                  <div className="text-xs text-muted-foreground">Type</div>
+                  <div className="text-sm font-bold text-foreground">
+                    Type <span className="text-destructive">*</span>
+                  </div>
                   <Input
                     value={uploadForm.document_type}
                     onChange={(e) =>
@@ -315,7 +318,7 @@ export function ContractorDocuments({
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="grid gap-2">
-                    <div className="text-xs text-muted-foreground">Issue date</div>
+                    <div className="text-sm font-bold text-foreground">Issue date</div>
                     <Input
                       type="date"
                       value={uploadForm.issue_date}
@@ -325,7 +328,7 @@ export function ContractorDocuments({
                     />
                   </div>
                   <div className="grid gap-2">
-                    <div className="text-xs text-muted-foreground">Expiry date</div>
+                    <div className="text-sm font-bold text-foreground">Expiry date</div>
                     <Input
                       type="date"
                       value={uploadForm.expiry_date}
@@ -337,7 +340,7 @@ export function ContractorDocuments({
                   </div>
                 </div>
                 <div className="grid gap-2">
-                  <div className="text-xs text-muted-foreground">Remarks</div>
+                  <div className="text-sm font-bold text-foreground">Remarks</div>
                   <Input
                     value={uploadForm.remarks}
                     onChange={(e) => setUploadForm((s) => ({ ...s, remarks: e.target.value }))}
@@ -345,7 +348,9 @@ export function ContractorDocuments({
                   />
                 </div>
                 <div className="grid gap-2">
-                  <div className="text-xs text-muted-foreground">File</div>
+                  <div className="text-sm font-bold text-foreground">
+                    File <span className="text-destructive">*</span>
+                  </div>
                   <Input
                     type="file"
                     onChange={(e) =>
@@ -484,50 +489,43 @@ export function ContractorDocuments({
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        <Button asChild size="xs" variant="outline">
-                          <a
-                            href={resolveFileUrl(d.file_path || d.file_url || "")}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <Eye className="mr-1.5 size-3.5 opacity-70" aria-hidden />
-                            View
-                          </a>
-                        </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
-                              size="icon-sm"
-                              variant="ghost"
-                              disabled={!canUpload && !canDelete}
-                              className="rounded-lg"
-                              title="More actions"
+                              size="xs"
+                              variant="outline"
+                              className="gap-1.5 rounded-lg"
+                              disabled={!resolveFileUrl(d.file_path || d.file_url || "") && !canUpload && !canDelete}
                             >
-                              <MoreHorizontal className="size-4 opacity-70" aria-hidden />
+                              Actions
+                              <ChevronDown className="size-3.5 opacity-70" aria-hidden />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem
+                              disabled={!resolveFileUrl(d.file_path || d.file_url || "")}
+                              onSelect={() => {
+                                const fileUrl = resolveFileUrl(d.file_path || d.file_url || "")
+                                if (fileUrl) window.open(fileUrl, "_blank", "noopener,noreferrer")
+                              }}
+                            >
+                              <Eye className="mr-2 size-4" aria-hidden />
+                              View Documents
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => openEdit(d)}
                               disabled={!canUpload}
                             >
                               <Pencil className="mr-2 size-4" aria-hidden />
-                              Edit details
+                              Edit Documents
                             </DropdownMenuItem>
-                            {d.versions && d.versions.length > 1 ? (
-                              <DropdownMenuItem onClick={() => setHistoryOf(d)}>
-                                <History className="mr-2 size-4" aria-hidden />
-                                Version history
-                              </DropdownMenuItem>
-                            ) : null}
-                            <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() => setConfirmDelete(d)}
                               disabled={!canDelete}
                               className="text-red-600 focus:text-red-700"
                             >
                               <Trash2 className="mr-2 size-4" aria-hidden />
-                              Delete document
+                              Delete Documents
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -553,7 +551,7 @@ export function ContractorDocuments({
           </DialogHeader>
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <div className="text-xs text-muted-foreground">Document name</div>
+              <div className="text-sm font-bold text-foreground">Document Name</div>
               <Input
                 value={editForm.document_name}
                 onChange={(e) => setEditForm((s) => ({ ...s, document_name: e.target.value }))}
@@ -561,7 +559,7 @@ export function ContractorDocuments({
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <div className="text-xs text-muted-foreground">Issue date</div>
+                <div className="text-sm font-bold text-foreground">Issue date</div>
                 <Input
                   type="date"
                   value={editForm.issue_date}
@@ -569,7 +567,7 @@ export function ContractorDocuments({
                 />
               </div>
               <div className="grid gap-2">
-                <div className="text-xs text-muted-foreground">Expiry date</div>
+                <div className="text-sm font-bold text-foreground">Expiry date</div>
                 <Input
                   type="date"
                   value={editForm.expiry_date}
@@ -579,7 +577,7 @@ export function ContractorDocuments({
               </div>
             </div>
             <div className="grid gap-2">
-              <div className="text-xs text-muted-foreground">Remarks</div>
+              <div className="text-sm font-bold text-foreground">Remarks</div>
               <Textarea
                 value={editForm.remarks}
                 onChange={(e) => setEditForm((s) => ({ ...s, remarks: e.target.value }))}

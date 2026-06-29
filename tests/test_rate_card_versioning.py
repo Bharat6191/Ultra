@@ -264,29 +264,25 @@ def test_rate_master_overlap_rejected(
         )
 
 
-def test_rate_master_supersession_still_allowed(
+def test_rate_master_duplicate_part_code_rejected(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
-    """Strict overlap rejection must NOT break the historical pattern of
-    activating a *successor* row for a combo whose previous row was open-ended.
-    """
+    """Part codes are unique; a second create with the same code must be rejected."""
     today = date.today()
-    rm_old = _make_part(
+    _make_part(
         db,
         plant_id=int(plant.id),
         actor_id=int(actor.id),
         effective_from=today - timedelta(days=30),
     )
-    rm_new = _make_part(
-        db,
-        plant_id=int(plant.id),
-        actor_id=int(actor.id),
-        base_rate="125.00",
-        effective_from=today,
-    )
-    db.refresh(rm_old)
-    assert rm_old.is_active is False
-    assert rm_new.is_active is True
+    with pytest.raises(ConflictError, match="Part Code already exists"):
+        _make_part(
+            db,
+            plant_id=int(plant.id),
+            actor_id=int(actor.id),
+            base_rate="125.00",
+            effective_from=today,
+        )
 
 
 # ---------- Status engine + auto-expiry ----------

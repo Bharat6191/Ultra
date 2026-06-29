@@ -36,6 +36,7 @@ from modules.approvals.model import (  # noqa: F401
     TaskComment,
 )
 from modules.approvals.assignment_service import WorkflowMappingService
+from modules.approvals.inbox_service import ApprovalInboxService
 from modules.approvals.service import ApprovalEngineService, ApprovalWorkflowService
 from modules.auth.model import UserSession  # noqa: F401
 from modules.contractor.models import Contractor  # noqa: F401
@@ -72,6 +73,7 @@ from modules.features.model import Feature  # noqa: F401
 from modules.org_units.model import OrgUnit
 from modules.permissions.model import Permission
 from modules.roles.model import Role
+from modules.tasks.service import TaskService, build_task_detail_public
 from modules.users.model import User
 
 
@@ -118,7 +120,18 @@ def contractor(db: Session, actor: User) -> Contractor:
         ContractorCreate(
             contractor_code="CTR-TEST-ACME",
             name="Acme Vendor",
+            legal_name="Acme Vendor Legal",
+            pan="ABCDE1234F",
+            gstin="22ABCDE1234F1Z5",
             contractor_type="vendor",
+            contact_person="Ops Admin",
+            email="acme.vendor@example.com",
+            phone="9876543210",
+            address="123 Market Road",
+            city="Mumbai",
+            state="Maharashtra",
+            country="India",
+            postal_code="400001",
         ),
         actor_user_id=actor.id,
     )
@@ -185,21 +198,21 @@ def test_rate_master_create_lists_with_org_name(
     assert rows[0].id == rm.id
 
 
-def test_rate_master_activation_supersedes_previous_active(
+def test_rate_master_duplicate_part_code_rejected(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
-    """Activating a second rate for the same combo deactivates the first."""
+    """Part codes are unique; creating a second record with the same code is rejected."""
     first = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
-    second = _make_part(
-        db,
-        plant_id=int(plant.id),
-        actor_id=int(actor.id),
-        base_rate="110",
-        effective_from=date.today() + timedelta(days=1),
-    )
+    with pytest.raises(ConflictError, match="Part Code already exists"):
+        _make_part(
+            db,
+            plant_id=int(plant.id),
+            actor_id=int(actor.id),
+            base_rate="110",
+            effective_from=date.today() + timedelta(days=1),
+        )
     db.refresh(first)
-    assert first.is_active is False
-    assert second.is_active is True
+    assert first.is_active is True
 
 
 def test_rate_master_inverted_dates_rejected(
@@ -595,6 +608,7 @@ def test_round_requires_at_least_one_value(
             part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today(),
+            remarks="initial submission",
         ),
         actor_user_id=int(actor.id),
     )
@@ -620,6 +634,7 @@ def test_submit_with_no_workflow_auto_approves_and_writes_activation_audit(
             part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today(),
+            remarks="initial submission",
         ),
         actor_user_id=int(actor.id),
     )
@@ -682,6 +697,62 @@ def _setup_workflow_for(
     return wf, role, approver
 
 
+def _setup_two_step_workflow_for(
+    db: Session, *, action_code: str, actor_id: int
+) -> tuple[ApprovalWorkflow, Role, User, Role, User]:
+    role_l1 = Role(name=f"Approver-L1-{action_code}", description=None)
+    role_l2 = Role(name=f"Approver-L2-{action_code}", description=None)
+    db.add_all([role_l1, role_l2])
+    db.commit()
+
+    approver_l1 = User(
+        full_name="Approver L1",
+        username=f"approver.l1.{action_code}",
+        phone="+15550100201",
+        email=f"approver.l1.{action_code}@example.com",
+        hashed_password="x",
+        password_changed_at=date.today(),
+    )
+    approver_l2 = User(
+        full_name="Approver L2",
+        username=f"approver.l2.{action_code}",
+        phone="+15550100202",
+        email=f"approver.l2.{action_code}@example.com",
+        hashed_password="x",
+        password_changed_at=date.today(),
+    )
+    db.add_all([approver_l1, approver_l2])
+    db.commit()
+
+    approver_l1.roles = [role_l1]
+    approver_l2.roles = [role_l2]
+    db.commit()
+
+    svc = ApprovalWorkflowService(db)
+    wf = svc.create_workflow(
+        name=f"Workflow {action_code} (2-step)",
+        entity_type=action_code,
+        created_by=actor_id,
+        is_active=False,
+    )
+    svc.add_step(
+        workflow_id=wf.id, step_order=1, approver_role_id=role_l1.id, required_approvals=1
+    )
+    svc.add_step(
+        workflow_id=wf.id, step_order=2, approver_role_id=role_l2.id, required_approvals=1
+    )
+    db.expire_all()
+    svc.activate_workflow(wf.id, actor_user_id=actor_id)
+
+    feat = Feature(key="contractor_rates", name="Contractor rates")
+    db.add(feat)
+    db.commit()
+    db.add(Permission(feature_id=feat.id, action="create", code=action_code))
+    db.commit()
+    WorkflowMappingService(db).create_mapping(action_code=action_code, workflow_id=wf.id)
+    return wf, role_l1, approver_l1, role_l2, approver_l2
+
+
 def test_submit_with_workflow_holds_pending_then_approves(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
 ) -> None:
@@ -694,6 +765,7 @@ def test_submit_with_workflow_holds_pending_then_approves(
             part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today(),
+            remarks="initial submission",
         ),
         actor_user_id=int(actor.id),
     )
@@ -799,6 +871,7 @@ def test_rejection_marks_rate_rejected_and_audits(
             part_master_id=int(rm.id),
             negotiated_rate=Decimal("90"),
             effective_from=date.today(),
+            remarks="initial submission",
         ),
         actor_user_id=int(actor.id),
     )
@@ -829,6 +902,326 @@ def test_rejection_marks_rate_rejected_and_audits(
     ]
     assert ACTION_REJECTED in actions
 
+
+def test_rejected_rate_resubmits_same_approval_request_without_duplicate_pending(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    _setup_workflow_for(db, action_code=ACTION_CODE_CREATE, actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    svc = ContractorRateService(db)
+    rate = svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            part_master_id=int(rm.id),
+            negotiated_rate=Decimal("90"),
+            effective_from=date.today(),
+            remarks="initial submission",
+        ),
+        actor_user_id=int(actor.id),
+    )
+    first_submit = svc.submit_for_approval(int(rate.id), actor_user_id=int(actor.id))
+    assert str(first_submit.status) == "pending_approval"
+    first_request_id = int(first_submit.approval_request_id or 0)
+    assert first_request_id > 0
+
+    req = db.get(ApprovalRequest, first_request_id)
+    assert req is not None
+    task = req.tasks[0]
+    approver = db.scalar(select(User).where(User.username == "approver"))
+    assert approver is not None
+    ApprovalEngineService(db).act_on_task(
+        task_id=int(task.id),
+        actor_user_id=int(approver.id),
+        action="reject",
+        comment="needs another round",
+    )
+
+    updated = svc.update_rate(
+        int(rate.id),
+        ContractorRateUpdate(
+            negotiated_rate=Decimal("88"),
+            remarks="retry after rejection",
+        ),
+        actor_user_id=int(actor.id),
+    )
+    resubmitted = svc.submit_for_approval(int(updated.id), actor_user_id=int(actor.id))
+    assert str(resubmitted.status) == "pending_approval"
+    assert int(resubmitted.approval_request_id or 0) == first_request_id
+
+    pending_requests = db.scalars(
+        select(ApprovalRequest).where(
+            ApprovalRequest.entity_type == "contractor_rate_approval",
+            ApprovalRequest.entity_id == int(rate.id),
+            ApprovalRequest.status == "pending",
+        )
+    ).all()
+    assert len(pending_requests) == 1
+
+    pending_tasks = db.scalars(
+        select(ApprovalTask).where(
+            ApprovalTask.request_id == first_request_id,
+            ApprovalTask.status == "pending",
+        )
+    ).all()
+    assert len(pending_tasks) == 1
+
+
+def test_reject_archives_stale_in_rework_request_for_same_rate(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    wf, _role, approver = _setup_workflow_for(db, action_code=ACTION_CODE_CREATE, actor_id=int(actor.id))
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    svc = ContractorRateService(db)
+    rate = svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            part_master_id=int(rm.id),
+            negotiated_rate=Decimal("90"),
+            effective_from=date.today(),
+            remarks="initial submission",
+        ),
+        actor_user_id=int(actor.id),
+    )
+    svc.submit_for_approval(int(rate.id), actor_user_id=int(actor.id))
+    first_request_id = int(svc.get_rate(int(rate.id)).approval_request_id or 0)
+    assert first_request_id > 0
+
+    first_task = db.scalars(
+        select(ApprovalTask)
+        .where(ApprovalTask.request_id == first_request_id, ApprovalTask.status == "pending")
+        .order_by(ApprovalTask.id.asc())
+    ).first()
+    assert first_task is not None
+    ApprovalEngineService(db).act_on_task(
+        task_id=int(first_task.id),
+        actor_user_id=int(approver.id),
+        action="reject",
+        comment="first reject",
+    )
+
+    stale_request = db.get(ApprovalRequest, first_request_id)
+    assert stale_request is not None
+    assert str(stale_request.status) == "in_rework"
+
+    rate_model = db.get(ContractorRate, int(rate.id))
+    assert rate_model is not None
+    rate_model.status = "pending_approval"
+    db.commit()
+
+    duplicate_request = ApprovalEngineService(db).create_request_for_entity(
+        workflow=wf,
+        entity_type="contractor_rate_approval",
+        entity_id=int(rate.id),
+        payload={
+            "action_code": ACTION_CODE_CREATE,
+            "contractor_rate_id": int(rate.id),
+            "contractor_id": int(contractor.id),
+            "part_master_id": int(rm.id),
+            "negotiated_rate": "90.00",
+            "previous_rate": None,
+            "savings_amount": "0.00",
+            "savings_percentage": "0.00",
+            "effective_from": date.today().isoformat(),
+            "effective_to": None,
+        },
+        created_by=int(actor.id),
+    )
+    rate_model.approval_request_id = int(duplicate_request.id)
+    db.commit()
+
+    duplicate_task = db.scalars(
+        select(ApprovalTask)
+        .where(ApprovalTask.request_id == int(duplicate_request.id), ApprovalTask.status == "pending")
+        .order_by(ApprovalTask.id.asc())
+    ).first()
+    assert duplicate_task is not None
+    ApprovalEngineService(db).act_on_task(
+        task_id=int(duplicate_task.id),
+        actor_user_id=int(approver.id),
+        action="reject",
+        comment="second reject",
+    )
+
+    db.expire_all()
+    refreshed_first = db.get(ApprovalRequest, first_request_id)
+    refreshed_second = db.get(ApprovalRequest, int(duplicate_request.id))
+    assert refreshed_first is not None and str(refreshed_first.status) == "rejected"
+    assert refreshed_second is not None and str(refreshed_second.status) == "in_rework"
+
+    stale_rework_tasks = db.scalars(
+        select(ApprovalTask).where(
+            ApprovalTask.request_id == first_request_id,
+            ApprovalTask.task_type == "rework",
+        )
+    ).all()
+    assert stale_rework_tasks
+    assert all(str(task.status) == "closed" for task in stale_rework_tasks)
+
+
+def test_second_step_rejection_pending_request_reads_as_rework(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    _wf, _role_l1, approver_l1, _role_l2, approver_l2 = _setup_two_step_workflow_for(
+        db, action_code=ACTION_CODE_CREATE, actor_id=int(actor.id)
+    )
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    svc = ContractorRateService(db)
+    rate = svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            part_master_id=int(rm.id),
+            negotiated_rate=Decimal("90"),
+            effective_from=date.today(),
+            remarks="two-step reject",
+        ),
+        actor_user_id=int(actor.id),
+    )
+    submitted = svc.submit_for_approval(int(rate.id), actor_user_id=int(actor.id))
+    request_id = int(submitted.approval_request_id or 0)
+    assert request_id > 0
+
+    first_task = db.scalars(
+        select(ApprovalTask)
+        .where(ApprovalTask.request_id == request_id, ApprovalTask.status == "pending")
+        .order_by(ApprovalTask.id.asc())
+    ).first()
+    assert first_task is not None
+    ApprovalEngineService(db).act_on_task(
+        task_id=int(first_task.id),
+        actor_user_id=int(approver_l1.id),
+        action="approve",
+        comment="l1 ok",
+    )
+
+    second_task = db.scalars(
+        select(ApprovalTask)
+        .where(ApprovalTask.request_id == request_id, ApprovalTask.status == "pending")
+        .order_by(ApprovalTask.id.asc())
+    ).first()
+    assert second_task is not None
+    ApprovalEngineService(db).act_on_task(
+        task_id=int(second_task.id),
+        actor_user_id=int(approver_l2.id),
+        action="reject",
+        comment="l2 rejected",
+    )
+
+    req = db.get(ApprovalRequest, request_id)
+    assert req is not None
+    assert str(req.status) == "in_rework"
+
+    rework_task = db.scalars(
+        select(ApprovalTask)
+        .where(ApprovalTask.request_id == request_id, ApprovalTask.task_type == "rework")
+        .order_by(ApprovalTask.id.desc())
+    ).first()
+    assert rework_task is not None
+
+    # Simulate a legacy partial-update row where the request stayed "pending"
+    # even though the current cycle had already been rejected at step 2.
+    req.status = "pending"
+    req.current_step = 2
+    req.last_resubmitted_at = None
+    db.commit()
+    db.expire_all()
+
+    status_payload = ApprovalInboxService(db).get_request_status(
+        request_id=request_id,
+        viewer_id=int(actor.id),
+    )
+    assert status_payload["request_status"] == "in_rework"
+
+    detail = build_task_detail_public(db, TaskService(db).get_task(task_id=int(second_task.id)))
+    assert detail.approval is not None
+    assert detail.approval.status == "in_rework"
+
+    active_tasks = TaskService(db).my_tasks(viewer_id=int(actor.id), inbox="active")
+    assert any(
+        int(task.request_id or 0) == request_id and str(task.task_type) == "rework"
+        for task in active_tasks
+    )
+    assert not any(
+        int(task.request_id or 0) == request_id and str(task.task_type) == "approval"
+        for task in active_tasks
+    )
+
+
+def test_resubmitted_request_with_historic_rejection_stays_pending_in_reads(
+    db: Session, actor: User, plant: OrgUnit, contractor: Contractor
+) -> None:
+    _wf, _role_l1, approver_l1, _role_l2, approver_l2 = _setup_two_step_workflow_for(
+        db, action_code=ACTION_CODE_CREATE, actor_id=int(actor.id)
+    )
+    rm = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    svc = ContractorRateService(db)
+    rate = svc.create_rate(
+        ContractorRateCreate(
+            contractor_id=int(contractor.id),
+            part_master_id=int(rm.id),
+            negotiated_rate=Decimal("90"),
+            effective_from=date.today(),
+            remarks="two-step resubmit",
+        ),
+        actor_user_id=int(actor.id),
+    )
+    submitted = svc.submit_for_approval(int(rate.id), actor_user_id=int(actor.id))
+    request_id = int(submitted.approval_request_id or 0)
+    assert request_id > 0
+
+    first_task = db.scalars(
+        select(ApprovalTask)
+        .where(ApprovalTask.request_id == request_id, ApprovalTask.status == "pending")
+        .order_by(ApprovalTask.id.asc())
+    ).first()
+    assert first_task is not None
+    ApprovalEngineService(db).act_on_task(
+        task_id=int(first_task.id),
+        actor_user_id=int(approver_l1.id),
+        action="approve",
+        comment="l1 ok",
+    )
+
+    second_task = db.scalars(
+        select(ApprovalTask)
+        .where(ApprovalTask.request_id == request_id, ApprovalTask.status == "pending")
+        .order_by(ApprovalTask.id.asc())
+    ).first()
+    assert second_task is not None
+    ApprovalEngineService(db).act_on_task(
+        task_id=int(second_task.id),
+        actor_user_id=int(approver_l2.id),
+        action="reject",
+        comment="needs revision",
+    )
+
+    updated = svc.update_rate(
+        int(rate.id),
+        ContractorRateUpdate(
+            negotiated_rate=Decimal("88"),
+            remarks="resubmitted after rejection",
+        ),
+        actor_user_id=int(actor.id),
+    )
+    resubmitted = svc.submit_for_approval(int(updated.id), actor_user_id=int(actor.id))
+    assert int(resubmitted.approval_request_id or 0) == request_id
+    db.expire_all()
+
+    status_payload = ApprovalInboxService(db).get_request_status(
+        request_id=request_id,
+        viewer_id=int(actor.id),
+    )
+    assert status_payload["request_status"] == "pending"
+
+    pending_task = db.scalars(
+        select(ApprovalTask)
+        .where(ApprovalTask.request_id == request_id, ApprovalTask.status == "pending")
+        .order_by(ApprovalTask.id.desc())
+    ).first()
+    assert pending_task is not None
+
+    detail = build_task_detail_public(db, TaskService(db).get_task(task_id=int(pending_task.id)))
+    assert detail.approval is not None
+    assert detail.approval.status == "pending"
 
 def test_approved_rate_can_start_successor_round_in_new_draft(
     db: Session, actor: User, plant: OrgUnit, contractor: Contractor
@@ -1087,59 +1480,33 @@ def test_rate_master_update_diff_audit(
     assert "part_code" not in new_value
 
 
-def test_rate_master_supersession_writes_supersede_audit(
+def test_rate_master_update_rejects_duplicate_part_code(
     db: Session, actor: User, plant: OrgUnit
 ) -> None:
-    rm_old = _make_part(
+    rm_existing = _make_part(db, plant_id=int(plant.id), actor_id=int(actor.id))
+    rm_other = _make_part(
         db,
         plant_id=int(plant.id),
         actor_id=int(actor.id),
-        effective_from=date.today() - timedelta(days=10),
+        job_type="Painter",
     )
-    rm_new = _make_part(
-        db,
-        plant_id=int(plant.id),
-        actor_id=int(actor.id),
-        base_rate="125.00",
-        effective_from=date.today(),
-    )
-    db.refresh(rm_old)
-    assert rm_old.is_active is False
-    assert rm_new.is_active is True
 
-    old_actions = [
-        r.action
-        for r in db.scalars(
-            select(PartMasterAuditLog)
-            .where(PartMasterAuditLog.part_master_id == int(rm_old.id))
-            .order_by(PartMasterAuditLog.id.asc())
-        ).all()
-    ]
-    assert "SUPERSEDED" in old_actions
-    new_actions = [
-        r.action
-        for r in db.scalars(
-            select(PartMasterAuditLog)
-            .where(PartMasterAuditLog.part_master_id == int(rm_new.id))
-            .order_by(PartMasterAuditLog.id.asc())
-        ).all()
-    ]
-    # 3.4: CREATED of a row that supersedes another now also writes
-    # VERSION_CREATED + RATE_REPLACED audits.
-    assert "CREATED" in new_actions
-    assert "VERSION_CREATED" in new_actions
-    assert "RATE_REPLACED" in new_actions
-    # The CREATED audit on the new row should reference the superseded row.
-    new_create = db.scalar(
-        select(PartMasterAuditLog)
-        .where(
-            PartMasterAuditLog.part_master_id == int(rm_new.id),
-            PartMasterAuditLog.action == "CREATED",
+    with pytest.raises(ConflictError, match="Part Code already exists"):
+        PartMasterService(db).update_part_master(
+            int(rm_other.id),
+            PartMasterUpdate(part_code=rm_existing.part_code),
+            actor_user_id=int(actor.id),
         )
-    )
-    assert new_create is not None
-    meta = new_create.metadata_json or {}
-    assert int(rm_old.id) in (meta.get("superseded_ids") or [])
+
+    actions = [
+        r.action
+        for r in db.scalars(
+            select(PartMasterAuditLog)
+            .where(PartMasterAuditLog.part_master_id == int(rm_other.id))
+            .order_by(PartMasterAuditLog.id.asc())
+        ).all()
+    ]
+    assert actions == ["CREATED", "VERSION_CREATED"]
 
 
 def test_rate_master_deactivate_writes_deactivated_audit(

@@ -130,7 +130,7 @@ export function ContractorCreatePage() {
       const payload = contractorFormToCreatePayload(form)
       const created = await postJson<ContractorPublic>("/contractors", payload as unknown as Record<string, unknown>)
       clearContractorCreateDraft()
-      toast.success("Contractor created", { id: "contractor-create" })
+      toast.success("Contractor Created", { id: "contractor-create" })
       navigate(`/dashboard/contractors/${created.id}`, { replace: true })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Create failed", { id: "contractor-create" })
@@ -149,7 +149,6 @@ export function ContractorCreatePage() {
       saving={saving}
       submitLabel="Create Contractor"
       submittingLabel="Creating…"
-      helperText="Required fields are validated as you move forward. You can still go back and update any step before creating the contractor."
       reviewMessage="Documents, plant mapping, and compliance tracking can be managed on the contractor detail screen after this profile is created."
       stepIndex={stepIndex}
       onStepIndexChange={setStepIndex}

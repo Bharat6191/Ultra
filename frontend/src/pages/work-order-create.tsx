@@ -1,9 +1,9 @@
 import * as React from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
+import { PageBackLink } from "@/components/layout/page-back-link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import {
   buildWorkOrderLinesForApi,
   newDraftLine,
@@ -15,6 +15,12 @@ import {
 import type { ContractorLite, OrgUnitLite, PartMasterLite } from "@/components/work-orders/work-order-execution-ui"
 import { ApiError, getJson, postJson } from "@/lib/api"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
+
+function submitSuccessMessage(status: string | null | undefined): string {
+  return String(status ?? "").trim().toLowerCase() === "active"
+    ? "Work order activated"
+    : "Submitted for approval"
+}
 
 export function WorkOrderCreatePage() {
   const navigate = useNavigate()
@@ -100,8 +106,8 @@ export function WorkOrderCreatePage() {
     setBusy(true)
     try {
       const wo = await postJson<{ id: number }>("/work-orders", v.body)
-      await postJson(`/work-orders/${wo.id}/submit`, {})
-      toast.success("Submitted for approval")
+      const submitted = await postJson<{ status?: string | null }>(`/work-orders/${wo.id}/submit`, {})
+      toast.success(submitSuccessMessage(submitted.status))
       navigate(`/dashboard/work-orders/${wo.id}`, { replace: true })
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Submit failed")
@@ -120,17 +126,12 @@ export function WorkOrderCreatePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-base font-medium">Create Work Order</h2>
-          <p className="text-sm text-muted-foreground">
-            Execution sheet. Line rates use negotiated prices effective on the creation date (set automatically when you save).
-          </p>
+    <div className="mx-auto max-w-[1500px] space-y-6">
+      <div className="min-w-0 space-y-3">
+        <PageBackLink to="/dashboard/work-orders" label="Work Orders" />
+        <div className="space-y-1.5">
+          <h3 className="text-3xl font-bold tracking-tight text-zinc-950">Create Work Order</h3>
         </div>
-        <Button asChild size="sm" variant="outline">
-          <Link to="/dashboard/work-orders">Back</Link>
-        </Button>
       </div>
 
       {loadError ? (
@@ -168,6 +169,8 @@ export function WorkOrderCreatePage() {
       <WorkOrderExecutionFooter
         busy={busy}
         showSubmit
+        saveLabel="Save Draft"
+        submitLabel="Activate"
         onCancel={() => navigate("/dashboard/work-orders")}
         onSave={() => void saveDraft()}
         onSubmitApproval={() => void saveAndSubmit()}

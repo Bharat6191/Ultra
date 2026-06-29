@@ -1,19 +1,28 @@
 import * as React from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
+import { Filter, Plus, Search } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/layout/PageHeader"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { ListPagination } from "@/components/shared/ListPagination"
+import { Card, CardContent } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getJson, getJsonList } from "@/lib/api"
 import { workOrderStatusBadgeVariant, workOrderStatusLabel } from "@/lib/work-order-status-badge"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
 type WoTab = "all" | "draft" | "operating" | "completed" | "inactive"
-type WorkOrderStatusFilter = "draft" | "rejected" | "pending_approval" | "active" | "approved" | "closed"
 
 const WO_PAGE_SIZE = 20
 
@@ -29,30 +38,31 @@ function isWoTab(value: string | null): value is WoTab {
   return WO_TABS.some((tab) => tab.id === value)
 }
 
-function isWorkOrderStatusFilter(value: string | null): value is WorkOrderStatusFilter {
-  return ["draft", "rejected", "pending_approval", "active", "approved", "closed"].includes(value ?? "")
+function workOrderPlantFromQuery(value: string | null): number | "all" {
+  const next = Number(value)
+  return Number.isFinite(next) && next > 0 ? next : "all"
 }
 
-function workOrdersListPath(tab: WoTab, page: number, statusFilter: WorkOrderStatusFilter | null): string {
-  const q = new URLSearchParams({
+function workOrdersListPath(tab: WoTab, page: number, plantFilter: number | "all", search: string): string {
+  const qs = new URLSearchParams({
     limit: String(WO_PAGE_SIZE),
     offset: String(page * WO_PAGE_SIZE),
   })
-  if (statusFilter) {
-    q.set("status", statusFilter)
-  } else if (tab === "draft") {
-    q.append("statuses", "draft")
-    q.append("statuses", "rejected")
-    q.append("statuses", "pending_approval")
+  if (plantFilter !== "all") qs.set("org_unit_id", String(plantFilter))
+  if (search.trim()) qs.set("q", search.trim())
+  if (tab === "draft") {
+    qs.append("statuses", "draft")
+    qs.append("statuses", "rejected")
+    qs.append("statuses", "pending_approval")
   } else if (tab === "operating") {
-    q.append("statuses", "active")
-    q.append("statuses", "approved")
+    qs.append("statuses", "active")
+    qs.append("statuses", "approved")
   } else if (tab === "completed") {
-    q.set("status", "closed")
+    qs.set("status", "closed")
   } else if (tab === "inactive") {
-    q.set("active", "false")
+    qs.set("active", "false")
   }
-  return `/work-orders?${q.toString()}`
+  return `/work-orders?${qs.toString()}`
 }
 
 export function WorkOrdersPage() {
@@ -66,21 +76,21 @@ export function WorkOrdersPage() {
   const [total, setTotal] = React.useState(0)
   const [error, setError] = React.useState<string | null>(null)
   const [plants, setPlants] = React.useState<{ id: number; name: string }[]>([])
+  const [q, setQ] = React.useState(() => searchParams.get("q") ?? "")
+  const [plantFilter, setPlantFilter] = React.useState<number | "all">(() =>
+    workOrderPlantFromQuery(searchParams.get("plant_id")),
+  )
   const rawTab = searchParams.get("tab")
-  const rawStatus = searchParams.get("status")
   const tab: WoTab = isWoTab(rawTab) ? rawTab : "all"
-  const statusFilter: WorkOrderStatusFilter | null = isWorkOrderStatusFilter(rawStatus) ? rawStatus : null
 
   const pageCount = Math.max(1, Math.ceil(total / WO_PAGE_SIZE))
   const pageSafe = Math.min(page, pageCount - 1)
-  const rangeStart = total === 0 ? 0 : pageSafe * WO_PAGE_SIZE + 1
-  const rangeEnd = Math.min(total, (pageSafe + 1) * WO_PAGE_SIZE)
 
   const load = React.useCallback(async () => {
     if (!canView) return
     setError(null)
     try {
-      const { items, total: t } = await getJsonList<any>(workOrdersListPath(tab, page, statusFilter))
+      const { items, total: t } = await getJsonList<any>(workOrdersListPath(tab, page, plantFilter, q))
       setRows(items)
       setTotal(t)
     } catch (e) {
@@ -88,7 +98,7 @@ export function WorkOrdersPage() {
       setRows([])
       setTotal(0)
     }
-  }, [canView, page, statusFilter, tab])
+  }, [canView, page, plantFilter, q, tab])
 
   React.useEffect(() => {
     void load()
@@ -96,18 +106,15 @@ export function WorkOrdersPage() {
 
   React.useEffect(() => {
     setPage(0)
-  }, [tab])
+  }, [plantFilter, q, tab])
 
-  const onTabChange = React.useCallback(
-    (nextTab: WoTab) => {
-      const nextParams = new URLSearchParams(searchParams)
-      nextParams.delete("status")
-      if (nextTab === "all") nextParams.delete("tab")
-      else nextParams.set("tab", nextTab)
-      setSearchParams(nextParams, { replace: true })
-    },
-    [searchParams, setSearchParams],
-  )
+  React.useEffect(() => {
+    const next = new URLSearchParams()
+    if (tab !== "all") next.set("tab", tab)
+    if (q.trim()) next.set("q", q.trim())
+    if (plantFilter !== "all") next.set("plant_id", String(plantFilter))
+    setSearchParams(next, { replace: true })
+  }, [plantFilter, q, setSearchParams, tab])
 
   React.useEffect(() => {
     if (!canView) return
@@ -127,6 +134,8 @@ export function WorkOrdersPage() {
     (orgUnitId: number) => plants.find((p) => p.id === orgUnitId)?.name ?? `#${orgUnitId}`,
     [plants],
   )
+
+  const activeFilterCount = (tab !== "all" ? 1 : 0) + (plantFilter !== "all" ? 1 : 0) + (q.trim() ? 1 : 0)
 
   return (
     <div className="space-y-4">
@@ -150,23 +159,101 @@ export function WorkOrdersPage() {
         </Alert>
       ) : null}
 
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="mt-3 flex flex-wrap gap-2">
-            {WO_TABS.map((t) => (
-              <Button
-                key={t.id}
-                type="button"
-                size="sm"
-                variant={tab === t.id ? "default" : "outline"}
-                className="h-8"
-                onClick={() => onTabChange(t.id)}
-              >
-                {t.label}
-              </Button>
-            ))}
+      <Card className="rounded-2xl">
+        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 opacity-60" aria-hidden />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search by WO number or title…"
+              className="pl-9"
+            />
           </div>
-        </CardHeader>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Filter className="mr-2 size-4 opacity-70" aria-hidden />
+                  Status
+                  {tab !== "all" ? (
+                    <span className="ml-2 rounded-md bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
+                      1
+                    </span>
+                  ) : null}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuLabel>Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {WO_TABS.map((option) => (
+                  <DropdownMenuCheckboxItem
+                    key={option.id}
+                    checked={tab === option.id}
+                    onCheckedChange={() => {
+                      const next = new URLSearchParams(searchParams)
+                      if (option.id === "all") next.delete("tab")
+                      else next.set("tab", option.id)
+                      setSearchParams(next, { replace: true })
+                    }}
+                  >
+                    {option.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Plant
+                  {plantFilter !== "all" ? (
+                    <span className="ml-2 rounded-md bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
+                      1
+                    </span>
+                  ) : null}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="max-h-64 w-56 overflow-auto">
+                <DropdownMenuLabel>Plant</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem
+                  checked={plantFilter === "all"}
+                  onCheckedChange={() => setPlantFilter("all")}
+                >
+                  All plants
+                </DropdownMenuCheckboxItem>
+                {plants.map((plant) => (
+                  <DropdownMenuCheckboxItem
+                    key={plant.id}
+                    checked={plantFilter === plant.id}
+                    onCheckedChange={() => setPlantFilter(plant.id)}
+                  >
+                    {plant.name}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {activeFilterCount > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setQ("")
+                  setPlantFilter("all")
+                  setSearchParams(new URLSearchParams(), { replace: true })
+                }}
+              >
+                Clear
+              </Button>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
@@ -225,38 +312,13 @@ export function WorkOrdersPage() {
             </TableBody>
           </Table>
           {total > 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3">
-              <p className="text-xs text-muted-foreground">
-                Showing {rangeStart}–{rangeEnd} of {total}
-              </p>
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2"
-                  disabled={pageSafe <= 0 || rows === null}
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <span className="min-w-[4.5rem] text-center text-xs tabular-nums text-muted-foreground">
-                  {pageSafe + 1} / {pageCount}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2"
-                  disabled={pageSafe >= pageCount - 1 || rows === null}
-                  onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-                  aria-label="Next page"
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
-              </div>
-            </div>
+            <ListPagination
+              page={pageSafe}
+              pageSize={WO_PAGE_SIZE}
+              total={total}
+              loading={rows === null}
+              onPageChange={setPage}
+            />
           ) : null}
         </CardContent>
       </Card>

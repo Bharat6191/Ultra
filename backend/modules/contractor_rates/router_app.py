@@ -176,8 +176,9 @@ def _versions_to_public(db: Session, versions: list) -> list[RateVersionEntry]:
 def contractor_rate_summary(
     svc: Annotated[ContractorRateService, Depends(_get_rate_service)],
     contractor_id: int | None = Query(None),
+    org_unit_id: int | None = Query(None),
 ) -> dict[str, Any]:
-    return svc.aggregate_summary(scope_contractor_id=contractor_id)
+    return svc.aggregate_summary(scope_contractor_id=contractor_id, scope_org_unit_id=org_unit_id)
 
 
 @router.get(

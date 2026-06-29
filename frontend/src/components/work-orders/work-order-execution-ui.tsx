@@ -1,11 +1,37 @@
 import * as React from "react"
+import {
+  BadgeIndianRupee,
+  ClipboardList,
+  Info,
+  Package,
+  Plus,
+  Scale,
+  Trash2,
+  Users,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SectionHint } from "@/components/ui/section-hint"
 import { getJson } from "@/lib/api"
 import { cn } from "@/lib/utils"
+
+const workOrderShellCardClass =
+  "overflow-hidden rounded-[1.5rem] border border-zinc-200/80 bg-white/95 shadow-[0_20px_48px_-36px_rgba(15,23,42,0.32)]"
+
+const workOrderFieldClass =
+  "h-12 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm text-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] outline-none transition focus-visible:border-emerald-400 focus-visible:ring-4 focus-visible:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-zinc-50/80 disabled:text-zinc-500"
+
+const workOrderSelectClass = `${workOrderFieldClass} appearance-none`
+const executionWeightHeaderHint = "Weight / Piece. Used only for weight-based per kg pricing."
+const executionRateHeaderHint =
+  "Resolved unit rate. Uses the approved negotiated rate for the pricing date; otherwise the Part Master list rate."
+const executionTaxableHeaderHint =
+  "Taxable formula: Qty × Rate. For weight-based pricing: Qty × Weight / Piece × Rate / Kg."
+const executionRequiredStarClass =
+  "ml-0.5 inline font-semibold text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.45)]"
 
 export function formatWorkOrderDateTime(iso: string | null | undefined): string {
   if (!iso) return "—"
@@ -31,12 +57,19 @@ export function pricingDateFromCreatedAt(createdAt: string | null | undefined): 
 export function ExecutionSheetContractorBanner({ name }: { name: string | null | undefined }) {
   return (
     <div
-      className="mt-2.5 rounded-lg border border-border/80 bg-muted/40 px-3.5 py-2.5 sm:px-4"
+      className="flex min-w-[18rem] items-center gap-3 rounded-[1.2rem] border border-emerald-100/90 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(240,253,250,0.92))] px-4 py-3 shadow-[0_14px_34px_-28px_rgba(5,150,105,0.55)] sm:min-w-[22rem] sm:px-5"
       role="group"
       aria-label="Contractor"
     >
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Contractor</p>
-      <p className="mt-0.5 text-base font-semibold leading-snug tracking-tight text-foreground">{name?.trim() || "—"}</p>
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+        <Users className="size-5" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Contractor</p>
+        <p className="truncate text-[1.02rem] font-semibold leading-snug tracking-tight text-zinc-950 sm:text-[1.08rem]">
+          {name?.trim() || "—"}
+        </p>
+      </div>
     </div>
   )
 }
@@ -113,7 +146,7 @@ export function flattenWorkOrderToDraftLines(row: WorkOrderLikeForLines): Execut
           : "",
       weight_per_piece:
         it.weight_per_piece_snapshot != null && String(it.weight_per_piece_snapshot) !== ""
-          ? String(it.weight_per_piece_snapshot)
+          ? formatEditableWeightValue(it.weight_per_piece_snapshot)
           : "",
       remarks: it.notes?.trim() ? it.notes.trim() : "",
     }
@@ -154,6 +187,53 @@ function parseDecimal(v: string | number | null | undefined): number {
   if (v === null || v === undefined) return NaN
   const n = typeof v === "number" ? v : Number(String(v).replace(/,/g, ""))
   return n
+}
+
+function formatEditableWeightValue(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return ""
+  const raw = String(value).trim()
+  if (!raw) return ""
+  const n = Number(raw.replace(/,/g, ""))
+  if (!Number.isFinite(n)) return raw
+  return n.toLocaleString(undefined, {
+    useGrouping: false,
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  })
+}
+
+function formatExecutionSummaryWeight(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "0.000 kg"
+  return `${value.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`
+}
+
+function formatExecutionSummaryQty(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "0"
+  const rounded = Math.round(value * 1000) / 1000
+  if (Math.abs(rounded - Math.round(rounded)) < 1e-9) return String(Math.round(rounded))
+  return rounded.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 3 })
+}
+
+function ExecutionMetricCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Package
+  label: string
+  value: string
+}) {
+  return (
+    <div className="flex items-center gap-4 rounded-[1.6rem] border border-emerald-100/70 bg-[linear-gradient(135deg,rgba(240,253,244,0.92),rgba(255,255,255,0.96))] px-5 py-5">
+      <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+        <Icon className="size-5" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-zinc-500">{label}</p>
+        <p className="mt-1 text-[1.65rem] font-semibold tracking-tight text-zinc-950">{value}</p>
+      </div>
+    </div>
+  )
 }
 
 /** Compact qty / % (e.g. 1.000 → 1). */
@@ -201,37 +281,56 @@ export function executionRateSourceLabel(raw: string): string {
   return String(raw ?? "").trim() || "—"
 }
 
-function breakdownFormulaHint(breakdown: Record<string, unknown> | null | undefined): string | null {
-  if (!breakdown) return null
-  const f = breakdown.formula
-  if (typeof f !== "string" || !f.trim()) return null
-  return f.trim().replace(/\s+/g, " ")
+export function ExecutionTableHeaderLabel({
+  label,
+  hint,
+  align = "left",
+  icon: Icon,
+  showRequired = false,
+}: {
+  label: string
+  hint?: string | null
+  align?: "left" | "right" | "center"
+  icon?: React.ComponentType<{ className?: string }>
+  showRequired?: boolean
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex max-w-full items-center gap-1.5",
+        align === "right" && "justify-end",
+        align === "center" && "justify-center",
+      )}
+    >
+      {Icon ? <Icon className="size-[0.95rem] shrink-0 text-zinc-500" /> : null}
+      <span>
+        {label}
+        {showRequired ? (
+          <span className={executionRequiredStarClass} aria-hidden>
+            *
+          </span>
+        ) : null}
+      </span>
+      {hint ? <SectionHint text={hint} /> : null}
+    </span>
+  )
 }
 
-/** Stacked rate: bold amount + muted basis line (enterprise table style). */
+/** Value-only rate cell; details live in the header hint. */
 export function executionDetailRateCell(args: {
   rateMoney: string
   rateSource: string
   pricingMethod?: string | null
   rateUnitType?: string | null
 }): React.ReactNode {
-  const pricing = executionPricingBasisLabel(args.pricingMethod, args.rateUnitType)
-  const src = executionRateSourceLabel(args.rateSource)
-  const sub = [pricing || null, src].filter(Boolean).join(" · ")
-  const full = sub || args.rateSource
   return (
     <div className="ml-auto block w-full max-w-full text-right align-middle leading-tight">
-      <div className="tabular-nums text-sm font-semibold text-foreground">{args.rateMoney}</div>
-      {sub ? (
-        <div className="truncate text-[10px] leading-snug text-muted-foreground" title={full}>
-          {sub}
-        </div>
-      ) : null}
+      <div className="tabular-nums text-[1.05rem] font-semibold tracking-tight text-zinc-950">{args.rateMoney}</div>
     </div>
   )
 }
 
-/** Stacked taxable: bold amount + muted calculation / source line. */
+/** Value-only taxable cell; details live in the header hint. */
 export function executionDetailTaxableCell(args: {
   money: string
   rateSource: string
@@ -239,19 +338,9 @@ export function executionDetailTaxableCell(args: {
   rateUnitType?: string | null
   calculationBreakdown?: Record<string, unknown> | null
 }): React.ReactNode {
-  const formula = breakdownFormulaHint(args.calculationBreakdown ?? null)
-  const basis = formula ?? executionPricingBasisLabel(args.pricingMethod, args.rateUnitType)
-  const src = executionRateSourceLabel(args.rateSource)
-  const sub = [basis || null, src].filter(Boolean).join(" · ")
-  const full = sub || src
   return (
     <div className="ml-auto block w-full max-w-full text-right align-middle leading-tight">
-      <div className="tabular-nums text-sm font-semibold text-foreground">{args.money}</div>
-      {sub ? (
-        <div className="line-clamp-2 text-[10px] leading-snug text-muted-foreground" title={full}>
-          {sub}
-        </div>
-      ) : null}
+      <div className="tabular-nums text-[1.05rem] font-semibold tracking-tight text-zinc-950">{args.money}</div>
     </div>
   )
 }
@@ -282,51 +371,64 @@ export function WorkOrderExecutionHeader(props: {
     plantLabel,
   } = props
 
-  const selectCls =
-    "h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <div className="grid gap-1.5">
-        <Label htmlFor="wo-title" showRequired={editable}>
-          Title
-        </Label>
-        <Input
-          id="wo-title"
-          placeholder="e.g. Site welding package Q2"
-          value={title}
-          onChange={(e) => onTitle(e.target.value)}
-          disabled={loading || !editable}
-        />
-      </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="wo-reference">Reference (optional)</Label>
-        <Input
-          id="wo-reference"
-          placeholder="Internal ref / PO"
-          value={reference}
-          onChange={(e) => onReference(e.target.value)}
-          disabled={loading || !editable}
-        />
-      </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="wo-plant" showRequired={editable && plantLabel === undefined}>
-          Plant
-        </Label>
-        {plantLabel !== undefined ? (
-          <div className={cn(selectCls, "flex h-10 items-center text-muted-foreground")}>{plantLabel || "—"}</div>
-        ) : (
-          <select id="wo-plant" className={selectCls} value={org_unit_id} onChange={(e) => onOrgUnit(e.target.value)} disabled={loading || !editable}>
-            <option value="">Select plant…</option>
-            {plants.map((p) => (
-              <option key={p.id} value={String(p.id)}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-    </div>
+    <Card className={workOrderShellCardClass}>
+      <CardContent className="grid gap-4 px-5 py-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-2">
+          <Label htmlFor="wo-title" showRequired={editable} className="text-sm font-semibold text-zinc-900">
+            Title
+          </Label>
+          <Input
+            id="wo-title"
+            className={workOrderFieldClass}
+            placeholder="Enter work order title"
+            value={title}
+            onChange={(e) => onTitle(e.target.value)}
+            disabled={loading || !editable}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="wo-reference" className="text-sm font-semibold text-zinc-900">
+            Reference (optional)
+          </Label>
+          <Input
+            id="wo-reference"
+            className={workOrderFieldClass}
+            placeholder="Internal ref / PO"
+            value={reference}
+            onChange={(e) => onReference(e.target.value)}
+            disabled={loading || !editable}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label
+            htmlFor="wo-plant"
+            showRequired={editable && plantLabel === undefined}
+            className="text-sm font-semibold text-zinc-900"
+          >
+            Plant
+          </Label>
+          {plantLabel !== undefined ? (
+            <div className={cn(workOrderFieldClass, "flex items-center text-zinc-600")}>{plantLabel || "—"}</div>
+          ) : (
+            <select
+              id="wo-plant"
+              className={workOrderSelectClass}
+              value={org_unit_id}
+              onChange={(e) => onOrgUnit(e.target.value)}
+              disabled={loading || !editable}
+            >
+              <option value="">Select plant…</option>
+              {plants.map((p) => (
+                <option key={p.id} value={String(p.id)}>
+                  {p.name}ƒ
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -449,11 +551,6 @@ export function WorkOrderExecutionTable(props: {
       window.clearTimeout(tid)
     }
   }, [isEdit, contractorId, pricingWorkDate, sortedPartIdsKey])
-  const hasCompletion = !isEdit && (detailRows ?? []).some((r) => Boolean(r.completionCell))
-  const hideContractorColumn = !isEdit && contractorSummaryLabel !== undefined
-  const viewTableFixed = !isEdit && hasCompletion
-  /** View: SR, [Contractor], Part, Qty, Wt, Unit, Rate, Taxable, [Completion] */
-  const viewColCount = (hideContractorColumn ? 0 : !isEdit ? 1 : 0) + 7 + (hasCompletion ? 1 : 0)
 
   function updateLine(key: string, patch: Partial<ExecutionDraftLine>) {
     onLinesChange(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -463,321 +560,390 @@ export function WorkOrderExecutionTable(props: {
     onLinesChange(lines.filter((l) => l.key !== key))
   }
 
-  const th = "whitespace-nowrap px-2 py-2 text-left align-middle text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+  const editSummary = React.useMemo(() => {
+    let totalQty = 0
+    let totalWeight = 0
+    let totalTaxable = 0
+
+    for (const line of lines) {
+      const pm = pickPartMaster(pms, line.part_master_id)
+      const qtyN = parseDecimal(line.qty)
+      if (Number.isFinite(qtyN) && qtyN > 0) totalQty += qtyN
+
+      if (needsWeightPerPiece(pm)) {
+        const weightValue =
+          line.weight_per_piece.trim() ||
+          (pm?.weight_per_piece != null && String(pm.weight_per_piece).trim() !== ""
+            ? String(pm.weight_per_piece).trim()
+            : "")
+        const weightN = parseDecimal(weightValue)
+        if (Number.isFinite(weightN) && weightN > 0) totalWeight += weightN
+      }
+
+      const resolvedForLine = line.part_master_id ? ratePreviewByPartId[line.part_master_id]?.resolved_rate : undefined
+      const taxable = estimateLineAmount(line, pm, resolvedForLine)
+      if (Number.isFinite(taxable) && taxable > 0) totalTaxable += taxable
+    }
+
+    return { totalQty, totalWeight, totalTaxable }
+  }, [lines, pms, ratePreviewByPartId])
+
+  if (isEdit) {
+    return (
+      <Card
+        className={cn(
+          workOrderShellCardClass,
+          "bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.08),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(249,250,251,0.94))]",
+        )}
+      >
+        <CardHeader className="px-5 pt-5 pb-0">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+                <ClipboardList className="size-6" />
+              </div>
+              <div className="min-w-0">
+                <CardTitle className="text-[1.55rem] font-bold tracking-tight text-zinc-950">Execution Sheet</CardTitle>
+                {/* <CardDescription className="mt-1.5 max-w-3xl text-sm leading-6 text-zinc-500">
+                  One contractor per work order. Lines are Part Master parts; unit rate and taxable value resolve from
+                  negotiated rates or Part Master base. Weight is required only for weight-based per-kg pricing.
+                </CardDescription> */}
+              </div>
+            </div>
+
+            <div className="grid max-w-xl gap-2">
+              <Label showRequired className="text-sm font-semibold text-zinc-900">
+                Contractor
+              </Label>
+              <select
+                className={workOrderSelectClass}
+                value={contractorId}
+                onChange={(e) => onContractorId(e.target.value)}
+                disabled={loading || !org_unit_id}
+              >
+                <option value="">Select contractor…</option>
+                {contractors.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="px-5 pb-5 pt-5">
+          <div className="h-px bg-gradient-to-r from-zinc-200 via-zinc-200 to-transparent" />
+
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-[1.3rem] font-bold tracking-tight text-zinc-950">Part Lines</h3>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 rounded-xl border-emerald-200 bg-white px-4 text-sm text-emerald-700 shadow-sm hover:bg-emerald-50"
+              disabled={loading}
+              onClick={() => onLinesChange([...lines, newDraftLine()])}
+            >
+              <Plus className="size-4" />
+              Add Part Line
+            </Button>
+          </div>
+
+          <div className="mt-4 overflow-hidden rounded-[1.2rem] border border-zinc-200 bg-white shadow-[0_12px_24px_-20px_rgba(15,23,42,0.35)]">
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-separate border-spacing-0 text-sm">
+                <thead>
+                  <tr className="bg-zinc-50/85">
+                    <th className="border-b border-zinc-200 px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                      SR
+                    </th>
+                    <th className="border-b border-zinc-200 px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                      Part Code
+                    </th>
+                    <th className="border-b border-zinc-200 px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                      Part Name
+                    </th>
+                    <th className="border-b border-zinc-200 px-4 py-3 text-center text-sm font-semibold text-zinc-700">
+                      <ExecutionTableHeaderLabel label="Qty" align="center" showRequired />
+                    </th>
+                    <th className="border-b border-zinc-200 px-4 py-3 text-center text-sm font-semibold text-zinc-700">
+                      <ExecutionTableHeaderLabel label="Weight" hint={executionWeightHeaderHint} align="center" />
+                    </th>
+                    <th className="border-b border-zinc-200 px-4 py-3 text-center text-sm font-semibold text-zinc-700">
+                      UOM
+                    </th>
+                    <th className="border-b border-zinc-200 px-4 py-3 text-right text-sm font-semibold text-zinc-700">
+                      <ExecutionTableHeaderLabel label="Rate" hint={executionRateHeaderHint} align="right" />
+                    </th>
+                    <th className="border-b border-zinc-200 px-4 py-3 text-right text-sm font-semibold text-zinc-700">
+                      <ExecutionTableHeaderLabel
+                        label="Taxable Value"
+                        hint={executionTaxableHeaderHint}
+                        align="right"
+                      />
+                    </th>
+                    <th className="border-b border-zinc-200 px-4 py-3 text-center text-sm font-semibold text-zinc-700">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((line, idx) => {
+                    const pm = pickPartMaster(pms, line.part_master_id)
+                    const showWt = needsWeightPerPiece(pm)
+                    const preview = line.part_master_id ? ratePreviewByPartId[line.part_master_id] : undefined
+                    const resolvedForLine = preview?.resolved_rate
+                    const invN = estimateLineAmount(line, pm, resolvedForLine)
+                    const invShown = Number.isFinite(invN) ? fmtMoney(invN) : "0.00"
+                    const unitShown = pm?.unit_type ?? "—"
+                    const baseN = pm ? parseDecimal(pm.base_rate) : NaN
+                    const rateN =
+                      resolvedForLine != null && Number.isFinite(resolvedForLine) ? resolvedForLine : baseN
+                    const rateShown = pm && Number.isFinite(rateN) ? fmtMoney(rateN) : "—"
+
+                    return (
+                      <tr key={line.key} className="transition-colors hover:bg-emerald-50/35">
+                        <td className="border-b border-zinc-100 px-4 py-3 align-middle text-sm font-medium text-zinc-600">
+                          {idx + 1}
+                        </td>
+                        <td className="border-b border-zinc-100 px-4 py-3 align-middle text-sm font-medium text-zinc-800">
+                          {pm?.part_code ?? "—"}
+                        </td>
+                        <td className="min-w-[18rem] border-b border-zinc-100 px-4 py-3 align-middle">
+                          <select
+                            className={cn(workOrderSelectClass, "h-10 rounded-lg px-3")}
+                            value={line.part_master_id}
+                            onChange={(e) => {
+                              const v = e.target.value
+                              const nextPm = pickPartMaster(pms, v)
+                              const nextNeedsWt = needsWeightPerPiece(nextPm)
+                              const wFromPm =
+                                nextPm &&
+                                nextPm.weight_per_piece != null &&
+                                String(nextPm.weight_per_piece).trim() !== ""
+                                  ? String(nextPm.weight_per_piece).trim()
+                                  : ""
+                              updateLine(line.key, {
+                                part_master_id: v,
+                                weight_per_piece: nextNeedsWt ? formatEditableWeightValue(wFromPm) : "",
+                              })
+                            }}
+                            disabled={loading || !org_unit_id}
+                          >
+                            <option value="">Select part…</option>
+                            {pms.map((r) => (
+                              <option key={r.id} value={String(r.id)}>
+                                {r.part_name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="border-b border-zinc-100 px-4 py-3 align-middle">
+                          <Input
+                            className="h-10 rounded-lg border-zinc-200 text-center text-sm tabular-nums"
+                            inputMode="decimal"
+                            placeholder={line.progress_type === "percentage" ? "%" : "0"}
+                            value={line.qty}
+                            onChange={(e) => updateLine(line.key, { qty: e.target.value })}
+                            disabled={loading}
+                          />
+                        </td>
+                        <td className="border-b border-zinc-100 px-4 py-3 align-middle">
+                          {showWt ? (
+                            <Input
+                              className="h-10 rounded-lg border-zinc-200 text-center text-sm tabular-nums"
+                              inputMode="decimal"
+                              placeholder={pm?.weight_per_piece != null ? formatEditableWeightValue(pm.weight_per_piece) : "0.000"}
+                              value={line.weight_per_piece}
+                              onChange={(e) => updateLine(line.key, { weight_per_piece: e.target.value })}
+                              onBlur={() =>
+                                updateLine(line.key, {
+                                  weight_per_piece: formatEditableWeightValue(line.weight_per_piece),
+                                })
+                              }
+                              disabled={loading}
+                            />
+                          ) : (
+                            <div className="flex h-10 items-center justify-center rounded-lg border border-zinc-100 bg-zinc-50/60 text-sm text-zinc-400">
+                              —
+                            </div>
+                          )}
+                        </td>
+                        <td className="border-b border-zinc-100 px-4 py-3 text-center align-middle text-sm text-zinc-700">
+                          {unitShown}
+                        </td>
+                        <td className="border-b border-zinc-100 px-4 py-3 text-right align-middle text-sm font-medium tabular-nums text-zinc-800">
+                          {rateShown}
+                        </td>
+                        <td className="border-b border-zinc-100 px-4 py-3 text-right align-middle text-sm font-medium tabular-nums text-zinc-900">
+                          {invShown}
+                        </td>
+                        <td className="border-b border-zinc-100 px-4 py-3 text-center align-middle">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-sm"
+                            className="rounded-xl border-zinc-200 text-red-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                            onClick={() => removeLine(line.key)}
+                            disabled={loading || lines.length <= 1}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            <ExecutionMetricCard
+              icon={Package}
+              label="Total Quantity"
+              value={formatExecutionSummaryQty(editSummary.totalQty)}
+            />
+            <ExecutionMetricCard
+              icon={Scale}
+              label="Total Weight"
+              value={formatExecutionSummaryWeight(editSummary.totalWeight)}
+            />
+            <ExecutionMetricCard
+              icon={BadgeIndianRupee}
+              label="Total Taxable Value"
+              value={fmtMoney(editSummary.totalTaxable)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const hasCompletion = (detailRows ?? []).some((r) => Boolean(r.completionCell))
+  const hideContractorColumn = contractorSummaryLabel !== undefined
+  const viewColCount = (hideContractorColumn ? 0 : 1) + 7 + (hasCompletion ? 1 : 0)
+  const th =
+    "whitespace-nowrap border-b border-emerald-100/80 px-3.5 py-3.5 text-left align-middle text-[0.9rem] font-semibold tracking-tight text-zinc-950"
+  const viewMinWidth = hasCompletion ? "min-w-[60rem]" : "min-w-[50rem]"
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0 pb-4">
+    <Card className={workOrderShellCardClass}>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0 px-5 pb-0 pt-5 sm:px-6 sm:pt-6">
         <div className="min-w-0 flex-1">
-          <CardTitle className="text-base font-semibold tracking-tight">Execution Sheet</CardTitle>
-          {isEdit ? (
-            <CardDescription className="mt-1">
+          <CardTitle className="text-[1.25rem] font-bold tracking-tight text-zinc-950 sm:text-[1.35rem]">
+            Execution Sheet
+          </CardTitle>
+          {contractorSummaryLabel === undefined ? (
+            <CardDescription className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
               One contractor per work order. Lines are Part Master parts; unit rate and taxable value resolve from
               negotiated rates (or Part Master base). Weight is required only for weight-based per-kg pricing.
             </CardDescription>
-          ) : contractorSummaryLabel !== undefined ? (
-            <ExecutionSheetContractorBanner name={contractorSummaryLabel} />
-          ) : (
-            <CardDescription className="mt-1">
-              One contractor per work order. Lines are Part Master parts; unit rate and taxable value resolve from
-              negotiated rates (or Part Master base). Weight is required only for weight-based per-kg pricing.
-            </CardDescription>
-          )}
+          ) : null}
         </div>
-        {isEdit ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={loading}
-            onClick={() => onLinesChange([...lines, newDraftLine()])}
-          >
-            + Add Line
-          </Button>
+        {contractorSummaryLabel !== undefined ? (
+          <ExecutionSheetContractorBanner name={contractorSummaryLabel} />
         ) : null}
       </CardHeader>
-      <CardContent className="overflow-x-auto p-0 px-px pb-4 sm:p-6 sm:pt-0 [&_[data-slot=exec-scroll]]:px-4 sm:[&_[data-slot=exec-scroll]]:px-0">
-        {isEdit ? (
-          <div className="grid max-w-md gap-1.5 border-b px-4 py-4 sm:px-6">
-            <Label showRequired={isEdit}>Contractor</Label>
-            <select
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-              value={contractorId}
-              onChange={(e) => onContractorId(e.target.value)}
-              disabled={loading || !org_unit_id}
-            >
-              <option value="">Select contractor…</option>
-              {contractors.map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
+      <CardContent className="overflow-x-auto px-5 pb-5 pt-5 sm:px-6 sm:pb-6 [&_[data-slot=exec-scroll]]:px-0">
         <div
           data-slot="exec-scroll"
-          className="relative w-full max-h-[min(72vh,880px)] overflow-x-auto overflow-y-auto rounded-lg border border-border/50 bg-card"
+          className="relative w-full max-h-[min(72vh,880px)] overflow-x-auto overflow-y-auto rounded-[1.55rem] border border-emerald-100/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(250,250,250,0.97))] shadow-[0_20px_44px_-34px_rgba(15,23,42,0.28)]"
         >
-          <table
-            className={cn(
-              "w-full border-collapse text-sm align-middle",
-              isEdit || viewTableFixed ? "table-fixed" : "table-auto",
-            )}
-          >
-            <thead className="sticky top-0 z-20 border-b border-border/60 bg-muted/95 shadow-[0_1px_0_0_hsl(var(--border)/0.6)] backdrop-blur-sm supports-[backdrop-filter]:bg-muted/80">
+          <table className={cn("w-full table-fixed border-separate border-spacing-0 text-sm align-middle", viewMinWidth)}>
+            <thead className="sticky top-0 z-20 bg-[linear-gradient(135deg,rgba(240,253,250,0.98),rgba(255,255,255,0.97),rgba(236,253,245,0.96))] backdrop-blur-sm supports-[backdrop-filter]:bg-emerald-50/90">
               <tr>
-                <th
-                  className={cn(
-                    th,
-                    isEdit ? "w-8 tabular-nums" : viewTableFixed ? (hideContractorColumn ? "w-[4%] tabular-nums" : "w-[3%] tabular-nums") : "tabular-nums",
-                  )}
-                >
-                  SR
+                <th className={cn(th, "w-16 text-center")}>
+                  <ExecutionTableHeaderLabel label="SR" align="center" />
                 </th>
-                {isEdit || hideContractorColumn ? null : (
-                  <th className={cn(th, viewTableFixed ? "w-[11%] truncate" : "max-w-[8rem] truncate")}>Contractor</th>
+                {hideContractorColumn ? null : (
+                  <th className={cn(th, "w-52 truncate")}>Contractor</th>
                 )}
-                <th
-                  className={cn(
-                    th,
-                    isEdit
-                      ? "min-w-0 w-[52%]"
-                      : viewTableFixed
-                        ? hideContractorColumn
-                          ? "w-[15%] min-w-0 truncate"
-                          : "w-[12%] min-w-0 truncate"
-                        : "min-w-[8rem] max-w-[14rem] truncate",
-                  )}
-                >
-                  Part
+                <th className={cn(th, "w-[10rem]")}>
+                  <ExecutionTableHeaderLabel label="Part" />
                 </th>
-                <th
-                  className={cn(
-                    th,
-                    isEdit
-                      ? "w-12 text-right tabular-nums"
-                      : viewTableFixed
-                        ? hideContractorColumn
-                          ? "w-[5%] text-right tabular-nums"
-                          : "w-[4%] text-right tabular-nums"
-                        : "text-right tabular-nums",
-                  )}
-                >
-                  Qty
+                <th className={cn(th, "w-20 text-center tabular-nums")}>
+                  <ExecutionTableHeaderLabel label="Qty" align="center" />
                 </th>
-                {isEdit ? (
-                  <>
-                    <th className={cn(th, "w-16")}>Wt</th>
-                    <th className={cn(th, "w-12")}>Unit</th>
-                  </>
-                ) : (
-                  <>
-                    <th
-                      className={cn(
-                        th,
-                        viewTableFixed
-                          ? hideContractorColumn
-                            ? "w-[5%] text-right tabular-nums"
-                            : "w-[4%] text-right tabular-nums"
-                          : "text-right tabular-nums",
-                      )}
-                    >
-                      Wt
-                    </th>
-                    <th
-                      className={cn(
-                        th,
-                        viewTableFixed
-                          ? hideContractorColumn
-                            ? "w-[4%] text-right tabular-nums"
-                            : "w-[3%] text-right tabular-nums"
-                          : "text-right tabular-nums",
-                      )}
-                    >
-                      Unit
-                    </th>
-                  </>
-                )}
-                <th
-                  className={cn(
-                    th,
-                    isEdit
-                      ? "w-20 text-right tabular-nums"
-                      : viewTableFixed
-                        ? hideContractorColumn
-                          ? "w-[10%] text-right tabular-nums"
-                          : "w-[9%] text-right tabular-nums"
-                        : "text-right tabular-nums",
-                  )}
-                >
-                  Rate
+                <th className={cn(th, "w-28 text-center tabular-nums")}>
+                  <ExecutionTableHeaderLabel label="Weight (kg)" hint={executionWeightHeaderHint} align="center" />
                 </th>
-                <th
-                  className={cn(
-                    th,
-                    isEdit
-                      ? "w-24 text-right tabular-nums"
-                      : viewTableFixed
-                        ? hideContractorColumn
-                          ? "w-[17%] text-right tabular-nums"
-                          : "w-[16%] text-right tabular-nums"
-                        : "text-right tabular-nums",
-                  )}
-                >
-                  Taxable
+                <th className={cn(th, "w-20 text-center")}>
+                  <ExecutionTableHeaderLabel label="Unit" align="center" />
+                </th>
+                <th className={cn(th, "w-28 text-right tabular-nums")}>
+                  <ExecutionTableHeaderLabel label="Rate (₹)" hint={executionRateHeaderHint} align="right" />
+                </th>
+                <th className={cn(th, "w-32 text-right tabular-nums")}>
+                  <ExecutionTableHeaderLabel label="Taxable (₹)" hint={executionTaxableHeaderHint} align="right" />
                 </th>
                 {hasCompletion ? (
-                  <th
-                    className={cn(
-                      th,
-                      isEdit
-                        ? "w-[36%] text-right"
-                        : viewTableFixed
-                          ? hideContractorColumn
-                            ? "w-[40%] text-right"
-                            : "w-[38%] text-right"
-                          : "text-right",
-                    )}
-                  >
+                  <th className={cn(th, "w-[14.5rem] text-center")}>
                     Completion
                   </th>
                 ) : null}
-                {isEdit ? <th className={cn(th, "w-16 text-right")} /> : null}
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/50">
-            {!isEdit && (detailRows?.length ?? 0) === 0 ? (
-              <tr>
-                <td colSpan={viewColCount} className="px-3 py-10 text-center text-sm text-muted-foreground">
-                  No execution lines on this work order.
-                </td>
-              </tr>
-            ) : null}
-            {isEdit
-              ? lines.map((line, idx) => {
-                  const pm = pickPartMaster(pms, line.part_master_id)
-                  const showWt = needsWeightPerPiece(pm)
-                  const preview = line.part_master_id ? ratePreviewByPartId[line.part_master_id] : undefined
-                  const resolvedForLine = preview?.resolved_rate
-                  const invN = estimateLineAmount(line, pm, resolvedForLine)
-                  const invShown = Number.isFinite(invN) ? fmtMoney(invN) : "—"
-                  const unitShown = pm?.unit_type ?? "—"
-                  const baseN = pm ? parseDecimal(pm.base_rate) : NaN
-                  const rateN =
-                    resolvedForLine != null && Number.isFinite(resolvedForLine)
-                      ? resolvedForLine
-                      : baseN
-                  const rateShown = pm ? fmtMoney(rateN) : "—"
-
-                  return (
-                    <tr
-                      key={line.key}
-                      className="transition-colors odd:bg-background even:bg-muted/[0.14] hover:bg-muted/30"
-                    >
-                      <td className="px-2 py-2 align-middle tabular-nums text-muted-foreground">{idx + 1}</td>
-                      <td className="min-w-0 px-2 py-2 align-middle">
-                        <select
-                          className="h-9 w-full max-w-[280px] rounded-md border border-input bg-background px-2 text-xs outline-none"
-                          value={line.part_master_id}
-                          onChange={(e) => {
-                            const v = e.target.value
-                            const nextPm = pickPartMaster(pms, v)
-                            const nextNeedsWt = needsWeightPerPiece(nextPm)
-                            const wFromPm =
-                              nextPm &&
-                              nextPm.weight_per_piece != null &&
-                              String(nextPm.weight_per_piece).trim() !== ""
-                                ? String(nextPm.weight_per_piece).trim()
-                                : ""
-                            updateLine(line.key, {
-                              part_master_id: v,
-                              weight_per_piece: nextNeedsWt ? wFromPm : "",
-                            })
-                          }}
-                          disabled={loading || !org_unit_id}
-                        >
-                          <option value="">Select…</option>
-                          {pms.map((r) => (
-                            <option key={r.id} value={String(r.id)}>
-                              {partLabel(r)}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-2 py-2 align-middle text-right tabular-nums text-muted-foreground">
-                        <Input
-                          className="h-9 tabular-nums"
-                          inputMode="decimal"
-                          placeholder={line.progress_type === "percentage" ? "%" : "0"}
-                          value={line.qty}
-                          onChange={(e) => updateLine(line.key, { qty: e.target.value })}
-                          disabled={loading}
-                        />
-                      </td>
-                      <td className="px-2 py-2 align-middle">
-                        {showWt ? (
-                          <Input
-                            className="h-9 tabular-nums"
-                            inputMode="decimal"
-                            placeholder={pm?.weight_per_piece != null ? String(pm.weight_per_piece) : "kg/pc"}
-                            value={line.weight_per_piece}
-                            onChange={(e) => updateLine(line.key, { weight_per_piece: e.target.value })}
-                            disabled={loading}
-                          />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-2 py-2 align-middle tabular-nums text-muted-foreground">{unitShown}</td>
-                      <td className="px-2 py-2 align-middle text-right tabular-nums text-muted-foreground">{rateShown}</td>
-                      <td className="px-2 py-2 align-middle text-right tabular-nums text-muted-foreground">{invShown}</td>
-                      <td className="px-2 py-2 align-middle text-right">
-                        <button
-                          type="button"
-                          className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-40"
-                          onClick={() => removeLine(line.key)}
-                          disabled={loading || lines.length <= 1}
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })
-              : (detailRows ?? []).map((dr) => (
-                  <React.Fragment key={dr.sr}>
-                    <tr
-                      className={cn(
-                        "transition-colors odd:bg-background even:bg-muted/[0.12] hover:bg-muted/25",
-                        "has-[[data-completion-dirty='true']]:bg-amber-500/[0.06] has-[[data-completion-dirty='true']]:ring-1 has-[[data-completion-dirty='true']]:ring-inset has-[[data-completion-dirty='true']]:ring-amber-400/35",
-                      )}
-                    >
-                      <td className="px-2 py-2 align-middle tabular-nums text-xs text-muted-foreground">{dr.sr}</td>
-                      {hideContractorColumn ? null : (
-                        <td className="min-w-0 truncate px-2 py-2 align-middle text-xs" title={dr.contractor_label}>
-                          {dr.contractor_label}
-                        </td>
-                      )}
+            <tbody className="[&_tr:last-child_td]:border-b-0">
+              {(detailRows?.length ?? 0) === 0 ? (
+                <tr>
+                  <td colSpan={viewColCount} className="px-6 py-12 text-center text-sm text-zinc-500">
+                    No execution lines on this work order.
+                  </td>
+                </tr>
+              ) : null}
+              {(detailRows ?? []).map((dr) => (
+                <React.Fragment key={dr.sr}>
+                  <tr
+                    className={cn(
+                      "bg-white transition-colors hover:bg-emerald-50/35",
+                      "has-[[data-completion-dirty='true']]:bg-amber-500/[0.06] has-[[data-completion-dirty='true']]:ring-1 has-[[data-completion-dirty='true']]:ring-inset has-[[data-completion-dirty='true']]:ring-amber-400/35",
+                    )}
+                  >
+                    <td className="border-b border-zinc-200/80 px-3.5 py-4 text-center align-middle tabular-nums text-[0.98rem] font-medium text-zinc-700">
+                      {dr.sr}
+                    </td>
+                    {hideContractorColumn ? null : (
                       <td
-                        className="min-w-0 max-w-full truncate px-2 py-2 align-middle font-mono text-xs font-semibold text-foreground"
-                        title={dr.job_label}
+                        className="min-w-0 truncate border-b border-zinc-200/80 px-3.5 py-4 align-middle text-[0.98rem] font-medium text-zinc-800"
+                        title={dr.contractor_label}
                       >
-                        {dr.job_label}
+                        {dr.contractor_label}
                       </td>
-                      <td className="px-2 py-2 align-middle text-right text-xs tabular-nums font-medium text-foreground">{dr.qty_display}</td>
-                      <td className="px-2 py-2 align-middle text-right text-xs tabular-nums text-muted-foreground">{dr.weight_display}</td>
-                      <td className="px-2 py-2 align-middle text-right text-xs tabular-nums text-muted-foreground">{dr.unit_display}</td>
-                      <td className="px-2 py-2 align-middle text-right text-xs">{dr.rate_display}</td>
-                      <td className="px-2 py-2 align-middle text-right text-xs tabular-nums">{dr.invoice_display}</td>
-                      {hasCompletion ? (
-                        <td className="min-w-0 px-2 py-2 align-middle">{dr.completionCell ?? null}</td>
-                      ) : null}
-                    </tr>
-                  </React.Fragment>
-                ))}
-          </tbody>
-        </table>
+                    )}
+                    <td
+                      className="min-w-0 max-w-full truncate border-b border-zinc-200/80 px-3.5 py-4 align-middle text-[1rem] font-semibold tracking-tight text-zinc-950"
+                      title={dr.job_label}
+                    >
+                      {dr.job_label}
+                    </td>
+                    <td className="border-b border-zinc-200/80 px-3.5 py-4 text-center align-middle text-[1rem] tabular-nums font-semibold text-zinc-950">
+                      {dr.qty_display}
+                    </td>
+                    <td className="border-b border-zinc-200/80 px-3.5 py-4 text-center align-middle text-[1rem] tabular-nums text-zinc-700">
+                      {dr.weight_display}
+                    </td>
+                    <td className="border-b border-zinc-200/80 px-3.5 py-4 text-center align-middle text-[1rem] font-medium text-zinc-800">
+                      {dr.unit_display}
+                    </td>
+                    <td className="border-b border-zinc-200/80 px-3.5 py-4 align-middle text-right text-xs">
+                      {dr.rate_display}
+                    </td>
+                    <td className="border-b border-zinc-200/80 px-3.5 py-4 align-middle text-right text-xs tabular-nums">
+                      {dr.invoice_display}
+                    </td>
+                    {hasCompletion ? (
+                      <td className="min-w-0 border-b border-zinc-200/80 px-3 py-4 align-middle">
+                        <div className="flex justify-end">{dr.completionCell ?? null}</div>
+                      </td>
+                    ) : null}
+                  </tr>
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
         </div>
       </CardContent>
     </Card>
@@ -801,29 +967,55 @@ export function WorkOrderExecutionFooter(props: {
     showSubmit,
     submitLabel = "Activate",
     saveLabel = "Save",
-    tip = "Tip: choose the contractor once, then add part lines. Taxable value uses negotiated rate when approved, else Part Master base.",
+    tip = "Tip: Choose the contractor once, then add part lines. Taxable value uses negotiated rate when approved, else Part Master base.",
     onCancel,
     onSave,
     onSubmitApproval,
   } = props
 
   return (
-    <Card>
-      <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-        {tip ? <p className="max-w-xl text-sm text-muted-foreground">{tip}</p> : <div />}
-        <div className="flex flex-wrap items-center gap-2">
+    <Card className={workOrderShellCardClass}>
+      <CardContent className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
+        {tip ? (
+          <div className="flex max-w-3xl items-start gap-3">
+            <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+              <Info className="size-4" />
+            </div>
+            <p className="text-sm leading-6 text-zinc-500">{tip}</p>
+          </div>
+        ) : (
+          <div />
+        )}
+        <div className="flex flex-wrap items-center gap-3">
           {onCancel ? (
-            <Button type="button" variant="outline" disabled={busy} onClick={() => onCancel()}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 min-w-[9rem] rounded-xl border-zinc-200 bg-white px-5"
+              disabled={busy}
+              onClick={() => onCancel()}
+            >
               Cancel
             </Button>
           ) : null}
           {showSave ? (
-            <Button type="button" disabled={busy} onClick={() => onSave?.()}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 min-w-[10rem] rounded-xl border-emerald-200 bg-emerald-50/70 px-5 text-emerald-700 hover:bg-emerald-100"
+              disabled={busy}
+              onClick={() => onSave?.()}
+            >
               {busy ? "Saving…" : saveLabel}
             </Button>
           ) : null}
           {showSubmit ? (
-            <Button type="button" disabled={busy} onClick={() => onSubmitApproval?.()}>
+            <Button
+              type="button"
+              className="h-11 min-w-[12rem] rounded-xl bg-emerald-600 px-6 shadow-[0_20px_40px_-20px_rgba(5,150,105,0.7)] hover:bg-emerald-700"
+              disabled={busy}
+              onClick={() => onSubmitApproval?.()}
+            >
               {busy ? "Working…" : submitLabel}
             </Button>
           ) : null}
@@ -858,11 +1050,18 @@ export function buildWorkOrderLinesForApi(
   for (const x of usable) {
     const pt = x.progress_type === "percentage" ? "percentage" : "quantity"
     const pm = pickPartMaster(partMasters, x.part_master_id)
+    const qtyValue = x.qty.trim()
+    if (!qtyValue) {
+      return {
+        ok: false,
+        error: pt === "percentage" ? "Percentage is required for each selected line." : "Quantity is required for each selected line.",
+      }
+    }
     const row: WorkOrderItemApiPayload = {
       part_master_id: Number(x.part_master_id),
       progress_type: pt,
-      planned_quantity: pt === "quantity" ? (x.qty.trim() ? x.qty : null) : null,
-      planned_percentage: pt === "percentage" ? (x.qty.trim() ? x.qty : null) : null,
+      planned_quantity: pt === "quantity" ? qtyValue : null,
+      planned_percentage: pt === "percentage" ? qtyValue : null,
       notes: x.remarks.trim() || null,
     }
     if (needsWeightPerPiece(pm)) {
