@@ -4,7 +4,6 @@ import {
   BriefcaseBusiness,
   Building2,
   ClipboardList,
-  Clock3,
   Mail,
   MapPin,
   Pencil,

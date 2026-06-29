@@ -16,7 +16,6 @@ import {
   flattenWorkOrderToDraftLines,
   formatExecutionQtyDisplay,
   formatExecutionWeightAmount,
-  formatWorkOrderDateTime,
   pricingDateForNewWorkOrder,
   newDraftLine,
   WorkOrderExecutionFooter,
