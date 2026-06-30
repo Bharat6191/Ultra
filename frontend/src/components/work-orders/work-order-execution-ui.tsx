@@ -1,11 +1,8 @@
 import * as React from "react"
 import {
-  BadgeIndianRupee,
   ClipboardList,
   Info,
-  Package,
   Plus,
-  Scale,
   Trash2,
   Users,
 } from "lucide-react"
@@ -200,40 +197,6 @@ function formatEditableWeightValue(value: string | number | null | undefined): s
     minimumFractionDigits: 3,
     maximumFractionDigits: 3,
   })
-}
-
-function formatExecutionSummaryWeight(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "0.000 kg"
-  return `${value.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`
-}
-
-function formatExecutionSummaryQty(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "0"
-  const rounded = Math.round(value * 1000) / 1000
-  if (Math.abs(rounded - Math.round(rounded)) < 1e-9) return String(Math.round(rounded))
-  return rounded.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 3 })
-}
-
-function ExecutionMetricCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Package
-  label: string
-  value: string
-}) {
-  return (
-    <div className="flex items-center gap-4 rounded-[1.6rem] border border-emerald-100/70 bg-[linear-gradient(135deg,rgba(240,253,244,0.92),rgba(255,255,255,0.96))] px-5 py-5">
-      <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
-        <Icon className="size-5" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-xs font-medium text-zinc-500">{label}</p>
-        <p className="mt-1 text-[1.65rem] font-semibold tracking-tight text-zinc-950">{value}</p>
-      </div>
-    </div>
-  )
 }
 
 /** Compact qty / % (e.g. 1.000 → 1). */
@@ -560,34 +523,6 @@ export function WorkOrderExecutionTable(props: {
     onLinesChange(lines.filter((l) => l.key !== key))
   }
 
-  const editSummary = React.useMemo(() => {
-    let totalQty = 0
-    let totalWeight = 0
-    let totalTaxable = 0
-
-    for (const line of lines) {
-      const pm = pickPartMaster(pms, line.part_master_id)
-      const qtyN = parseDecimal(line.qty)
-      if (Number.isFinite(qtyN) && qtyN > 0) totalQty += qtyN
-
-      if (needsWeightPerPiece(pm)) {
-        const weightValue =
-          line.weight_per_piece.trim() ||
-          (pm?.weight_per_piece != null && String(pm.weight_per_piece).trim() !== ""
-            ? String(pm.weight_per_piece).trim()
-            : "")
-        const weightN = parseDecimal(weightValue)
-        if (Number.isFinite(weightN) && weightN > 0) totalWeight += weightN
-      }
-
-      const resolvedForLine = line.part_master_id ? ratePreviewByPartId[line.part_master_id]?.resolved_rate : undefined
-      const taxable = estimateLineAmount(line, pm, resolvedForLine)
-      if (Number.isFinite(taxable) && taxable > 0) totalTaxable += taxable
-    }
-
-    return { totalQty, totalWeight, totalTaxable }
-  }, [lines, pms, ratePreviewByPartId])
-
   if (isEdit) {
     return (
       <Card
@@ -799,24 +734,6 @@ export function WorkOrderExecutionTable(props: {
               </table>
             </div>
           </div>
-
-          {/* <div className="mt-5 grid gap-3 lg:grid-cols-3">
-            <ExecutionMetricCard
-              icon={Package}
-              label="Total Quantity"
-              value={formatExecutionSummaryQty(editSummary.totalQty)}
-            />
-            <ExecutionMetricCard
-              icon={Scale}
-              label="Total Weight"
-              value={formatExecutionSummaryWeight(editSummary.totalWeight)}
-            />
-            <ExecutionMetricCard
-              icon={BadgeIndianRupee}
-              label="Total Taxable Value"
-              value={fmtMoney(editSummary.totalTaxable)}
-            />
-          </div> */}
         </CardContent>
       </Card>
     )
