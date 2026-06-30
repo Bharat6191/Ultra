@@ -130,13 +130,7 @@ export function NegotiatedRateDetailPage() {
             className={rate.part_code ? "font-mono" : undefined}
           />
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-            <span className="font-mono text-xl">{rate.part_code ?? "—"}</span>
-            {rate.part_name ? (
-              <>
-                <span className="text-muted-foreground"> · </span>
-                <span className="text-muted-foreground">{rate.part_name}</span>
-              </>
-            ) : null}
+            <span className="font-mono text-xl text-zinc-950">{rate.part_code ?? "—"}</span>
           </h1>
           
         </div>

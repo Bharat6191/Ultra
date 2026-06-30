@@ -109,11 +109,11 @@ function StepCard({
   return (
     <div className={cn("space-y-5", compact ? "space-y-4" : "space-y-6")}>
       <div className={cn("space-y-1.5", compact ? "" : "space-y-2")}>
-        <div className={cn("font-semibold text-zinc-950", compact ? "text-lg" : "text-[2.15rem] tracking-tight")}>
+        <div className={cn("font-semibold text-zinc-950", compact ? "text-lg" : "text-[1.45rem] tracking-tight")}>
           {title}
         </div>
         {description ? (
-          <div className={cn("text-muted-foreground", compact ? "text-sm" : "text-lg leading-7")}>{description}</div>
+          <div className={cn("text-muted-foreground", compact ? "text-sm" : "text-base leading-6")}>{description}</div>
         ) : null}
       </div>
       <div>{children}</div>

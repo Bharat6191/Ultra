@@ -14,7 +14,7 @@ export function PageBackLink({ to, label, className }: PageBackLinkProps) {
     <Link
       to={to}
       className={cn(
-        "inline-flex w-fit items-center gap-2 text-sm font-medium tracking-tight text-zinc-500 transition-colors hover:text-zinc-950",
+        "inline-flex w-fit items-center gap-2 text-sm font-medium tracking-tight text-zinc-950 transition-colors hover:text-zinc-950",
         className,
       )}
     >
