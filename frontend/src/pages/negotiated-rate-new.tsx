@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Eye, File, FileImage, FileText } from "lucide-react"
+import { CalendarDays, Eye, File, FileImage, FileText, IndianRupee, Search, UploadCloud } from "lucide-react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -19,6 +19,7 @@ import {
 } from "@/components/contractors/rateStatus"
 import { VsBaseToleranceBadge } from "@/components/contractors/VsBaseToleranceBadge"
 import { hasPermission, isSuperuser } from "@/lib/permissions"
+import { cn } from "@/lib/utils"
 import {
   EMPTY_RATE_FORM,
   type NewRateForm,
@@ -32,6 +33,18 @@ const ATTACHMENT_ACCEPT =
   "image/*,.pdf,.txt,.csv,.md,.log,.json,.xml,text/plain,text/csv,text/markdown,application/pdf"
 
 const TEXT_PREVIEW_MAX_BYTES = 512 * 1024
+const NEGOTIATION_REMARKS_MAX_LENGTH = 500
+
+function mergeAttachments(existing: File[], incoming: File[]) {
+  const merged = [...existing, ...incoming]
+  const seen = new Set<string>()
+  return merged.filter((f) => {
+    const key = `${f.name}:${f.size}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
 
 function attachmentKind(f: File): "image" | "pdf" | "text" | "other" {
   if (f.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name)) return "image"
@@ -108,6 +121,9 @@ export function NegotiatedRateNewPage() {
   const [saveError, setSaveError] = React.useState<string | null>(null)
   const [attachments, setAttachments] = React.useState<File[]>([])
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const partSearchRef = React.useRef<HTMLDivElement>(null)
+  const [isPartSearchOpen, setIsPartSearchOpen] = React.useState(false)
+  const [isAttachmentDragActive, setIsAttachmentDragActive] = React.useState(false)
   const [threadsByPartMasterId, setThreadsByPartMasterId] = React.useState<
     Record<number, { id: number; status: string }>
   >({})
@@ -246,6 +262,31 @@ export function NegotiatedRateNewPage() {
   const effectiveContractorId: number | null =
     fixedContractorId ?? (typeof pickedContractorId === "number" ? pickedContractorId : null)
   const needContractorPick = fixedContractorId == null && contractorChoices.length > 0
+  const selectedContractorName = React.useMemo(() => {
+    if (effectiveContractorId == null) return null
+    return (
+      contractorChoices.find((choice) => choice.id === effectiveContractorId)?.name ??
+      `Contractor #${effectiveContractorId}`
+    )
+  }, [contractorChoices, effectiveContractorId])
+
+  React.useEffect(() => {
+    if (!isPartSearchOpen) return
+    function handlePointerDown(event: MouseEvent) {
+      if (!partSearchRef.current?.contains(event.target as Node)) {
+        setIsPartSearchOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown)
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown)
+    }
+  }, [isPartSearchOpen])
+
+  React.useEffect(() => {
+    if (effectiveContractorId != null) return
+    setIsPartSearchOpen(false)
+  }, [effectiveContractorId])
 
   React.useEffect(() => {
     if (!canCreate || effectiveContractorId == null || !canViewRates) {
@@ -330,6 +371,13 @@ export function NegotiatedRateNewPage() {
     !!form.effective_from.trim() &&
     !!form.remarks.trim() &&
     attachments.length >= 1
+  const showPartResults = effectiveContractorId !== null && isPartSearchOpen
+  const remarksCount = form.remarks.length
+
+  function handleFilesAdded(files: File[]) {
+    if (files.length === 0) return
+    setAttachments((prev) => mergeAttachments(prev, files))
+  }
 
   async function submit() {
     if (!effectiveContractorId || form.part_master_id === null) return
@@ -420,337 +468,485 @@ export function NegotiatedRateNewPage() {
         </Alert>
       ) : null}
 
-      <div className="grid w-full min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
-        <Card className="min-w-0 rounded-2xl border-border/50 shadow-sm">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-base">Contractor & part</CardTitle>
-              <SectionHint text="Baseline comes from Part Master for the selected plant. One active thread per contractor and part — open the existing rate to add rounds." />
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            {needContractorPick ? (
-              <div className="grid gap-1">
-                <Label showRequired>Contractor</Label>
-                <select
-                  className={SELECT_ROW_CLASS}
-                  value={pickedContractorId === "" ? "" : String(pickedContractorId)}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    setPickedContractorId(v === "" ? "" : Number(v))
-                  }}
-                >
-                  <option value="">Select contractor…</option>
-                  {contractorChoices.map((c) => (
-                    <option key={c.id} value={String(c.id)}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : fixedContractorId ? (
-              <p className="text-sm text-muted-foreground">
-                Creating for contractor #{fixedContractorId}.{" "}
-                <Link
-                  to="/dashboard/negotiated-rates/new"
-                  className="font-medium underline underline-offset-2"
-                >
-                  Change
-                </Link>
-              </p>
-            ) : null}
-
-            <div className="grid gap-1">
-              <Label>Search Parts</Label>
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Code, name, plant…" />
-            </div>
-
-            <div className="grid gap-1">
-              <Label showRequired>Part baseline</Label>
-              {selected ? (
-                <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-                  <div className="font-medium">
-                    <span className="font-mono">{selected.part_code}</span>{" "}
-                    <span className="text-muted-foreground">·</span> {selected.part_name}
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {selected.org_unit_name ?? "—"} · {selected.pricing_method.replace(/_/g, " ")} ·{" "}
-                    {selected.rate_unit_type.replace(/_/g, " ")} · unit {selected.unit_type}
-                  </div>
-                  <div className="mt-2 text-xs">
-                    Should Cost: <span className="font-medium text-foreground">{formatMoney(selected.base_rate)}</span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="mt-2 h-8 px-2 text-xs"
-                    onClick={() => setForm((f) => ({ ...f, part_master_id: null }))}
-                  >
-                    Choose different part
-                  </Button>
+      <Card className="min-w-0 overflow-visible rounded-[28px] border-border/50 shadow-sm">
+        <CardContent className="p-0">
+          <div className="grid min-w-0 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)]">
+            <section className="border-b border-border/50 px-6 py-6 lg:border-b-0 lg:border-r">
+              <div className="space-y-6">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-semibold tracking-tight">
+                    Contractor & Part Selection
+                  </h2>
                 </div>
-              ) : effectiveContractorId == null ? (
-                <p className="rounded-md border border-dashed bg-muted/30 px-2 py-5 text-center text-xs text-muted-foreground">
-                  Select a contractor first.
-                </p>
-              ) : (
-                <ul className="max-h-[min(28rem,55vh)] space-y-1 overflow-y-auto rounded-lg border p-1">
-                  {selectableParts.length === 0 && blockedParts.length === 0 ? (
-                    <li className="px-2 py-6 text-center text-xs text-muted-foreground">No matches.</li>
-                  ) : null}
-                  {selectableParts.map((pm) => (
-                    <li key={pm.id}>
-                      <button
-                        type="button"
-                        className="w-full rounded-md px-2 py-2 text-left text-sm transition hover:bg-muted"
-                        onClick={() => setForm((f) => ({ ...f, part_master_id: pm.id }))}
+
+                
+                  <div className="grid gap-2">
+                    <Label showRequired>Contractor</Label>
+                    {needContractorPick ? (
+                      <select
+                        className={cn(SELECT_ROW_CLASS, "h-11 rounded-xl")}
+                        value={pickedContractorId === "" ? "" : String(pickedContractorId)}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          setPickedContractorId(value === "" ? "" : Number(value))
+                        }}
                       >
-                        <span className="font-mono text-xs">{pm.part_code}</span>{" "}
-                        <span className="text-muted-foreground">·</span> {pm.part_name}
-                        <div className="text-[11px] text-muted-foreground">
-                          {pm.org_unit_name ?? "—"} · {formatMoney(pm.base_rate)}
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                  {blockedParts.length > 0 ? (
-                    <li className="px-2 pt-2">
-                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Already under negotiation
+                        <option value="">Select contractor...</option>
+                        {contractorChoices.map((choice) => (
+                          <option key={choice.id} value={String(choice.id)}>
+                            {choice.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="flex min-h-11 items-center rounded-xl border border-border/70 bg-background px-3 text-sm font-medium text-foreground">
+                        {selectedContractorName ?? "No active contractor available"}
                       </div>
-                      <ul className="space-y-1">
-                        {blockedParts.map((pm) => {
-                          const t = threadsByPartMasterId[pm.id]
-                          return (
-                            <li
+                    )}
+                    {fixedContractorId ? (
+                      <p className="text-xs text-muted-foreground">
+                        Creating for a pre-selected contractor.{" "}
+                        <Link
+                          to="/dashboard/negotiated-rates/new"
+                          className="font-medium text-foreground underline underline-offset-2"
+                        >
+                          Change
+                        </Link>
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div ref={partSearchRef} className="relative grid gap-2">
+                    <Label htmlFor="neg-search-parts">Search Parts</Label>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                      <Input
+                        id="neg-search-parts"
+                        className="h-11 rounded-xl pl-9"
+                        value={search}
+                        onFocus={() => {
+                          if (effectiveContractorId != null) setIsPartSearchOpen(true)
+                        }}
+                        onChange={(e) => {
+                          setSearch(e.target.value)
+                          if (effectiveContractorId != null) setIsPartSearchOpen(true)
+                        }}
+                        placeholder="Search by code, name or plant..."
+                        disabled={effectiveContractorId == null}
+                      />
+                    </div>
+
+                    {showPartResults ? (
+                      <div className="absolute top-full z-30 mt-2 w-full overflow-hidden rounded-2xl border border-border/70 bg-background shadow-xl">
+                        <div className="max-h-[24rem] overflow-y-auto p-2">
+                          {selectableParts.length === 0 && blockedParts.length === 0 ? (
+                            <div className="rounded-xl px-3 py-8 text-center text-sm text-muted-foreground">
+                              No matching parts found.
+                            </div>
+                          ) : null}
+
+                          {selectableParts.map((pm) => (
+                            <button
                               key={pm.id}
-                              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200/80 bg-amber-50/50 px-2 py-2 text-sm"
+                              type="button"
+                              className="mb-1.5 w-full rounded-xl border border-transparent bg-background px-3 py-3 text-left transition hover:border-emerald-200 hover:bg-emerald-50/50"
+                              onClick={() => {
+                                setForm((prev) => ({ ...prev, part_master_id: pm.id }))
+                                setSearch("")
+                                setIsPartSearchOpen(false)
+                              }}
                             >
-                              <div className="min-w-0 flex-1">
-                                <span className="font-mono text-xs">{pm.part_code}</span>{" "}
-                                <span className="text-muted-foreground">·</span>{" "}
-                                <span className="text-muted-foreground">{pm.part_name}</span>
-                                <div className="text-[11px] text-muted-foreground">
-                                  {t ? `${rateStatusLabel(t.status)} · ` : null}
-                                  {pm.org_unit_name ?? "—"}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-mono text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                      {pm.part_code}
+                                    </span>
+                                    <span className="text-sm font-semibold text-foreground">
+                                      {pm.part_name}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {pm.org_unit_name ?? "No plant"} ·{" "}
+                                    {pm.pricing_method.replace(/_/g, " ")} ·{" "}
+                                    {pm.rate_unit_type.replace(/_/g, " ")}
+                                  </p>
                                 </div>
+                                <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                                  {formatMoney(pm.base_rate)}
+                                </span>
                               </div>
-                              {t ? (
-                                <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 text-xs" asChild>
-                                  <Link to={`/dashboard/negotiated-rates/${t.id}`}>View existing</Link>
-                                </Button>
-                              ) : null}
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </li>
-                  ) : null}
-                </ul>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                            </button>
+                          ))}
 
-        <Card className="min-w-0 rounded-2xl border-border/50 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-base">Rates & notes</CardTitle>
-              <SectionHint text="Work order lines use their work date: it must fall on or after effective from. Approved rates stay open-ended until superseded or expired by policy." />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {/* Use a div instead of <form> so implicit submit / file-control quirks cannot full-page reload the app. */}
-            <div className="grid gap-4">
-            <div className="grid gap-1">
-              <Label htmlFor="neg-initial" showRequired>
-                Initial ask
-              </Label>
-              <Input
-                id="neg-initial"
-                type="number"
-                inputMode="decimal"
-                placeholder="Contractor opening price"
-                value={form.initial_rate}
-                onChange={(e) => setForm((f) => ({ ...f, initial_rate: e.target.value }))}
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="neg-agreed" showRequired>
-                Agreed rate
-              </Label>
-              <Input
-                id="neg-agreed"
-                type="number"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={form.negotiated_rate}
-                onChange={(e) => setForm((f) => ({ ...f, negotiated_rate: e.target.value }))}
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label
-                htmlFor="neg-effective-from"
-                showRequired
-                title="First day this rate can apply to work orders (by line work date)."
-              >
-                Effective from
-              </Label>
-              <Input
-                id="neg-effective-from"
-                type="date"
-                value={form.effective_from}
-                onChange={(e) => setForm((f) => ({ ...f, effective_from: e.target.value }))}
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label htmlFor="neg-remarks" showRequired>
-                Remarks
-              </Label>
-              <Textarea
-                id="neg-remarks"
-                rows={3}
-                required
-                placeholder="Context for approvers — timeline, rationale, links…"
-                value={form.remarks}
-                onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <div className="flex flex-wrap items-end justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  <Label htmlFor="neg-file-btn" showRequired>
-                    Attachments
-                  </Label>
-                  <SectionHint text="PDFs or images attach to round 1 as opening evidence when the draft is created. Use Negotiate for files on later rounds." />
-                </div>
-                {attachments.length > 0 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-xs text-muted-foreground"
-                    onClick={() => setAttachments([])}
-                  >
-                    Clear all
-                  </Button>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept={ATTACHMENT_ACCEPT}
-                  className="sr-only"
-                  tabIndex={-1}
-                  aria-hidden
-                  onChange={(e) => {
-                    const next = Array.from(e.target.files ?? [])
-                    if (next.length) {
-                      setAttachments((prev) => {
-                        const merged = [...prev, ...next]
-                        const seen = new Set<string>()
-                        return merged.filter((f) => {
-                          const k = `${f.name}:${f.size}`
-                          if (seen.has(k)) return false
-                          seen.add(k)
-                          return true
-                        })
-                      })
-                    }
-                    e.target.value = ""
-                  }}
-                />
-                <Button
-                  id="neg-file-btn"
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  Add files…
-                </Button>
-                <span className="text-xs text-muted-foreground">Multi-select · images, PDF, text</span>
-              </div>
-              {attachments.length > 0 ? (
-                <ul className="max-h-40 space-y-1.5 overflow-y-auto rounded-lg border bg-muted/30 p-2 text-sm">
-                  {attachments.map((f, i) => (
-                    <li
-                      key={`${f.name}-${f.size}-${i}`}
-                      className="flex items-center justify-between gap-2 rounded-md bg-background px-2 py-1.5"
-                    >
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <AttachmentRowIcon file={f} />
-                        <span className="min-w-0 truncate font-medium" title={f.name}>
-                          {f.name}
-                        </span>
-                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
-                          {attachmentKind(f)}
-                        </span>
+                          {blockedParts.length > 0 ? (
+                            <div className="mt-2 border-t border-border/50 pt-2">
+                              <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                Already under negotiation
+                              </div>
+                              <div className="space-y-1.5">
+                                {blockedParts.map((pm) => {
+                                  const thread = threadsByPartMasterId[pm.id]
+                                  return (
+                                    <div
+                                      key={pm.id}
+                                      className="rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-3"
+                                    >
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <span className="font-mono text-xs font-semibold uppercase tracking-wide text-amber-900/70">
+                                              {pm.part_code}
+                                            </span>
+                                            <span className="text-sm font-semibold text-foreground">
+                                              {pm.part_name}
+                                            </span>
+                                          </div>
+                                          <p className="mt-1 text-xs text-amber-900/75">
+                                            {thread ? `${rateStatusLabel(thread.status)} · ` : null}
+                                            {pm.org_unit_name ?? "No plant"}
+                                          </p>
+                                        </div>
+                                        {thread ? (
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 shrink-0 rounded-lg border-amber-300 bg-white px-3 text-xs"
+                                            asChild
+                                          >
+                                            <Link to={`/dashboard/negotiated-rates/${thread.id}`}>
+                                              View existing
+                                            </Link>
+                                          </Button>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {(f.size / 1024).toFixed(f.size < 10240 ? 1 : 0)} KB
-                      </span>
-                      {canPreviewStagedFile(f) ? (
+                    ) : null}
+                  </div>
+                
+
+                <div className="grid gap-2">
+                  <Label>Part Baseline</Label>
+                  <div
+                    className={cn(
+                      "flex min-h-[140px] items-center justify-center rounded-2xl border px-5 py-5 text-center",
+                      selected
+                        ? "border-emerald-100 bg-emerald-50/35"
+                        : "border-border/70 bg-background",
+                    )}
+                  >
+                    {selected ? (
+                      <div className="w-full space-y-3 text-left">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-base font-semibold text-foreground">
+                              {selected.part_name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              <span className="font-mono">{selected.part_code}</span> ·{" "}
+                              {selected.org_unit_name ?? "No plant"}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                            {formatMoney(selected.base_rate)}
+                          </span>
+                        </div>
+                        <div className="grid gap-1 text-xs text-muted-foreground">
+                          <p>
+                            {selected.pricing_method.replace(/_/g, " ")} ·{" "}
+                            {selected.rate_unit_type.replace(/_/g, " ")} · unit {selected.unit_type}
+                          </p>
+                        </div>
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="h-7 shrink-0 px-2 text-xs"
-                          onClick={() => openAttachmentPreview(f)}
+                          className="h-8 rounded-lg px-2 text-xs text-emerald-700 hover:text-emerald-800"
+                          onClick={() => {
+                            setForm((prev) => ({ ...prev, part_master_id: null }))
+                            setSearch("")
+                            setIsPartSearchOpen(true)
+                          }}
                         >
-                          <Eye className="size-3.5" aria-hidden />
-                          View
+                          Change part
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+                          <FileText className="size-5" aria-hidden />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-base font-semibold text-foreground">
+                            No part selected yet
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Select contractor and search part to view baseline rate.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="border-b border-border/50 px-6 py-6 lg:border-b-0">
+              <div className="space-y-5">
+                <div className="space-y-5">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-semibold tracking-tight">Rate Details</h2>
+                    <SectionHint text="Work order lines use their work date: it must fall on or after effective from. Approved rates stay open-ended until superseded or expired by policy." />
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-3">
+                    <div className="grid gap-2">
+                      <Label htmlFor="neg-initial" showRequired>
+                        Initial Ask (Contractor Opening Price)
+                      </Label>
+                      <div className="relative">
+                        <IndianRupee className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                        <Input
+                          id="neg-initial"
+                          type="number"
+                          inputMode="decimal"
+                          className="h-11 rounded-xl pl-9"
+                          placeholder="Enter initial ask"
+                          value={form.initial_rate}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, initial_rate: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label htmlFor="neg-agreed" showRequired>
+                        Agreed Rate
+                      </Label>
+                      <div className="relative">
+                        <IndianRupee className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                        <Input
+                          id="neg-agreed"
+                          type="number"
+                          inputMode="decimal"
+                          className="h-11 rounded-xl pl-9"
+                          placeholder="0.00"
+                          value={form.negotiated_rate}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, negotiated_rate: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label
+                        htmlFor="neg-effective-from"
+                        showRequired
+                        title="First day this rate can apply to work orders (by line work date)."
+                      >
+                        Effective From
+                      </Label>
+                      <div className="relative">
+                        <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                        <Input
+                          id="neg-effective-from"
+                          type="date"
+                          className="h-11 rounded-xl pl-9"
+                          value={form.effective_from}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, effective_from: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="neg-remarks" showRequired>
+                        Remarks
+                      </Label>
+                      <span className="text-xs text-muted-foreground">
+                        {remarksCount} / {NEGOTIATION_REMARKS_MAX_LENGTH}
+                      </span>
+                    </div>
+                    <Textarea
+                      id="neg-remarks"
+                      rows={2}
+                      required
+                      maxLength={NEGOTIATION_REMARKS_MAX_LENGTH}
+                      className="min-h-[76px] rounded-2xl"
+                      placeholder="Context for approvers — timeline, rationale, links..."
+                      value={form.remarks}
+                      onChange={(e) => setForm((prev) => ({ ...prev, remarks: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <Label htmlFor="neg-file-btn" showRequired>
+                          Attachments
+                        </Label>
+                        <SectionHint text="PDFs, images, and text-based support files attach to round 1 as opening evidence when the draft is created." />
+                      </div>
+                      {attachments.length > 0 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 rounded-lg px-2 text-xs text-muted-foreground"
+                          onClick={() => setAttachments([])}
+                        >
+                          Clear
                         </Button>
                       ) : null}
+                    </div>
+
+                    <input
+                      ref={fileInputRef}
+                      id="neg-file-btn"
+                      type="file"
+                      multiple
+                      accept={ATTACHMENT_ACCEPT}
+                      className="sr-only"
+                      tabIndex={-1}
+                      aria-hidden
+                      onChange={(e) => {
+                        handleFilesAdded(Array.from(e.target.files ?? []))
+                        e.target.value = ""
+                      }}
+                    />
+
+                    <div
+                      className={cn(
+                        "rounded-2xl border px-4 py-4 text-center transition",
+                        isAttachmentDragActive
+                          ? "border-emerald-400 bg-emerald-50/60"
+                          : "border-border/70 bg-background",
+                      )}
+                      onDragEnter={(e) => {
+                        e.preventDefault()
+                        setIsAttachmentDragActive(true)
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        setIsAttachmentDragActive(true)
+                      }}
+                      onDragLeave={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                          setIsAttachmentDragActive(false)
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        setIsAttachmentDragActive(false)
+                        handleFilesAdded(Array.from(e.dataTransfer.files ?? []))
+                      }}
+                    >
                       <Button
                         type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 shrink-0 px-2 text-xs"
-                        onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                        variant="outline"
+                        className="h-10 w-full rounded-xl"
+                        onClick={() => fileInputRef.current?.click()}
                       >
-                        Remove
+                        <UploadCloud className="size-4" aria-hidden />
+                        Browse Files
                       </Button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
+                      <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                        PDF, JPG, PNG, TXT (Max 10MB)
+                      </p>
+                    </div>
 
-            {/* {previewNegotiationSavings && previewNegotiationSavings.amount > 0 ? (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-xs text-emerald-900">
-                Negotiation savings vs opening ask:{" "}
-                <strong>{formatMoney(previewNegotiationSavings.amount)}</strong> (
-                {previewNegotiationSavings.pct.toFixed(1)}%)
+                    {attachments.length > 0 ? (
+                      <ul className="space-y-2 rounded-2xl border border-border/70 bg-muted/15 p-3">
+                        {attachments.map((file, index) => (
+                          <li
+                            key={`${file.name}-${file.size}-${index}`}
+                            className="space-y-2 rounded-xl bg-background px-3 py-2"
+                          >
+                            <div className="flex items-start gap-2">
+                              <AttachmentRowIcon file={file} />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium" title={file.name}>
+                                  {file.name}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {(file.size / 1024).toFixed(file.size < 10240 ? 1 : 0)} KB
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {canPreviewStagedFile(file) ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 rounded-lg px-3 text-xs"
+                                  onClick={() => openAttachmentPreview(file)}
+                                >
+                                  <Eye className="size-3.5" aria-hidden />
+                                  View
+                                </Button>
+                              ) : null}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 rounded-lg px-2 text-xs"
+                                onClick={() =>
+                                  setAttachments((prev) => prev.filter((_, fileIndex) => fileIndex !== index))
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+
+                  {previewVsBase ? (
+                    <VsBaseToleranceBadge
+                      negotiated={negRate}
+                      baseRate={baseRate}
+                      tolerance={previewVsBase}
+                    />
+                  ) : null}
+
+                  {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-3 border-t border-border/50 pt-3">
+                  <Button type="button" variant="outline" className="h-10 rounded-xl px-5" asChild>
+                    <Link to="/dashboard/negotiated-rates">Cancel</Link>
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-10 rounded-xl px-5"
+                    disabled={!canSave || saving}
+                    onClick={() => void submit()}
+                  >
+                    <FileText className="size-4" aria-hidden />
+                    {saving ? "Creating..." : "Save as Draft"}
+                  </Button>
+                </div>
               </div>
-            ) : null} */}
-            {previewVsBase ? (
-              <VsBaseToleranceBadge
-                negotiated={negRate}
-                baseRate={baseRate}
-                tolerance={previewVsBase}
-              />
-            ) : null}
-
-            {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
-
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" disabled={!canSave || saving} onClick={() => void submit()}>
-                {saving ? "Creating…" : "Create draft"}
-              </Button>
-              <Button type="button" variant="outline" asChild>
-                <Link to="/dashboard/negotiated-rates">Cancel</Link>
-              </Button>
-            </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </section>
+          </div>
+        </CardContent>
+      </Card>
 
       <Dialog
         open={previewOpen}
