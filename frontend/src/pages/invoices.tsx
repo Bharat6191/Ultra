@@ -26,7 +26,7 @@ import {
 } from "@/lib/invoice-validation-display"
 import { canListOrgUnitsForAssignments, hasPermission } from "@/lib/permissions"
 
-type InvoiceStatusTab = "all" | "draft" | "pass" | "blocked" | "rejected" | "pending_exception_approval"
+type InvoiceStatusTab = "all" | "draft" | "pass" | "blocked" | "rejected"
 
 const INVOICE_STATUS_TABS: { id: InvoiceStatusTab; label: string }[] = [
   { id: "all", label: "All" },
@@ -34,7 +34,6 @@ const INVOICE_STATUS_TABS: { id: InvoiceStatusTab; label: string }[] = [
   { id: "pass", label: "Pass" },
   { id: "blocked", label: "Blocked" },
   { id: "rejected", label: "Rejected" },
-  { id: "pending_exception_approval", label: "Pending Approval" },
 ]
 
 const INVOICE_PAGE_SIZE = 20
@@ -69,9 +68,7 @@ export function InvoicesPage() {
           ? "blocked"
           : statusFilter === "rejected"
             ? "rejected"
-          : statusFilter === "pending_exception_approval"
-            ? "pending_exception_approval"
-          : "all"
+            : "all"
 
   const contractorLabel = React.useCallback(
     (id: number) => contractors.find((c) => c.id === id)?.name ?? `#${id}`,
@@ -138,22 +135,6 @@ export function InvoicesPage() {
   const filtered = React.useMemo(() => {
     if (!rows) return []
     const query = q.trim().toLowerCase()
-    if (statusFilter === "pending_exception_approval") {
-      return rows.filter((r) => {
-        if (String(r.status ?? "").toLowerCase() !== "pending_exception_approval") return false
-        if (plantFilter !== "all" && Number(r.org_unit_id) !== plantFilter) return false
-        if (!query) return true
-        const haystack = [
-          r.invoice_number ?? "",
-          workOrderSummary(r),
-          contractorLabel(Number(r.contractor_id)),
-          plantLabel(Number(r.org_unit_id)),
-        ]
-          .join(" ")
-          .toLowerCase()
-        return haystack.includes(query)
-      })
-    }
     return rows.filter((r) => {
       if (statusFilter === "draft" && invoiceDisplayStatus(r) !== "draft") return false
       if (statusFilter === "pass" && invoiceDisplayStatus(r) !== "pass") return false

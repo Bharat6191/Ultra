@@ -130,7 +130,7 @@ export function WorkOrderCreatePage() {
       <div className="min-w-0 space-y-3">
         <PageBackLink to="/dashboard/work-orders" label="Work Orders" />
         <div className="space-y-1.5">
-          <h3 className="text-3xl font-bold tracking-tight text-zinc-950">Create Work Order</h3>
+          <h3 className="text-xl font-bold tracking-tight text-zinc-950">Create Work Order</h3>
         </div>
       </div>
 

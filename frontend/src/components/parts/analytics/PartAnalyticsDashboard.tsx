@@ -402,15 +402,15 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="h-8 text-xs">Contractor</TableHead>
                   <TableHead className="h-8 text-right text-xs">Should Cost</TableHead>
-                  <TableHead className="h-8 text-right text-xs"> quote</TableHead>
-                  <TableHead className="h-8 text-right text-xs">negotiated</TableHead>
+                  <TableHead className="h-8 text-right text-xs"> Quote</TableHead>
+                  <TableHead className="h-8 text-right text-xs">Negotiated</TableHead>
                   <TableHead className="h-8 text-right text-xs">Cost Variance </TableHead>
                   <TableHead className="h-8 text-right text-xs">Savings %</TableHead>
-                  <TableHead className="h-8 text-xs"> status</TableHead>
+                  <TableHead className="h-8 text-xs"> Status</TableHead>
                   <TableHead className="h-8 text-xs">Approved by</TableHead>
-                  <TableHead className="h-8 text-xs">Last negotiation</TableHead>
+                  <TableHead className="h-8 text-xs">Last Negotiation</TableHead>
                   <TableHead className="h-8 text-right text-xs">Active WO</TableHead>
-                  <TableHead className="h-8 text-right text-xs">Total WO value</TableHead>
+                  <TableHead className="h-8 text-right text-xs">Total WO Value</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -492,7 +492,7 @@ export function PartAnalyticsDashboard({ partMasterId }: { partMasterId: number 
                   <TableHead className="h-8 text-xs">WO number</TableHead>
                   <TableHead className="h-8 text-xs">Contractor</TableHead>
                   <TableHead className="h-8 text-right text-xs">Qty</TableHead>
-                  <TableHead className="h-8 text-right text-xs">WO value</TableHead>
+                  <TableHead className="h-8 text-right text-xs">WO Value</TableHead>
                   <TableHead className="h-8 text-right text-xs">Invoiced</TableHead>
                   <TableHead className="h-8 text-right text-xs">Pending</TableHead>
                   <TableHead className="h-8 text-xs">Status</TableHead>

@@ -421,7 +421,7 @@ export function WorkOrderExecutionHeader(props: {
               <option value="">Select plant…</option>
               {plants.map((p) => (
                 <option key={p.id} value={String(p.id)}>
-                  {p.name}ƒ
+                  {p.name}
                 </option>
               ))}
             </select>
@@ -800,7 +800,7 @@ export function WorkOrderExecutionTable(props: {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+          {/* <div className="mt-5 grid gap-3 lg:grid-cols-3">
             <ExecutionMetricCard
               icon={Package}
               label="Total Quantity"
@@ -816,7 +816,7 @@ export function WorkOrderExecutionTable(props: {
               label="Total Taxable Value"
               value={fmtMoney(editSummary.totalTaxable)}
             />
-          </div>
+          </div> */}
         </CardContent>
       </Card>
     )

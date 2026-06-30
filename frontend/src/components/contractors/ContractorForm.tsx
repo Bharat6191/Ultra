@@ -479,7 +479,7 @@ export function ContractorForm({
       <div className="grid gap-4 lg:grid-cols-3">
         <Card id={sectionIds?.basic} className="rounded-2xl shadow-sm lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Basic information</CardTitle>
+            <CardTitle className="text">Basic information</CardTitle>
             <CardDescription>Core identity details used across workflows and compliance.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -572,7 +572,7 @@ export function ContractorForm({
       <div className="grid gap-4 lg:grid-cols-3">
         <Card id={sectionIds?.contact} className="rounded-2xl shadow-sm lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Contact information</CardTitle>
+            <CardTitle className="text">Contact information</CardTitle>
             <CardDescription>Primary and secondary contact channels.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">

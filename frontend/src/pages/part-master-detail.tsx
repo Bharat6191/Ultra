@@ -1,10 +1,8 @@
 import * as React from "react"
-import { ChevronRight, Sparkles } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { PageBackLink } from "@/components/layout/page-back-link"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -16,7 +14,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError, getJson, patchJson } from "@/lib/api"
 import { humanizeFieldKey } from "@/lib/field-labels"
 import { canListOrgUnitsForAssignments, hasPermission, isSuperuser } from "@/lib/permissions"
-import { cn } from "@/lib/utils"
 import { RateVersionHistoryButton } from "@/components/contractors/RateVersionHistoryDrawer"
 import { PartAnalyticsDashboard } from "@/components/parts/analytics/PartAnalyticsDashboard"
 import type { PartMasterPublic } from "@/pages/part-master"
@@ -35,17 +32,10 @@ type PartMasterAuditEntry = {
   created_at: string
 }
 
-function auditActionLabel(action: string): string {
-  const a = action.toUpperCase()
-  if (a === "CREATED") return "Created"
-  if (a === "VERSION_CREATED") return "Version recorded"
-  if (a === "UPDATED") return "Updated"
-  if (a === "VALIDITY_CHANGED") return "Validity changed"
-  if (a === "ACTIVATED") return "Activated"
-  if (a === "DEACTIVATED") return "Deactivated"
-  if (a === "SUPERSEDED") return "Superseded"
-  if (a === "RATE_REPLACED") return "Rate replaced"
-  return action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+function auditActionRowLabel(action: string): string {
+  const raw = String(action || "").trim()
+  if (!raw) return "AUDIT"
+  return raw.replace(/\s+/g, "_").toUpperCase()
 }
 
 const AUDIT_FIELD_LABELS: Record<string, string> = {
@@ -129,18 +119,6 @@ function formatAuditDateTime(iso: string): { date: string; time: string } {
   } catch {
     return { date: iso, time: "" }
   }
-}
-
-function initialsFromName(name: string): string {
-  const tokens = String(name)
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-  if (tokens.length === 0 || name === "—") return "—"
-  return tokens
-    .slice(0, 2)
-    .map((token) => token.charAt(0).toUpperCase())
-    .join("")
 }
 
 function emptyEditForm(): {
@@ -823,101 +801,50 @@ export function PartMasterDetailPage() {
           ) : null}
 
           <Card className="min-w-0 overflow-hidden rounded-2xl border-border/50 shadow-sm" aria-labelledby="part-audit-heading">
-            <CardHeader className="border-b border-border/60 bg-muted/15 pb-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <CardTitle id="part-audit-heading" className="text-base">
-                    Audit Log
-                  </CardTitle>
-                  {/* <CardDescription>
-                    Summary cards show the audit event, who performed it, when it happened, and expandable field changes.
-                  </CardDescription> */}
-                </div>
-                <Badge variant="outline" className="rounded-full px-2.5 py-1">
-                  {activityEntries.length} {activityEntries.length === 1 ? "entry" : "entries"}
-                </Badge>
-              </div>
+            <CardHeader className="border-b border-border/60 bg-muted/15 pb-3">
+              <CardTitle id="part-audit-heading" className="text-base">
+                Audit Log
+              </CardTitle>
             </CardHeader>
-            <CardContent className="pt-4">
+            <CardContent className="pt-3">
               {activityEntries.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
                   No audit entries yet.
                 </div>
               ) : (
                 <>
-                  <div className="space-y-4">
+                  <div className="space-y-2.5">
                     {visibleAuditEntries.map((entry) => {
                       const actor = entry.changed_by_name ?? (entry.changed_by != null ? `User #${entry.changed_by}` : "—")
                       const { date, time } = formatAuditDateTime(entry.created_at)
                       const changes = auditChangeRows(entry)
                       const expanded = expandedAuditIds.includes(entry.id)
                       return (
-                        <div key={entry.id} className="flex gap-3">
-                          <div className="shrink-0 pt-2">
-                            <div className="flex size-10 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm sm:size-12">
-                              <Sparkles className="size-4.5 sm:size-5" aria-hidden />
-                            </div>
-                          </div>
-
-                          <div className="min-w-0 flex-1 rounded-[24px] border border-border/70 bg-background px-4 py-4 shadow-sm">
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                              <div className="min-w-0 flex-1 space-y-3">
-                                <div className="flex flex-wrap items-center gap-2.5">
-                                  <h3 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-                                    {auditActionLabel(entry.action)}
-                                  </h3>
-                                  <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide">
-                                    AUDIT
-                                  </Badge>
-                                </div>
-
-                                <div className="grid gap-2.5 sm:grid-cols-2 xl:max-w-xl">
-                                  <div className="rounded-2xl border border-border/70 bg-muted/10 px-4 py-3">
-                                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                                      Performed By
-                                    </div>
-                                    <div className="mt-1.5 flex items-center gap-2.5">
-                                      <div className="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
-                                        {initialsFromName(actor)}
-                                      </div>
-                                      <div className="min-w-0 text-sm font-semibold text-foreground sm:text-[15px]">{actor}</div>
-                                    </div>
-                                  </div>
-
-                                  <div className="rounded-2xl border border-border/70 bg-muted/10 px-4 py-3">
-                                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                                      Time
-                                    </div>
-                                    <time dateTime={entry.created_at} className="mt-1.5 block text-sm font-semibold text-foreground sm:text-[15px]">
-                                      {date}
-                                      {time ? `, ${time}` : ""}
-                                    </time>
-                                  </div>
-                                </div>
+                        <div key={entry.id} className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
+                          <button
+                            type="button"
+                            className="flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-muted/10"
+                            onClick={() => toggleAuditEntry(entry.id)}
+                            aria-expanded={expanded}
+                          >
+                            <div className="min-w-0">
+                              <div className="text-base font-semibold leading-tight text-foreground">
+                                {auditActionRowLabel(entry.action)}
                               </div>
-
-                              <div className="flex shrink-0 items-start justify-end">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  className="h-auto rounded-full px-2.5 py-1.5 text-sm font-semibold text-foreground hover:bg-transparent hover:text-foreground"
-                                  onClick={() => toggleAuditEntry(entry.id)}
-                                >
-                                  <ChevronRight
-                                    className={cn("mr-1.5 size-4 transition-transform duration-200", expanded && "rotate-90")}
-                                    aria-hidden
-                                  />
-                                  {expanded ? "Hide Changes" : "View Changes"}
-                                </Button>
-                              </div>
+                              <div className="mt-1 text-sm leading-tight text-foreground">{actor}</div>
                             </div>
-                            
-
+                            <div className="shrink-0">
+                              <time dateTime={entry.created_at} className="text-right text-sm font-medium leading-tight text-foreground tabular-nums">
+                                {date}
+                                {time ? `, ${time}` : ""}
+                              </time>
+                            </div>
+                          </button>
                             {expanded ? (
-                              <div className="mt-4 border-t border-border/60 pt-4">
+                              <div className="border-t border-border/60 px-4 py-3">
                                 {changes.length > 0 ? (
-                                  <div className="overflow-hidden rounded-2xl border border-border/60">
-                                    <div className="hidden grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-border/60 bg-muted/20 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:grid">
+                                  <div className="overflow-hidden rounded-xl border border-border/60">
+                                    <div className="hidden grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-border/60 bg-muted/20 px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:grid">
                                       <div>Updated Field</div>
                                       <div>Before</div>
                                       <div>After</div>
@@ -926,38 +853,37 @@ export function PartMasterDetailPage() {
                                       {changes.map((change) => (
                                         <div
                                           key={`${entry.id}-${change.key}`}
-                                          className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)]"
+                                          className="grid gap-3 px-3 py-2.5 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)]"
                                         >
                                           <div className="min-w-0">
-                                            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                                            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
                                               Updated Field
                                             </div>
-                                            <div className="text-sm font-medium text-foreground">{change.field}</div>
+                                            <div className="text-xs font-medium text-foreground">{change.field}</div>
                                           </div>
                                           <div className="min-w-0">
-                                            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                                            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
                                               Before
                                             </div>
-                                            <div className="break-words text-sm text-muted-foreground">{change.before}</div>
+                                            <div className="break-words text-xs text-muted-foreground">{change.before}</div>
                                           </div>
                                           <div className="min-w-0">
-                                            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                                            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
                                               After
                                             </div>
-                                            <div className="break-words text-sm font-semibold text-foreground">{change.after}</div>
+                                            <div className="break-words text-xs font-semibold text-foreground">{change.after}</div>
                                           </div>
                                         </div>
                                       ))}
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-4 text-sm text-muted-foreground">
+                                  <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-4 py-3 text-sm text-muted-foreground">
                                     No field changes recorded for this audit event.
                                   </div>
                                 )}
                               </div>
                             ) : null}
-                          </div>
                         </div>
                       )
                     })}

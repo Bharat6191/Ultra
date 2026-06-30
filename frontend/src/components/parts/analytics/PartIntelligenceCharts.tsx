@@ -77,7 +77,7 @@ export function PartIntelligenceCharts({ contractors, workOrders }: Props) {
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader className="pb-1 pt-4">
-          <CardTitle className="text-sm font-semibold">Negotiated rate vs should cost</CardTitle>
+          <CardTitle className="text-sm font-semibold">Negotiated Rate vs Should Cost</CardTitle>
           <br />
           <br />
           <br />
@@ -112,7 +112,7 @@ export function PartIntelligenceCharts({ contractors, workOrders }: Props) {
 
       <Card>
         <CardHeader className="pb-1 pt-4">
-          <CardTitle className="text-sm font-semibold">Work order status mix</CardTitle>
+          <CardTitle className="text-sm font-semibold">Work Order Status Mix</CardTitle>
           <br />
           <br />
           <br />

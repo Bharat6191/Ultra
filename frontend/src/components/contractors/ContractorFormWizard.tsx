@@ -308,7 +308,7 @@ export function ContractorFormWizard({
         return (
           <StepCard
             title="Basic Information"
-            description="Capture the contractor identity and public-facing profile details."
+            // description="Capture the contractor identity and public-facing profile details."
             compact={compactLayout}
           >
             <div className={sectionGridClassName}>
@@ -395,7 +395,7 @@ export function ContractorFormWizard({
         return (
           <StepCard
             title="Contact Information"
-            description="Add the primary communication details used for onboarding and operations."
+            // description="Add the primary communication details used for onboarding and operations."
             compact={compactLayout}
           >
             <div className={sectionGridClassName}>
@@ -486,7 +486,7 @@ export function ContractorFormWizard({
         return (
           <StepCard
             title="Compliance & Registration"
-            description="Provide tax, statutory, and registration identifiers for this contractor."
+            // description="Provide tax, statutory, and registration identifiers for this contractor."
             compact={compactLayout}
           >
             <div className={sectionGridClassName}>
@@ -545,7 +545,7 @@ export function ContractorFormWizard({
         return (
           <StepCard
             title="Additional Information"
-            description="Provide address details and website information."
+            // description="Provide address details and website information."
             compact={compactLayout}
           >
             <div className={formSectionSpacingClassName}>
@@ -662,7 +662,7 @@ export function ContractorFormWizard({
         return (
           <StepCard
             title="Review & Notes"
-            description="Add internal notes and verify the captured details before saving."
+            // description="Add internal notes and verify the captured details before saving."
             compact={compactLayout}
           >
             <div className="space-y-5">
@@ -670,8 +670,8 @@ export function ContractorFormWizard({
                 <Textarea
                   value={form.notes}
                   onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Anything your team should know before proceeding with compliance, documents, or onboarding."
-                  className={textareaClassName}
+                  placeholder="Any internal notes or comments about this contractor"
+                  className={`${textareaClassName} h-20 min-h-20 resize-none`}
                 />
               </Field>
 

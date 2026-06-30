@@ -62,24 +62,26 @@ export function ContractorHeader(props: ContractorHeaderProps) {
     onViewAudit,
   } = props
   const display = legalName || name
+  const title = contractorCode?.trim() || display
   return (
     <div className="rounded-2xl border bg-white p-6 shadow-sm">
       <div className="space-y-4">
         <PageBackLink
           to="/dashboard/contractors"
           label={contractorCode?.trim() || display}
-          className={contractorCode ? "font-mono" : undefined}
         />
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-4">
           <Avatar className="h-12 w-12 rounded-2xl">
             <AvatarFallback className="rounded-2xl bg-emerald-50 text-sm font-semibold text-emerald-700">
-              {initials(display)}
+              {initials(title)}
             </AvatarFallback>
           </Avatar>
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">{display}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">
+                {title}
+              </h1>
               <Badge variant={statusVariant(status)}>{statusLabel(status)}</Badge>
               {/* {complianceState ? (
                 <Badge variant={complianceVariant(complianceState)}>
@@ -93,12 +95,7 @@ export function ContractorHeader(props: ContractorHeaderProps) {
               ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-              {contractorCode ? (
-                <span>
-                  <span className="text-zinc-500">Code:</span>{" "}
-                  <span className="font-mono text-zinc-700">{contractorCode}</span>
-                </span>
-              ) : null}
+              {contractorCode ? <span>{display}</span> : null}
               {contractorType ? <span>{contractorTypeLabel(contractorType)}</span> : null}
             </div>
           </div>

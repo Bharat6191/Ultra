@@ -602,10 +602,10 @@ export function ContractorAnalyticsDashboard({
           <div className="grid gap-0 lg:grid-cols-5">
             <div className="space-y-3 p-6">
               <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-950">
-                Contractor
+                Contractor No.
               </div>
               <div className="text-2xl font-semibold tracking-tight">
-                {summary.contractor_code ?? "—"}
+                {summary.contractor_code ?? summary.name ?? "—"}
               </div>
             </div>
 
@@ -921,7 +921,7 @@ export function ContractorAnalyticsDashboard({
                       <TableHead className="h-8 text-xs">WO number</TableHead>
                       <TableHead className="h-8 text-xs">Plant</TableHead>
                       <TableHead className="h-8 text-right text-xs">Qty</TableHead>
-                      <TableHead className="h-8 text-right text-xs">WO value</TableHead>
+                      <TableHead className="h-8 text-right text-xs">WO Value</TableHead>
                       <TableHead className="h-8 text-right text-xs">Invoiced</TableHead>
                       <TableHead className="h-8 text-right text-xs">Pending</TableHead>
                       <TableHead className="h-8 text-xs">Status</TableHead>
